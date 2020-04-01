@@ -94,8 +94,8 @@ class DiagonalGaussianLayer(TypedModel):
     def forward(self, inputs):
         with name_count():
             zs = self.layer(inputs).view(-1, 2, self._out_dim)
-            return pyro.sample(self._latent_name,
-                               dist.Normal(zs[:, 0], F.softplus(zs[:, 1])))
+            normal = dist.Normal(zs[:, 0], F.softplus(zs[:, 1])).to_event(1)
+            return pyro.sample(self._latent_name, normal)
 
 class StandardNormalLayer(TypedModel):
     def __init__(self, dim, latent_name=None):
