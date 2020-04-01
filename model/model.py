@@ -97,6 +97,25 @@ class DiagonalGaussianLayer(TypedModel):
             return pyro.sample(self._latent_name,
                                dist.Normal(zs[:, 0], F.softplus(zs[:, 1])))
 
+class StandardNormalLayer(TypedModel):
+    def __init__(self, dim, latent_name=None):
+        super().__init__()
+        if not latent_name:
+            latent_name = 'Z^{N(0, 1)}'
+        self._latent_name = latent_name
+        self._dim = dim
+
+    def type(self):
+        return FirstOrderType.ARROWT(FirstOrderType.TOPT(),
+                                     FirstOrderType.TENSORT(torch.float,
+                                                            self._dim))
+
+    def forward(self, inputs):
+        with name_count():
+            z_loc = inputs.new_zeros(torch.Size((inputs.shape[0], self._dim)))
+            z_scale = inputs.new_ones(torch.Size((inputs.shape[0], self._dim)))
+            return pyro.sample(self._latent_name, dist.Normal(z_loc, z_scale))
+
 class MnistModel(BaseModel):
     def __init__(self, num_classes=10):
         super().__init__()
