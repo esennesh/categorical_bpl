@@ -1,20 +1,23 @@
+import pyro
+from pyro.contrib.autoname import name_count
+import pyro.distributions as dist
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from base import FirstOrderType, TypedModel
 
 class EncInputLayer(TypedModel):
-    def __init__(self, input_size=28*28):
+    def __init__(self, input_dim=28*28):
         super().__init__()
         self.layer = nn.Sequential(
-            nn.Linear(input_size, 512),
+            nn.Linear(input_dim, 512),
             nn.BatchNorm1d(512),
             nn.ELU(),
         )
 
     def type(self):
         return FirstOrderType.ARROWT(
-            FirstOrderType.TENSORT(torch.float, torch.Size(input_size)),
+            FirstOrderType.TENSORT(torch.float, torch.Size(input_dim)),
             FirstOrderType.TENSORT(torch.float, torch.Size(512))
         )
 
