@@ -9,9 +9,10 @@ class Trainer(BaseTrainer):
     """
     Trainer class
     """
-    def __init__(self, model, criterion, metric_ftns, optimizer, config, data_loader,
-                 valid_data_loader=None, lr_scheduler=None, len_epoch=None):
-        super().__init__(model, criterion, metric_ftns, optimizer, config)
+    def __init__(self, model, metric_ftns, optimizer, config, data_loader,
+                 valid_data_loader=None, lr_scheduler=None, len_epoch=None,
+                 jit=False):
+        super().__init__(model, metric_ftns, optimizer, config)
         self.config = config
         self.data_loader = data_loader
         if len_epoch is None:
@@ -25,6 +26,7 @@ class Trainer(BaseTrainer):
         self.do_validation = self.valid_data_loader is not None
         self.lr_scheduler = lr_scheduler
         self.log_step = int(np.sqrt(data_loader.batch_size))
+        self.jit = jit
 
         self.train_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
         self.valid_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
