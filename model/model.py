@@ -42,7 +42,7 @@ class NonreductiveLayer(TypedModel):
     def forward(self, inputs):
         return self.layer(inputs)
 
-class ReductiveLayer1(TypedModel):
+class ReductiveLayer(TypedModel):
     def __init__(self):
         super().__init__()
         self.layer = nn.Sequential(
