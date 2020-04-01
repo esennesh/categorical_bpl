@@ -32,3 +32,60 @@ def unique_identifier():
 
 def unique_vart():
     return FirstOrderType.VART(unique_identifier())
+
+UNIFICATION_EXCEPTION_MSG = 'Could not unify %s with %s'
+SUBSTITUTION_EXCEPTION_MSG = 'to substitute for %s'
+
+class UnificationException(Exception):
+    def __init__(self, x, y, k=None):
+        self.key = k
+        self.vals = (x, y)
+        if k:
+            msg = UNIFICATION_EXCEPTION_MSG + ' ' + SUBSTITUTION_EXCEPTION_MSG
+            self.message = msg % (x, y, k)
+        else:
+            self.message = UNIFICATION_EXCEPTION_MSG % (x, y)
+
+def try_unify(a, b, subst={}):
+    if a == b:
+        return a, {}
+    if a._key == FirstOrderType._Key.VART:
+        return b, {a.vart(): b}
+    if b._key == FirstOrderType._Key.VART:
+        return a, {b.vart(): a}
+    if a._key == FirstOrderType._Key.ARROWT and\
+       b._key == FirstOrderType._Key.ARROWT:
+        (la, ra) = a.arrowt()
+        (lb, rb) = b.arrowt()
+        l, lsub = try_unify(la, lb)
+        r, rsub = try_unify(ra, rb)
+        for k in {**lsub, **rsub}.keys():
+            if k in lsub and k in rsub:
+                _, sub = try_unify(lsub[k], rsub[k])
+                subst.update(sub)
+        subst.update(lsub)
+        subst.update(rsub)
+        return FirstOrderType.ARROWT(l, r), subst
+    raise UnificationException(a, b)
+
+def unify(a, b, substitution={}):
+    try:
+        result, substitution = try_unify(a, b, substitution)
+        return substitute(result, substitution)
+    except UnificationException:
+        return None
+
+def unifier(a, b, substitution={}):
+    try:
+        _, substitution = try_unify(a, b, substitution)
+        return substitution
+    except UnificationException:
+        return None
+
+def substitute(t, sub):
+    return t.match(
+        tensort=FirstOrderType.TENSORT,
+        vart=lambda m: sub[m] if m in sub else FirstOrderType.VART(m),
+        arrowt=lambda l, r: FirstOrderType.ARROWT(substitute(l, sub),
+                                              substitute(r, sub))
+    )
