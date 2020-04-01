@@ -11,7 +11,8 @@ class FirstOrderType:
 
     def _pretty(self, parenthesize=False):
         result = self.match(
-            TENSORT=lambda dtype, size: '%s[%s]' % (dtype, size),
+            topt=lambda: '⊤',
+            tensort=lambda dtype, size: '%s[%s]' % (dtype, size),
             vart=lambda name: name,
             arrowt=lambda l, r: '%s -> %s' % (l._pretty(True), r._pretty())
         )
@@ -98,6 +99,7 @@ def fold_arrow(ts):
 
 def unfold_arrow(arrow):
     return arrow.match(
+        topt=lambda: [FirstOrderType.TOPT()],
         tensort=lambda dtype, size: [FirstOrderType.TENSORT(dtype, size)],
         vart=lambda v: [FirstOrderType.VART(v)],
         arrowt=lambda l, r: [l] + unfold_arrow(r)
