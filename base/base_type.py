@@ -26,3 +26,9 @@ class FirstOrderType:
 
     def __hash__(self):
         return hash(str(self))
+
+def unique_identifier():
+    return uuid.uuid4().hex[:7]
+
+def unique_vart():
+    return FirstOrderType.VART(unique_identifier())
