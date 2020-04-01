@@ -21,6 +21,56 @@ class EncInputLayer(TypedModel):
     def forward(self, inputs):
         return self.layer(inputs)
 
+class NonreductiveLayer(TypedModel):
+    def __init__(self):
+        super().__init__()
+        self.layer = nn.Sequential(
+            nn.Linear(512, 512),
+            nn.BatchNorm1d(512),
+            nn.ELU(),
+        )
+
+    def type(self):
+        return FirstOrderType.ARROWT(
+            FirstOrderType.TENSORT(torch.float, torch.Size(512)),
+            FirstOrderType.TENSORT(torch.float, torch.Size(512))
+        )
+
+    def forward(self, inputs):
+        return self.layer(inputs)
+
+class ReductiveLayer1(TypedModel):
+    def __init__(self):
+        super().__init__()
+        self.layer = nn.Sequential(
+            nn.Linear(512, 256),
+            nn.BatchNorm1d(256),
+            nn.ELU(),
+        )
+
+    def type(self):
+        return FirstOrderType.ARROWT(
+            FirstOrderType.TENSORT(torch.float, torch.Size(512)),
+            FirstOrderType.TENSORT(torch.float, torch.Size(256))
+        )
+
+    def forward(self, inputs):
+        return self.layer(inputs)
+
+class EncOutputLayer(TypedModel):
+    def __init__(self):
+        super().__init__()
+        self.layer = nn.Linear(256, 128)
+
+    def type(self):
+        return FirstOrderType.ARROWT(
+            FirstOrderType.TENSORT(torch.float, torch.Size(256)),
+            FirstOrderType.TENSORT(torch.float, torch.Size(128))
+        )
+
+    def forward(self, inputs):
+        return self.layer(inputs)
+
 class MnistModel(BaseModel):
     def __init__(self, num_classes=10):
         super().__init__()
