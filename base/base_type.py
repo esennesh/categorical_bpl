@@ -4,6 +4,7 @@ import uuid
 
 @adt
 class FirstOrderType:
+    TOPT: Case
     TENSORT: Case[torch.dtype, torch.Size]
     VART: Case[str]
     ARROWT: Case["FirstOrderType", "FirstOrderType"]
