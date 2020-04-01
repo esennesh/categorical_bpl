@@ -14,11 +14,12 @@ class EncInputLayer(TypedModel):
             nn.BatchNorm1d(512),
             nn.ELU(),
         )
+        self._input_dim = input_dim
 
     def type(self):
         return FirstOrderType.ARROWT(
-            FirstOrderType.TENSORT(torch.float, torch.Size(input_dim)),
-            FirstOrderType.TENSORT(torch.float, torch.Size(512))
+            FirstOrderType.TENSORT(torch.float, torch.Size([self._input_dim])),
+            FirstOrderType.TENSORT(torch.float, torch.Size([512]))
         )
 
     def forward(self, inputs):
@@ -35,8 +36,8 @@ class NonreductiveLayer(TypedModel):
 
     def type(self):
         return FirstOrderType.ARROWT(
-            FirstOrderType.TENSORT(torch.float, torch.Size(512)),
-            FirstOrderType.TENSORT(torch.float, torch.Size(512))
+            FirstOrderType.TENSORT(torch.float, torch.Size([512])),
+            FirstOrderType.TENSORT(torch.float, torch.Size([512]))
         )
 
     def forward(self, inputs):
@@ -53,22 +54,23 @@ class ReductiveLayer(TypedModel):
 
     def type(self):
         return FirstOrderType.ARROWT(
-            FirstOrderType.TENSORT(torch.float, torch.Size(512)),
-            FirstOrderType.TENSORT(torch.float, torch.Size(256))
+            FirstOrderType.TENSORT(torch.float, torch.Size([512])),
+            FirstOrderType.TENSORT(torch.float, torch.Size([256]))
         )
 
     def forward(self, inputs):
         return self.layer(inputs)
 
 class EncOutputLayer(TypedModel):
-    def __init__(self):
+    def __init__(self, hidden_dim=64):
         super().__init__()
-        self.layer = nn.Linear(256, 128)
+        self.layer = nn.Linear(256, hidden_dim * 2)
+        self._out_dim = hidden_dim * 2
 
     def type(self):
         return FirstOrderType.ARROWT(
-            FirstOrderType.TENSORT(torch.float, torch.Size(256)),
-            FirstOrderType.TENSORT(torch.float, torch.Size(128))
+            FirstOrderType.TENSORT(torch.float, torch.Size([256])),
+            FirstOrderType.TENSORT(torch.float, torch.Size([self._out_dim]))
         )
 
     def forward(self, inputs):
@@ -78,9 +80,11 @@ class DiagonalGaussianLayer(TypedModel):
     def __init__(self, layer_class, latent_name=None):
         super().__init__()
         self.layer = layer_class()
-        (_, self._in_dim), (_, self._out_dim) = self.layer.type().arrowt()
+        l, r = self.layer.type().arrowt()
+        _, self._in_dim = l.tensort()
+        _, self._out_dim = r.tensort()
         assert self._out_dim[0] % 2 == 0
-        self._out_dim = torch.Size(self._out_dim[0] / 2)
+        self._out_dim = torch.Size([self._out_dim[0] // 2])
         if not latent_name:
             latent_name = 'Z^{%d -> %d}' % (self._in_dim[0], self._out_dim[0])
         self._latent_name = latent_name
@@ -101,14 +105,15 @@ class StandardNormalLayer(TypedModel):
     def __init__(self, dim, latent_name=None):
         super().__init__()
         if not latent_name:
-            latent_name = 'Z^{N(0, 1)}'
+            latent_name = 'Z^{N(0, 1)}_{%d}' % dim
         self._latent_name = latent_name
         self._dim = dim
 
     def type(self):
-        return FirstOrderType.ARROWT(FirstOrderType.TOPT(),
-                                     FirstOrderType.TENSORT(torch.float,
-                                                            self._dim))
+        return FirstOrderType.ARROWT(
+            FirstOrderType.TOPT(),
+            FirstOrderType.TENSORT(torch.float, torch.Size([self._dim]))
+        )
 
     def forward(self, inputs):
         with name_count():
