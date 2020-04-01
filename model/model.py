@@ -74,6 +74,29 @@ class EncOutputLayer(TypedModel):
     def forward(self, inputs):
         return self.layer(inputs)
 
+class DiagonalGaussianLayer(TypedModel):
+    def __init__(self, layer_class, latent_name=None):
+        super().__init__()
+        self.layer = layer_class()
+        (_, self._in_dim), (_, self._out_dim) = self.layer.type().arrowt()
+        assert self._out_dim[0] % 2 == 0
+        self._out_dim = torch.Size(self._out_dim[0] / 2)
+        if not latent_name:
+            latent_name = 'Z^{%d -> %d}' % (self._in_dim[0], self._out_dim[0])
+        self._latent_name = latent_name
+
+    def type(self):
+        return FirstOrderType.ARROWT(
+            FirstOrderType.TENSORT(torch.float, self._in_dim),
+            FirstOrderType.TENSORT(torch.float, self._out_dim)
+        )
+
+    def forward(self, inputs):
+        with name_count():
+            zs = self.layer(inputs).view(-1, 2, self._out_dim)
+            return pyro.sample(self._latent_name,
+                               dist.Normal(zs[:, 0], F.softplus(zs[:, 1])))
+
 class MnistModel(BaseModel):
     def __init__(self, num_classes=10):
         super().__init__()
