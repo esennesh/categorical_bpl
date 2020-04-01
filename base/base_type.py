@@ -89,3 +89,15 @@ def substitute(t, sub):
         arrowt=lambda l, r: FirstOrderType.ARROWT(substitute(l, sub),
                                               substitute(r, sub))
     )
+
+def fold_arrow(ts):
+    if len(ts) == 1:
+        return ts[-1]
+    return fold_arrow(ts[:-2] + [FirstOrderType.ARROWT(ts[-2], ts[-1])])
+
+def unfold_arrow(arrow):
+    return arrow.match(
+        tensort=lambda dtype, size: [FirstOrderType.TENSORT(dtype, size)],
+        vart=lambda v: [FirstOrderType.VART(v)],
+        arrowt=lambda l, r: [l] + unfold_arrow(r)
+    )
