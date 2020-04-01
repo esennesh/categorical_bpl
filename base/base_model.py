@@ -23,3 +23,13 @@ class BaseModel(nn.Module):
         model_parameters = filter(lambda p: p.requires_grad, self.parameters())
         params = sum([np.prod(p.size()) for p in model_parameters])
         return super().__str__() + '\nTrainable parameters: {}'.format(params)
+
+class TypedModel(BaseModel):
+    @abstractmethod
+    def type(self):
+        """
+        Type signature for the layer as an arrow between two vector spaces
+
+        :return: A FirstOrderType for the model's arrow type
+        """
+        raise NotImplementedError
