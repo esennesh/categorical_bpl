@@ -1,5 +1,8 @@
+#!/usr/bin/env python3
+
 import argparse
 import collections
+import pyro
 import torch
 import numpy as np
 import data_loader.data_loaders as module_data
@@ -28,27 +31,18 @@ def main(config):
     model = config.init_obj('arch', module_arch)
     logger.info(model)
 
-    # get function handles of loss and metrics
-    criterion = getattr(module_loss, config['loss'])
-    metrics = [getattr(module_metric, met) for met in config['metrics']]
-
     # build optimizer, learning rate scheduler. delete every lines containing lr_scheduler for disabling scheduler
-    trainable_params = filter(lambda p: p.requires_grad, model.parameters())
-    optimizer = config.init_obj('optimizer', torch.optim, trainable_params)
+    optimizer = config.init_obj('optimizer', pyro.optim)
 
-    lr_scheduler = config.init_obj('lr_scheduler', torch.optim.lr_scheduler, optimizer)
-
-    trainer = Trainer(model, criterion, metrics, optimizer,
-                      config=config,
+    trainer = Trainer(model, [], optimizer, config=config,
                       data_loader=data_loader,
-                      valid_data_loader=valid_data_loader,
-                      lr_scheduler=lr_scheduler)
+                      valid_data_loader=valid_data_loader)
 
     trainer.train()
 
 
 if __name__ == '__main__':
-    args = argparse.ArgumentParser(description='PyTorch Template')
+    args = argparse.ArgumentParser(description='Bayesian Program Categories')
     args.add_argument('-c', '--config', default=None, type=str,
                       help='config file path (default: None)')
     args.add_argument('-r', '--resume', default=None, type=str,
