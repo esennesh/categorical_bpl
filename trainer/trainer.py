@@ -1,5 +1,5 @@
 import numpy as np
-from pyro.infer import SVI, JitTrace_ELBO, Trace_ELBO
+from pyro.infer import SVI, JitTraceEnum_ELBO, TraceEnum_ELBO
 from pyro.optim import Adam
 import torch
 from torchvision.utils import make_grid
@@ -40,7 +40,7 @@ class Trainer(BaseTrainer):
         :param epoch: Integer, current training epoch.
         :return: A log that contains average loss and metric in this epoch.
         """
-        elbo = JitTrace_ELBO() if self.jit else Trace_ELBO()
+        elbo = JitTraceEnum_ELBO() if self.jit else TraceEnum_ELBO()
         svi = SVI(self.model.model, self.model.guide, self.optimizer, loss=elbo)
 
         self.model.train()
@@ -80,7 +80,7 @@ class Trainer(BaseTrainer):
         :param epoch: Integer, current training epoch.
         :return: A log that contains information about validation
         """
-        elbo = JitTrace_ELBO() if self.jit else Trace_ELBO()
+        elbo = JitTraceEnum_ELBO() if self.jit else TraceEnum_ELBO()
         svi = SVI(self.model.model, self.model.guide, self.optimizer, loss=elbo)
 
         self.model.eval()
