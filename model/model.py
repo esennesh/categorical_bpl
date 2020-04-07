@@ -244,7 +244,7 @@ class VAECategoryModel(BaseModel):
         exponential = F.softmax(util.expm(adjacency.unsqueeze(0)), dim=-1)
         return -torch.log(exponential).squeeze(0)
 
-    def _object_by_dim(self, latent, dims):
+    def _object_by_dim(self, latent, dims, infer={}):
         spaces = list(self._category.nodes())
         if latent:
             nonlatent_spaces = [FirstOrderType.TOPT(), FirstOrderType.TENSORT(
@@ -255,11 +255,11 @@ class VAECategoryModel(BaseModel):
 
         dims = F.softmin(dims, dim=0)
         obj = pyro.sample('category_object', dist.Categorical(probs=dims),
-                          infer={'enumerate': 'sequential'})
+                          infer=infer)
 
         return spaces[obj.item()]
 
-    def _morphism_by_weight(self, src, dest):
+    def _morphism_by_weight(self, src, dest, infer={}):
         morphisms = list(self._category[src][dest].keys())
         if len(morphisms) == 1:
             return morphisms[0]
@@ -267,11 +267,11 @@ class VAECategoryModel(BaseModel):
                              self._category[src][dest].values()], dim=0)
         morphisms_cat = dist.Categorical(probs=F.softmax(weights, dim=0))
         k = pyro.sample('morphism_{%s -> %s}' % (src, dest), morphisms_cat,
-                        infer={'enumerate': 'sequential'})
+                        infer=infer)
         return morphisms[k.item()]
 
     def _morphism_by_distance(self, src, dest, distances, confidence,
-                              device=None, k=0):
+                              device=None, k=0, infer={}):
         dest_idx = self._object_index(dest)
 
         morphisms = [(neighbor, m) for (_, neighbor, m) in
@@ -283,12 +283,11 @@ class VAECategoryModel(BaseModel):
         to_dest = distances.index_select(0, j)[:, dest_idx] * confidence
 
         morphism_cat = dist.Categorical(probs=F.softmin(to_dest, dim=0))
-        k = pyro.sample('arrow_%d' % k, morphism_cat,
-                        infer={'enumerate': 'sequential'})
+        k = pyro.sample('arrow_%d' % k, morphism_cat, infer=infer)
 
         return morphisms[k.item()]
 
-    def model(self, data):
+    def model(self, observations=None):
         pyro.param('generator_confidence_alpha',
                    self.generator_confidence_alpha)
         pyro.param('generator_confidence_beta', self.generator_confidence_beta)
@@ -296,6 +295,10 @@ class VAECategoryModel(BaseModel):
             pyro.module(name, g)
             pyro.param('generating_weight_' + name, w)
 
+        if isinstance(observations, dict):
+            data = observations['X^{%d}' % self._data_dim]
+        else:
+            data = observations
         data = data.view(data.shape[0], self._data_dim)
         data_space = FirstOrderType.TENSORT(torch.float,
                                             torch.Size([self._data_dim]))
@@ -334,7 +337,7 @@ class VAECategoryModel(BaseModel):
 
             return latent
 
-    def guide(self, data):
+    def guide(self, observations=None):
         pyro.module('guide_generator_confidence',
                     self.guide_generator_confidence)
         pyro.module('guide_generator_weights', self.guide_generator_weights)
@@ -344,6 +347,10 @@ class VAECategoryModel(BaseModel):
                 pyro.module(name, g)
                 pyro.param('generating_weight_' + name, w)
 
+        if isinstance(observations, dict):
+            data = observations['X^{%d}' % self._data_dim]
+        else:
+            data = observations
         data = data.view(data.shape[0], self._data_dim)
         with name_count():
             generators_confidence = self.guide_generator_confidence(data).mean(
@@ -367,17 +374,18 @@ class VAECategoryModel(BaseModel):
             # a path there via intuitive distance softmin.
             with pyro.markov():
                 while location != self.data_space:
-                    encoder = self._morphism_by_weight(self.data_space,
-                                                       location)
+                    encoder = self._morphism_by_weight(
+                        self.data_space, location, infer={'is_auxiliary': True}
+                    )
                     encoders.append(encoder)
                     (location, _) = self._morphism_by_distance(
                         location, self.data_space, distances,
                         generators_confidence, device=data.device,
-                        k=len(encoders)
+                        k=len(encoders),
                     )
 
             with pyro.plate('data', len(data)):
-                for i in pyro.plate('encoders', len(encoders)):
-                    latent = encoders[i](data)
+                for encoder in encoders:
+                    latent = encoder(data)
 
             return latent
