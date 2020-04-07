@@ -2,6 +2,15 @@ from adt import adt, Case
 import torch
 import uuid
 
+def _label_dtype(dtype):
+    if dtype == torch.int:
+        return 'Z'
+    if dtype == torch.uint8:
+        return 'Char'
+    if dtype == torch.float:
+        return 'R'
+    raise NotImplementedError()
+
 @adt
 class FirstOrderType:
     TOPT: Case
@@ -12,7 +21,8 @@ class FirstOrderType:
     def _pretty(self, parenthesize=False):
         result = self.match(
             topt=lambda: '⊤',
-            tensort=lambda dtype, size: '%s[%s]' % (dtype, size),
+            tensort=lambda dtype, size: '%s^%d' % (_label_dtype(dtype),
+                                                   size[0]),
             vart=lambda name: name,
             arrowt=lambda l, r: '%s -> %s' % (l._pretty(True), r._pretty())
         )
