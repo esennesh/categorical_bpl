@@ -289,6 +289,13 @@ class VAECategoryModel(BaseModel):
         return morphisms[k.item()]
 
     def model(self, data):
+        pyro.param('generator_confidence_alpha',
+                   self.generator_confidence_alpha)
+        pyro.param('generator_confidence_beta', self.generator_confidence_beta)
+        for name, (g, w) in self._generators.items():
+            pyro.module(name, g)
+            pyro.param('generating_weight_' + name, w)
+
         data = data.view(data.shape[0], self._data_dim)
         data_space = FirstOrderType.TENSORT(torch.float,
                                             torch.Size([self._data_dim]))
@@ -328,6 +335,15 @@ class VAECategoryModel(BaseModel):
             return latent
 
     def guide(self, data):
+        pyro.module('guide_generator_confidence',
+                    self.guide_generator_confidence)
+        pyro.module('guide_generator_weights', self.guide_generator_weights)
+        pyro.module('guide_latent_weights', self.guide_latent_weights)
+        for name, (g, w) in self._generators.items():
+            if g.type().arrowt()[0] == self.data_space:
+                pyro.module(name, g)
+                pyro.param('generating_weight_' + name, w)
+
         data = data.view(data.shape[0], self._data_dim)
         with name_count():
             generators_confidence = self.guide_generator_confidence(data).mean(
