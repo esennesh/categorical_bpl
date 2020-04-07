@@ -40,14 +40,14 @@ class Trainer(BaseTrainer):
         :param epoch: Integer, current training epoch.
         :return: A log that contains average loss and metric in this epoch.
         """
-        rws = ReweightedWakeSleep(vectorize_particles=False)
+        rws = ReweightedWakeSleep(vectorize_particles=False, insomnia=0.)
         svi = SVI(self.model.model, self.model.guide, self.optimizer, loss=rws)
 
         self.model.train()
         self.train_metrics.reset()
         for batch_idx, (data, target) in enumerate(self.data_loader):
             data, target = data.to(self.device), target.to(self.device)
-            loss = sum(svi.step(data))
+            loss = sum(svi.step(observations=data))
 
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
             self.train_metrics.update('loss', loss)
@@ -80,7 +80,7 @@ class Trainer(BaseTrainer):
         :param epoch: Integer, current training epoch.
         :return: A log that contains information about validation
         """
-        rws = ReweightedWakeSleep(vectorize_particles=False)
+        rws = ReweightedWakeSleep(vectorize_particles=False, insomnia=0.)
         svi = SVI(self.model.model, self.model.guide, self.optimizer, loss=rws)
 
         self.model.eval()
@@ -88,7 +88,7 @@ class Trainer(BaseTrainer):
         with torch.no_grad():
             for batch_idx, (data, target) in enumerate(self.valid_data_loader):
                 data, target = data.to(self.device), target.to(self.device)
-                loss = sum(svi.evaluate_loss(data))
+                loss = sum(svi.evaluate_loss(observations=data))
 
                 self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
                 self.valid_metrics.update('loss', loss)
