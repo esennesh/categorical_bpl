@@ -1,5 +1,5 @@
 import numpy as np
-from pyro.infer import SVI, JitTraceEnum_ELBO, TraceEnum_ELBO
+from pyro.infer import SVI, ReweightedWakeSleep
 from pyro.optim import Adam
 import torch
 from torchvision.utils import make_grid
@@ -40,14 +40,14 @@ class Trainer(BaseTrainer):
         :param epoch: Integer, current training epoch.
         :return: A log that contains average loss and metric in this epoch.
         """
-        elbo = JitTraceEnum_ELBO() if self.jit else TraceEnum_ELBO()
-        svi = SVI(self.model.model, self.model.guide, self.optimizer, loss=elbo)
+        rws = ReweightedWakeSleep(vectorize_particles=False)
+        svi = SVI(self.model.model, self.model.guide, self.optimizer, loss=rws)
 
         self.model.train()
         self.train_metrics.reset()
         for batch_idx, (data, target) in enumerate(self.data_loader):
             data, target = data.to(self.device), target.to(self.device)
-            loss = svi.step(data)
+            loss = sum(svi.step(data))
 
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
             self.train_metrics.update('loss', loss)
@@ -80,15 +80,15 @@ class Trainer(BaseTrainer):
         :param epoch: Integer, current training epoch.
         :return: A log that contains information about validation
         """
-        elbo = JitTraceEnum_ELBO() if self.jit else TraceEnum_ELBO()
-        svi = SVI(self.model.model, self.model.guide, self.optimizer, loss=elbo)
+        rws = ReweightedWakeSleep(vectorize_particles=False)
+        svi = SVI(self.model.model, self.model.guide, self.optimizer, loss=rws)
 
         self.model.eval()
         self.valid_metrics.reset()
         with torch.no_grad():
             for batch_idx, (data, target) in enumerate(self.valid_data_loader):
                 data, target = data.to(self.device), target.to(self.device)
-                loss = svi.evaluate_loss(data)
+                loss = sum(svi.evaluate_loss(data))
 
                 self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
                 self.valid_metrics.update('loss', loss)
