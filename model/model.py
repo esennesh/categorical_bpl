@@ -71,8 +71,8 @@ class BernoulliObservation(TypedModel):
         with name_count():
             xs = torch.sigmoid(inputs.view(-1, self._obs_dim[0]))
             bernoulli = dist.Bernoulli(probs=xs).to_event(1)
-            return pyro.sample(self._observable_name, bernoulli,
-                               obs=observations)
+            pyro.sample(self._observable_name, bernoulli, obs=observations)
+            return xs
 
 class PathDensityNet(TypedModel):
     def __init__(self, spaces_path, dist_layer=BernoulliObservation):
