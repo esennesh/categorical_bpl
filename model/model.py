@@ -119,18 +119,14 @@ class LayersGraph:
     def likelihoods(self):
         # Use the data space to construct likelihood layers
         for source in self.latent_spaces():
-            for path in map(nx.utils.pairwise,
-                            nx.all_simple_paths(self._prototype, source,
-                                                self._data_space)):
-                yield PathDensityNet(path, dist_layer=BernoulliObservation)
+            yield PathDensityNet([(source, self._data_space)],
+                                 dist_layer=BernoulliObservation)
 
     def encoders(self):
         # Use the data space to construct likelihood layers
         for dest in self.latent_spaces():
-            for path in map(nx.utils.pairwise,
-                            nx.all_simple_paths(self._prototype,
-                                                self._data_space, dest)):
-                yield PathDensityNet(path, dist_layer=DiagonalGaussian)
+            yield PathDensityNet([(self._data_space, dest)],
+                                 dist_layer=DiagonalGaussian)
 
     def priors(self):
         for latent in self.latent_spaces():
@@ -138,13 +134,7 @@ class LayersGraph:
 
     def latent_maps(self):
         for z1, z2 in itertools.permutations(self.latent_spaces(), 2):
-            latent_subgraph = nx.subgraph_view(self._prototype,
-                                               lambda n: n != self._data_space)
-            for path in map(nx.utils.pairwise,
-                            nx.all_simple_paths(latent_subgraph, z1, z2)):
-                yield PathDensityNet(path, dist_layer=DiagonalGaussian)
-        for z in self.latent_spaces():
-            yield PathDensityNet([(z, z)], dist_layer=DiagonalGaussian)
+            yield PathDensityNet([(z1, z2)], dist_layer=DiagonalGaussian)
 
 class VAECategoryModel(BaseModel):
     def __init__(self, data_dim=28*28, hidden_dim=64):
