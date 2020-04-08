@@ -249,12 +249,16 @@ class VAECategoryModel(BaseModel):
 
         return spaces[obj.item()]
 
-    def _morphism_by_weight(self, src, dest, infer={}):
+    def _morphism_by_weight(self, src, dest, weights, infer={}):
         morphisms = list(self._category[src][dest].keys())
         if len(morphisms) == 1:
             return morphisms[0]
-        weights = torch.cat([v['weight'] for v in
-                             self._category[src][dest].values()], dim=0)
+        weights = torch.unbind(weights, dim=0)
+        src_dest_weights = []
+        for (g, _), w in zip(self._generators.values(), weights):
+            if g.type() == FirstOrderType.ARROWT(src, dest):
+                src_dest_weights += [w]
+        src_dest_weights = torch.stack(src_dest_weights, dim=0)
         morphisms_cat = dist.Categorical(probs=F.softmax(weights, dim=0))
         k = pyro.sample('morphism_{%s -> %s}' % (src, dest), morphisms_cat,
                         infer=infer)
@@ -303,7 +307,8 @@ class VAECategoryModel(BaseModel):
             distances = self._intuitive_distances(weights)
 
             location = self._object_by_dim(True, self.latent_dims)
-            prior = self._morphism_by_weight(FirstOrderType.TOPT(), location)
+            prior = self._morphism_by_weight(FirstOrderType.TOPT(), location,
+                                             weights)
 
             path = [prior]
             with pyro.markov():
@@ -357,7 +362,8 @@ class VAECategoryModel(BaseModel):
             latent_dims = generators_confidence *\
                           self.guide_latent_weights(data).mean(dim=0)
             location = self._object_by_dim(True, latent_dims)
-            self._morphism_by_weight(FirstOrderType.TOPT(), location)
+            self._morphism_by_weight(FirstOrderType.TOPT(), location,
+                                     generators_weights)
 
             encoders = []
             # Cycle through while the location is not the data space, finding
@@ -365,7 +371,8 @@ class VAECategoryModel(BaseModel):
             with pyro.markov():
                 while location != self.data_space:
                     encoder = self._morphism_by_weight(
-                        self.data_space, location, infer={'is_auxiliary': True}
+                        self.data_space, location, generators_weights,
+                        infer={'is_auxiliary': True}
                     )
                     encoders.append(encoder)
                     (location, _) = self._morphism_by_distance(
