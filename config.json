@@ -1,10 +1,13 @@
 {
-    "name": "Mnist_LeNet",
+    "name": "Mnist_VaeCategory",
     "n_gpu": 1,
 
     "arch": {
-        "type": "MnistModel",
-        "args": {}
+        "type": "VAECategoryModel",
+        "args": {
+          "data_dim": 784,
+          "hidden_dim": 64
+        }
     },
     "data_loader": {
         "type": "MnistDataLoader",
@@ -19,15 +22,13 @@
     "optimizer": {
         "type": "Adam",
         "args":{
-            "lr": 0.001,
-            "weight_decay": 0,
-            "amsgrad": true
+            "optim_args": {
+              "lr": 1e-4,
+              "weight_decay": 0,
+              "amsgrad": true
+            }
         }
     },
-    "loss": "nll_loss",
-    "metrics": [
-        "accuracy", "top_k_acc"
-    ],
     "lr_scheduler": {
         "type": "StepLR",
         "args": {
@@ -41,7 +42,7 @@
         "save_dir": "saved/",
         "save_period": 1,
         "verbosity": 2,
-        
+
         "monitor": "min val_loss",
         "early_stop": 10,
 
