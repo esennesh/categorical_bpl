@@ -259,7 +259,8 @@ class VAECategoryModel(BaseModel):
             if g.type() == FirstOrderType.ARROWT(src, dest):
                 src_dest_weights += [w]
         src_dest_weights = torch.stack(src_dest_weights, dim=0)
-        morphisms_cat = dist.Categorical(probs=F.softmax(weights, dim=0))
+        morphisms_cat = dist.Categorical(probs=F.softmax(src_dest_weights,
+                                                         dim=0))
         k = pyro.sample('morphism_{%s -> %s}' % (src, dest), morphisms_cat,
                         infer=infer)
         return morphisms[k.item()]
