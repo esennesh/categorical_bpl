@@ -294,6 +294,8 @@ class VAECategoryModel(BaseModel):
             data = observations['X^{%d}' % self._data_dim]
         else:
             data = observations
+        if data is None:
+            data = torch.zeros(1, self._data_dim)
         data = data.view(data.shape[0], self._data_dim)
         data_space = FirstOrderType.TENSORT(torch.float,
                                             torch.Size([self._data_dim]))
@@ -387,3 +389,14 @@ class VAECategoryModel(BaseModel):
                     latent = encoder(data)
 
             return latent
+
+    def forward(self, observations=None):
+        if observations is not None:
+            trace = pyro.poutine.trace(self.guide).get_trace(
+                observations=observations
+            )
+            return pyro.poutine.replay(self.model, trace=trace)(
+                observations=observations
+            )
+        else:
+            return self.model(observations=None)
