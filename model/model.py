@@ -294,6 +294,8 @@ class VAECategoryModel(BaseModel):
             data = observations['X^{%d}' % self._data_dim]
         else:
             data = observations
+        if data is None:
+            data = torch.zeros(1, self._data_dim)
         data = data.view(data.shape[0], self._data_dim)
         data_space = FirstOrderType.TENSORT(torch.float,
                                             torch.Size([self._data_dim]))
