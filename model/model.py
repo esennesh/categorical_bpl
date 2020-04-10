@@ -389,3 +389,14 @@ class VAECategoryModel(BaseModel):
                     latent = encoder(data)
 
             return latent
+
+    def forward(self, observations=None):
+        if observations is not None:
+            trace = pyro.poutine.trace(self.guide).get_trace(
+                observations=observations
+            )
+            return pyro.poutine.replay(self.model, trace=trace)(
+                observations=observations
+            )
+        else:
+            return self.model(observations=None)
