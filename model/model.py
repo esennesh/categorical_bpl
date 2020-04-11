@@ -5,6 +5,7 @@ import pyro
 from pyro.contrib.autoname import name_count
 import pyro.distributions as dist
 import torch
+import torch.distributions.constraints as constraints
 import torch.nn as nn
 import torch.nn.functional as F
 from base import BaseModel, FirstOrderType, TypedModel
@@ -129,8 +130,8 @@ class LayersGraph:
                                  dist_layer=DiagonalGaussian)
 
     def priors(self):
-        for latent in self.latent_spaces():
-            yield StandardNormal(latent)
+        for obj in self._prototype:
+            yield StandardNormal(obj)
 
     def latent_maps(self):
         for z1, z2 in itertools.permutations(self.latent_spaces(), 2):
@@ -188,9 +189,7 @@ class VAECategoryModel(BaseModel):
         assert name not in self._generators
         assert isinstance(generator, TypedModel)
 
-        weight = len(generator) if isinstance(generator, PathDensityNet) else\
-                 generator.type().arrowt()[1].tensort()[1][0]
-        weight = nn.Parameter(torch.ones(1) * weight)
+        weight = nn.Parameter(torch.ones(1))
         self.register_parameter('generating_weight_' + name, weight)
         self._generators[name] = (generator, weight)
         self.add_module(name, generator)
@@ -209,30 +208,32 @@ class VAECategoryModel(BaseModel):
         return spaces.index(obj)
 
     def _intuitive_distances(self, weights):
-        adjacency = weights.new_zeros(torch.Size([len(self._category),
-                                                  len(self._category)]),
-                                      requires_grad=True)
+        transition = weights.new_zeros(torch.Size([len(self._category),
+                                                   len(self._category)]))
         generators = [g for (g, w) in self._generators.values()]
         row_indices = []
         column_indices = []
-        adjacency_weights = []
+        transition_probs = []
         for src in self._category.nodes():
             i = self._object_index(src)
             out_edges = self._category.out_edges(src, data='weight',
                                                  keys=True)
+            src_weight = weights.new_zeros(torch.Size([1]))
             for (_, dest, generator, _) in out_edges:
                 j = self._object_index(dest)
                 g = generators.index(generator)
                 row_indices.append(i)
                 column_indices.append(j)
-                adjacency_weights.append(weights[g])
-        adjacency = adjacency.index_put((torch.LongTensor(row_indices),
-                                         torch.LongTensor(column_indices)),
-                                        torch.stack(adjacency_weights, dim=0))
-        adjacency = F.softmax(adjacency, dim=-1)
+                src_weight = src_weight + torch.exp(-weights[g])
 
-        exponential = F.softmax(util.expm(adjacency.unsqueeze(0)), dim=-1)
-        return -torch.log(exponential).squeeze(0)
+            for (_, dest, generator, _) in out_edges:
+                transition_probs.append(torch.exp(-weights[g]) / src_weight)
+
+        transition = transition.index_put((torch.LongTensor(row_indices),
+                                           torch.LongTensor(column_indices)),
+                                          torch.cat(transition_probs, dim=0))
+        transition = transition / transition.sum(dim=-1, keepdim=True)
+        return util.expm(transition.unsqueeze(0)).squeeze(0)
 
     def _object_by_dim(self, latent, dims, infer={}):
         spaces = list(self._category.nodes())
@@ -276,19 +277,21 @@ class VAECategoryModel(BaseModel):
         j = torch.LongTensor([self._object_index(neighbor) for (neighbor, _) in
                               morphisms]).to(device=device)
         to_dest = distances.index_select(0, j)[:, dest_idx] * confidence
-
-        morphism_cat = dist.Categorical(probs=F.softmin(to_dest, dim=0))
+        morphism_cat = dist.Categorical(probs=F.softmax(to_dest, dim=0))
         k = pyro.sample('arrow_%d' % k, morphism_cat, infer=infer)
 
         return morphisms[k.item()]
 
     def model(self, observations=None):
         pyro.param('generator_confidence_alpha',
-                   self.generator_confidence_alpha)
-        pyro.param('generator_confidence_beta', self.generator_confidence_beta)
+                   self.generator_confidence_alpha,
+                   constraint=constraints.positive)
+        pyro.param('generator_confidence_beta', self.generator_confidence_beta,
+                   constraint=constraints.positive)
         for name, (g, w) in self._generators.items():
             pyro.module(name, g)
-            pyro.param('generating_weight_' + name, w)
+            pyro.param('generating_weight_' + name, w,
+                       constraint=constraints.positive)
 
         if isinstance(observations, dict):
             data = observations['X^{%d}' % self._data_dim]
