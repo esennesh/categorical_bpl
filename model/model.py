@@ -189,9 +189,7 @@ class VAECategoryModel(BaseModel):
         assert name not in self._generators
         assert isinstance(generator, TypedModel)
 
-        weight = len(generator) if isinstance(generator, PathDensityNet) else\
-                 generator.type().arrowt()[1].tensort()[1][0]
-        weight = nn.Parameter(torch.ones(1) * weight)
+        weight = nn.Parameter(torch.ones(1))
         self.register_parameter('generating_weight_' + name, weight)
         self._generators[name] = (generator, weight)
         self.add_module(name, generator)
