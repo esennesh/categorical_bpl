@@ -5,6 +5,7 @@ import pyro
 from pyro.contrib.autoname import name_count
 import pyro.distributions as dist
 import torch
+import torch.distributions.constraints as constraints
 import torch.nn as nn
 import torch.nn.functional as F
 from base import BaseModel, FirstOrderType, TypedModel
@@ -284,11 +285,14 @@ class VAECategoryModel(BaseModel):
 
     def model(self, observations=None):
         pyro.param('generator_confidence_alpha',
-                   self.generator_confidence_alpha)
-        pyro.param('generator_confidence_beta', self.generator_confidence_beta)
+                   self.generator_confidence_alpha,
+                   constraint=constraints.positive)
+        pyro.param('generator_confidence_beta', self.generator_confidence_beta,
+                   constraint=constraints.positive)
         for name, (g, w) in self._generators.items():
             pyro.module(name, g)
-            pyro.param('generating_weight_' + name, w)
+            pyro.param('generating_weight_' + name, w,
+                       constraint=constraints.positive)
 
         if isinstance(observations, dict):
             data = observations['X^{%d}' % self._data_dim]
