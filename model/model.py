@@ -208,30 +208,32 @@ class VAECategoryModel(BaseModel):
         return spaces.index(obj)
 
     def _intuitive_distances(self, weights):
-        adjacency = weights.new_zeros(torch.Size([len(self._category),
-                                                  len(self._category)]),
-                                      requires_grad=True)
+        transition = weights.new_zeros(torch.Size([len(self._category),
+                                                   len(self._category)]))
         generators = [g for (g, w) in self._generators.values()]
         row_indices = []
         column_indices = []
-        adjacency_weights = []
+        transition_probs = []
         for src in self._category.nodes():
             i = self._object_index(src)
             out_edges = self._category.out_edges(src, data='weight',
                                                  keys=True)
+            src_weight = weights.new_zeros(torch.Size([1]))
             for (_, dest, generator, _) in out_edges:
                 j = self._object_index(dest)
                 g = generators.index(generator)
                 row_indices.append(i)
                 column_indices.append(j)
-                adjacency_weights.append(weights[g])
-        adjacency = adjacency.index_put((torch.LongTensor(row_indices),
-                                         torch.LongTensor(column_indices)),
-                                        torch.stack(adjacency_weights, dim=0))
-        adjacency = F.softmax(adjacency, dim=-1)
+                src_weight = src_weight + torch.exp(-weights[g])
 
-        exponential = F.softmax(util.expm(adjacency.unsqueeze(0)), dim=-1)
-        return -torch.log(exponential).squeeze(0)
+            for (_, dest, generator, _) in out_edges:
+                transition_probs.append(torch.exp(-weights[g]) / src_weight)
+
+        transition = transition.index_put((torch.LongTensor(row_indices),
+                                           torch.LongTensor(column_indices)),
+                                          torch.cat(transition_probs, dim=0))
+        transition = transition / transition.sum(dim=-1, keepdim=True)
+        return util.expm(transition.unsqueeze(0)).squeeze(0)
 
     def _object_by_dim(self, latent, dims, infer={}):
         spaces = list(self._category.nodes())
