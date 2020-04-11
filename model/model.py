@@ -130,8 +130,8 @@ class LayersGraph:
                                  dist_layer=DiagonalGaussian)
 
     def priors(self):
-        for latent in self.latent_spaces():
-            yield StandardNormal(latent)
+        for obj in self._prototype:
+            yield StandardNormal(obj)
 
     def latent_maps(self):
         for z1, z2 in itertools.permutations(self.latent_spaces(), 2):
