@@ -143,12 +143,14 @@ class LayersGraph:
             yield PathDensityNet([(z1, z2)], dist_layer=DiagonalGaussian)
 
 class VAECategoryModel(BaseModel):
-    def __init__(self, data_dim=28*28, hidden_dim=64):
+    def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=None):
         super().__init__()
         self._data_dim = data_dim
         self._category = nx.MultiDiGraph()
         self._category.add_node(FirstOrderType.TOPT())
         self._generators = OrderedDict()
+        if not guide_hidden_dim:
+            guide_hidden_dim = data_dim // 4
 
         # Build up a bunch of torch.Sizes for the powers of two between
         # hidden_dim and data_dim.
@@ -177,14 +179,17 @@ class VAECategoryModel(BaseModel):
         self.register_buffer('latent_dims', latent_dims)
 
         self.guide_generator_confidence = nn.Sequential(
-            nn.Linear(data_dim, 2),
-            nn.Softplus(),
+            nn.Linear(data_dim, guide_hidden_dim), nn.ReLU(),
+            nn.Linear(guide_hidden_dim, 2), nn.Softplus(),
         )
         self.guide_generator_weights = nn.Sequential(
-            nn.Linear(data_dim, len(self._generators)),
-            nn.Softmax(dim=-1),
+            nn.Linear(data_dim, guide_hidden_dim), nn.ReLU(),
+            nn.Linear(guide_hidden_dim, len(self._generators)), nn.Softplus(),
         )
-        self.guide_latent_weights = nn.Linear(data_dim, len(self._category) - 2)
+        self.guide_latent_weights = nn.Sequential(
+            nn.Linear(data_dim, guide_hidden_dim), nn.ReLU(),
+            nn.Linear(guide_hidden_dim, len(self._category) - 2), nn.Softplus(),
+        )
 
     @property
     def data_space(self):
