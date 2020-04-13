@@ -85,12 +85,17 @@ class PathDensityNet(TypedModel):
 
         layers = []
         for i, (u, v) in enumerate(spaces_path):
+            h = u + v // 2
             if i == len(spaces_path) - 1:
-                self.add_module('layer_%d' % i, nn.Linear(u, v))
+                self.add_module('layer_%d' % i, nn.Sequential(
+                    nn.Linear(u, h), nn.BatchNorm1d(h), nn.ReLU(),
+                    nn.Linear(h, v)
+                ))
                 self.add_module('distribution', dist_layer(v))
             else:
                 self.add_module('layer_%d' % i, nn.Sequential(
-                    nn.Linear(u, v), nn.BatchNorm1d(v), nn.ELU()
+                    nn.Linear(u, h), nn.BatchNorm1d(h), nn.ReLU(),
+                    nn.Linear(h, v), nn.BatchNorm1d(v), nn.ReLU(),
                 ))
 
     def __len__(self):
