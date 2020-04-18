@@ -6,7 +6,7 @@
         "type": "VAECategoryModel",
         "args": {
           "data_dim": 784,
-          "hidden_dim": 32
+          "hidden_dim": 10
         }
     },
     "data_loader": {
@@ -23,7 +23,7 @@
         "type": "Adam",
         "args":{
             "optim_args": {
-              "lr": 1e-3,
+              "lr": 1e-4,
               "weight_decay": 0,
               "amsgrad": true
             }
@@ -37,14 +37,14 @@
         }
     },
     "trainer": {
-        "epochs": 100,
+        "epochs": 1000,
 
         "save_dir": "saved/",
-        "save_period": 1,
+        "save_period": 25,
         "verbosity": 2,
 
         "monitor": "min val_loss",
-        "early_stop": 10,
+        "early_stop": 50,
 
         "tensorboard": true
     }
