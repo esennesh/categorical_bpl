@@ -10,7 +10,7 @@
         }
     },
     "data_loader": {
-        "type": "MnistDataLoader",
+        "type": "MnistTargetBatchDataLoader",
         "args":{
             "data_dir": "data/",
             "batch_size": 128,
