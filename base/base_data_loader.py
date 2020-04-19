@@ -26,6 +26,10 @@ class BaseDataLoader(DataLoader):
         }
         super().__init__(sampler=self.sampler, **self.init_kwargs)
 
+    @property
+    def batch_length(self):
+        return self.batch_size
+
     def _split_sampler(self, split):
         if split == 0.0:
             return None, None
