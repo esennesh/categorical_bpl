@@ -10,7 +10,7 @@
         }
     },
     "data_loader": {
-        "type": "MnistDataLoader",
+        "type": "MnistTargetBatchDataLoader",
         "args":{
             "data_dir": "data/",
             "batch_size": 128,
@@ -23,7 +23,7 @@
         "type": "Adam",
         "args":{
             "optim_args": {
-              "lr": 1e-3,
+              "lr": 1e-4,
               "weight_decay": 0,
               "amsgrad": true
             }
