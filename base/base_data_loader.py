@@ -138,28 +138,25 @@ class TargetBatchRandomSampler(Sampler):
         if not isinstance(drop_last, bool):
             raise ValueError("drop_last should be a boolean value, but got "
                              "drop_last={}".format(drop_last))
-        self.targets = {t.item() for t in targets}
-        self.target_indices = [indices[targets == t] for t in self.targets]
         self.batch_size = batch_size
         self.drop_last = drop_last
 
+        target_set = {t.item() for t in targets}
+        target_indices = [indices[targets == t] for t in target_set]
+        self._batches = []
+        for t, t_indices in zip(target_set, target_indices):
+            i = 0
+            while len(t_indices) - i * self.batch_size >= self.batch_size:
+                k = i * self.batch_size
+                self._batches.append(t_indices[k:k+self.batch_size])
+                i += 1
+            if len(t_indices) - i * self.batch_size > 0 and not self.drop_last:
+                self._batches.append(t_indices[i * self.batch_size:])
+
     def __iter__(self):
         batch = []
-        target_idxs = list(zip(self.targets, self.target_indices))
-        for t in torch.randperm(len(self.targets)):
-            target, target_indices = target_idxs[t]
-            for i in torch.randperm(len(target_indices)):
-                batch.append(target_indices[i])
-                if len(batch) == self.batch_size:
-                    yield batch
-                    batch = []
-            if len(batch) > 0 and not self.drop_last:
-                yield batch
-                batch = []
+        for b in torch.randperm(len(self._batches)):
+            yield np.random.permutation(self._batches[b])
 
     def __len__(self):
-        if self.drop_last:
-            return sum([len(indices) // self.batch_size for indices
-                        in self.target_indices])
-        return sum([(len(indices) + self.batch_size - 1) // self.batch_size
-                    for indices in self.target_indices])
+        return len(self._batches)
