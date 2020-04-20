@@ -138,25 +138,26 @@ class TargetBatchRandomSampler(Sampler):
         if not isinstance(drop_last, bool):
             raise ValueError("drop_last should be a boolean value, but got "
                              "drop_last={}".format(drop_last))
+        self.indices = indices
+        self.targets = targets
+        self._targets = {t.item() for t in targets}
         self.batch_size = batch_size
         self.drop_last = drop_last
 
-        target_set = {t.item() for t in targets}
-        target_indices = [indices[targets == t] for t in target_set]
-        self._batches = []
-        for t, t_indices in zip(target_set, target_indices):
-            i = 0
-            while len(t_indices) - i * self.batch_size >= self.batch_size:
-                k = i * self.batch_size
-                self._batches.append(t_indices[k:k+self.batch_size])
-                i += 1
-            if len(t_indices) - i * self.batch_size > 0 and not self.drop_last:
-                self._batches.append(t_indices[i * self.batch_size:])
-
     def __iter__(self):
-        batch = []
-        for b in torch.randperm(len(self._batches)):
-            yield np.random.permutation(self._batches[b])
+        batches = {t: [] for t in self._targets}
+        for idx in torch.randperm(len(self.indices)):
+            target = self.targets[idx].item()
+            batches[target].append(self.indices[idx])
+            if len(batches[target]) == self.batch_size:
+                yield batches[target]
+                batches[target] = []
+        for target, batch in batches.items():
+            if len(batch) > 0 and not self.drop_last:
+                yield batch
 
     def __len__(self):
-        return len(self._batches)
+        if self.drop_last:
+            return len(self.indices) // self.batch_size
+        else:
+            return (len(self.indices) + self.batch_size - 1) // self.batch_size
