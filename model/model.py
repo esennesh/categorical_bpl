@@ -167,8 +167,6 @@ class VAECategoryModel(BaseModel):
             name = 'encoder_%d' % k
             self.add_generating_morphism(name, generator)
 
-        self.generator_confidence_alpha = nn.Parameter(torch.ones(1))
-        self.generator_confidence_beta = nn.Parameter(torch.ones(1))
         latent_dims = torch.ones(len(self._category) - 2)
         latent = lambda s: s != FirstOrderType.TOPT() and s != self.data_space
         latent_subgraph = nx.subgraph_view(self._category, latent)
@@ -197,13 +195,11 @@ class VAECategoryModel(BaseModel):
         assert name not in self._generators
         assert isinstance(generator, TypedModel)
 
-        weight = nn.Parameter(torch.ones(1))
-        self.register_parameter('generating_weight_' + name, weight)
-        self._generators[name] = (generator, weight)
+        self._generators[name] = generator
         self.add_module(name, generator)
 
         l, r = generator.type().arrowt()
-        self._category.add_edge(l, r, generator, weight=weight)
+        self._category.add_edge(l, r, generator)
 
     def draw(self):
         diagram = nx.MultiDiGraph(incoming_graph_data=self._category)
@@ -218,23 +214,22 @@ class VAECategoryModel(BaseModel):
     def _intuitive_distances(self, weights):
         transition = weights.new_zeros(torch.Size([len(self._category),
                                                    len(self._category)]))
-        generators = [g for (g, w) in self._generators.values()]
+        generators = list(self._generators.values())
         row_indices = []
         column_indices = []
         transition_probs = []
         for src in self._category.nodes():
             i = self._object_index(src)
-            out_edges = self._category.out_edges(src, data='weight',
-                                                 keys=True)
+            out_edges = self._category.out_edges(src, keys=True)
             src_weight = weights.new_zeros(torch.Size([1]))
-            for (_, dest, generator, _) in out_edges:
+            for (_, dest, generator) in out_edges:
                 j = self._object_index(dest)
                 g = generators.index(generator)
                 row_indices.append(i)
                 column_indices.append(j)
                 src_weight = src_weight + torch.exp(-weights[g])
 
-            for (_, dest, generator, _) in out_edges:
+            for (_, dest, generator) in out_edges:
                 transition_probs.append(torch.exp(-weights[g]) / src_weight)
 
         transition = transition.index_put((torch.LongTensor(row_indices),
@@ -274,8 +269,7 @@ class VAECategoryModel(BaseModel):
                         infer=infer)
         return morphisms[k.item()]
 
-    def _morphism_by_distance(self, src, dest, distances, confidence,
-                              device=None, k=0, infer={}):
+    def _morphism_by_distance(self, src, dest, distances, k=0, infer={}):
         dest_idx = self._object_index(dest)
 
         morphisms = [(neighbor, m) for (_, neighbor, m) in
@@ -283,8 +277,8 @@ class VAECategoryModel(BaseModel):
         if len(morphisms) == 1:
             return morphisms[0]
         j = torch.LongTensor([self._object_index(neighbor) for (neighbor, _) in
-                              morphisms]).to(device=device)
-        to_dest = distances.index_select(0, j)[:, dest_idx] * confidence
+                              morphisms]).to(device=distances.device)
+        to_dest = distances.index_select(0, j)[:, dest_idx]
         morphism_cat = dist.Categorical(probs=F.softmax(to_dest, dim=0))
         k = pyro.sample('arrow_%d' % k, morphism_cat, infer=infer)
 
