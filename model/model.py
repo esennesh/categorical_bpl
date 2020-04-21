@@ -47,11 +47,10 @@ class StandardNormal(TypedModel):
         )
 
     def forward(self, inputs):
-        with name_count():
-            z_loc = inputs.new_zeros(torch.Size((inputs.shape[0], self._dim)))
-            z_scale = inputs.new_ones(torch.Size((inputs.shape[0], self._dim)))
-            normal = dist.Normal(z_loc, z_scale).to_event(1)
-            return pyro.sample(self._latent_name, normal)
+        z_loc = inputs.new_zeros(torch.Size((inputs.shape[0], self._dim)))
+        z_scale = inputs.new_ones(torch.Size((inputs.shape[0], self._dim)))
+        normal = dist.Normal(z_loc, z_scale).to_event(1)
+        return pyro.sample(self._latent_name, normal)
 
 class BernoulliObservation(TypedModel):
     def __init__(self, obs_dim, observable_name=None):
