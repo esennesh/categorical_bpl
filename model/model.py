@@ -339,59 +339,53 @@ class VAECategoryModel(BaseModel):
             return latent
 
     def guide(self, observations=None):
-        pyro.module('guide_generator_confidence',
-                    self.guide_generator_confidence)
-        pyro.module('guide_generator_weights', self.guide_generator_weights)
-        pyro.module('guide_latent_weights', self.guide_latent_weights)
-        for name, (g, w) in self._generators.items():
-            if g.type().arrowt()[0] == self.data_space:
-                pyro.module(name, g)
-                pyro.param('generating_weight_' + name, w)
-
         if isinstance(observations, dict):
             data = observations['X^{%d}' % self._data_dim]
         else:
             data = observations
         data = data.view(data.shape[0], self._data_dim)
-        with name_count():
-            generators_confidence = self.guide_generator_confidence(data).mean(
-                dim=0
-            )
-            confidence_gamma = dist.Gamma(generators_confidence[0],
-                                          generators_confidence[1])
-            generators_confidence = pyro.sample('generator_weights_confidence',
-                                                confidence_gamma.to_event(0))
-            generators_weights = self.guide_generator_weights(data).mean(dim=0)
 
-            distances = self._intuitive_distances(generators_weights)
+        pyro.module('guide_generator_confidence',
+                    self.guide_generator_confidence)
+        pyro.module('guide_generator_weights', self.guide_generator_weights)
+        pyro.module('guide_latent_weights', self.guide_latent_weights)
 
-            latent_dims = generators_confidence *\
-                          self.guide_latent_weights(data).mean(dim=0)
-            location = self._object_by_dim(True, latent_dims)
-            self._morphism_by_weight(FirstOrderType.TOPT(), location,
-                                     generators_weights)
+        generators_confidence = self.guide_generator_confidence(data).mean(
+            dim=0
+        )
+        confidence_gamma = dist.Gamma(generators_confidence[0],
+                                      generators_confidence[1])
+        confidence = pyro.sample('generators_confidence',
+                                 confidence_gamma.to_event(0))
+        weights = self.guide_generator_weights(data).mean(dim=0) * confidence
 
-            encoders = []
-            # Cycle through while the location is not the data space, finding
-            # a path there via intuitive distance softmin.
-            with pyro.markov():
-                while location != self.data_space:
-                    encoder = self._morphism_by_weight(
-                        self.data_space, location, generators_weights,
-                        infer={'is_auxiliary': True}
-                    )
-                    encoders.append(encoder)
-                    (location, _) = self._morphism_by_distance(
-                        location, self.data_space, distances,
-                        generators_confidence, device=data.device,
-                        k=len(encoders),
-                    )
+        distances = self._intuitive_distances(weights)
 
-            with pyro.plate('data', len(data)):
+        latent_dims = self.guide_latent_weights(data).mean(dim=0) * confidence
+        location = self._object_by_dim(True, latent_dims)
+        self._morphism_by_weight(FirstOrderType.TOPT(), location, weights)
+
+        encoders = []
+        # Cycle through while the location is not the data space, finding
+        # a path there via intuitive distance softmin.
+        with pyro.markov():
+            while location != self.data_space:
+                encoder = self._morphism_by_weight(
+                    self.data_space, location, weights,
+                    infer={'is_auxiliary': True}
+                )
+                encoders.append(encoder)
+                (location, _) = self._morphism_by_distance(location,
+                                                           self.data_space,
+                                                           distances,
+                                                           k=len(encoders))
+
+        with pyro.plate('data', len(data)):
+            with name_count():
                 for encoder in encoders:
                     latent = encoder(data)
 
-            return latent
+        return latent
 
     def forward(self, observations=None):
         if observations is not None:
