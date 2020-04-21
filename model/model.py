@@ -28,10 +28,9 @@ class DiagonalGaussian(TypedModel):
         )
 
     def forward(self, inputs, observations=None):
-        with name_count():
-            zs = self.parameterization(inputs).view(-1, 2, self._dim[0])
-            normal = dist.Normal(zs[:, 0], F.softplus(zs[:, 1])).to_event(1)
-            return pyro.sample(self._latent_name, normal, obs=observations)
+        zs = self.parameterization(inputs).view(-1, 2, self._dim[0])
+        normal = dist.Normal(zs[:, 0], F.softplus(zs[:, 1])).to_event(1)
+        return pyro.sample(self._latent_name, normal, obs=observations)
 
 class StandardNormal(TypedModel):
     def __init__(self, dim, latent_name=None):
