@@ -285,16 +285,6 @@ class VAECategoryModel(BaseModel):
         return morphisms[k.item()]
 
     def model(self, observations=None):
-        pyro.param('generator_confidence_alpha',
-                   self.generator_confidence_alpha,
-                   constraint=constraints.positive)
-        pyro.param('generator_confidence_beta', self.generator_confidence_beta,
-                   constraint=constraints.positive)
-        for name, (g, w) in self._generators.items():
-            pyro.module(name, g)
-            pyro.param('generating_weight_' + name, w,
-                       constraint=constraints.positive)
-
         if isinstance(observations, dict):
             data = observations['X^{%d}' % self._data_dim]
         else:
@@ -305,31 +295,39 @@ class VAECategoryModel(BaseModel):
         data_space = FirstOrderType.TENSORT(torch.float,
                                             torch.Size([self._data_dim]))
 
-        with name_count():
-            confidence_gamma = dist.Gamma(self.generator_confidence_alpha,
-                                          self.generator_confidence_beta)
-            generators_confidence = pyro.sample('generator_weights_confidence',
-                                                confidence_gamma.to_event(0))
-            weights = torch.cat([w for (_, w) in self._generators.values()],
-                                dim=0)
-            distances = self._intuitive_distances(weights)
+        alpha = pyro.param('confidence_alpha', data.new_ones(1),
+                           constraint=constraints.positive)
+        beta = pyro.param('confidence_beta', data.new_ones(1),
+                          constraint=constraints.positive)
+        confidence_gamma = dist.Gamma(alpha, beta)
+        confidence = pyro.sample('generators_confidence',
+                                 confidence_gamma.to_event(0))
 
-            location = self._object_by_dim(True, self.latent_dims)
-            prior = self._morphism_by_weight(FirstOrderType.TOPT(), location,
-                                             weights)
+        weights = []
+        for (src, dest, generator) in self._category.edges(keys=True):
+            pyro.module('generator_{%s -> %s}' % (src, dest), generator)
+            w = pyro.param('generator_weight_{%s -> %s}' % (src, dest),
+                           data.new_ones(1), constraint=constraints.positive)
+            weights.append(w)
+        weights = torch.cat(weights, dim=0) * confidence
+        distances = self._intuitive_distances(weights)
 
-            path = [prior]
+        location = self._object_by_dim(True, confidence * self.latent_dims)
+        prior = self._morphism_by_weight(FirstOrderType.TOPT(), location,
+                                         weights)
+
+        path = [prior]
+        with pyro.markov():
+            while location != data_space:
+                (location, morphism) = self._morphism_by_distance(
+                    location, self.data_space, distances, k=len(path)
+                )
+                path.append(morphism)
+
+        latent = None
+        with pyro.plate('data', len(data)):
             with pyro.markov():
-                while location != data_space:
-                    (location, morphism) = self._morphism_by_distance(
-                        location, self.data_space, distances,
-                        generators_confidence, device=data.device, k=len(path)
-                    )
-                    path.append(morphism)
-
-            latent = None
-            with pyro.plate('data', len(data)):
-                with pyro.markov():
+                with name_count():
                     for i, morphism in enumerate(path):
                         if i == len(path) - 1:
                             latent = morphism(latent, observations=data)
