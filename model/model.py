@@ -211,8 +211,8 @@ class VAECategoryModel(BaseModel):
         spaces = list(self._category.nodes())
         return spaces.index(obj)
 
-    def _intuitive_distances(self, weights):
-        transition = weights.new_zeros(torch.Size([len(self._category),
+    def _intuitive_distances(self, step_distances):
+        transition = step_distances.new_zeros(torch.Size([len(self._category),
                                                    len(self._category)]))
         generators = list(self._generators.values())
         row_indices = []
@@ -221,21 +221,22 @@ class VAECategoryModel(BaseModel):
         for src in self._category.nodes():
             i = self._object_index(src)
             out_edges = self._category.out_edges(src, keys=True)
-            src_weight = weights.new_zeros(torch.Size([1]))
+            src_probs = []
             for (_, dest, generator) in out_edges:
                 j = self._object_index(dest)
                 g = generators.index(generator)
                 row_indices.append(i)
                 column_indices.append(j)
-                src_weight = src_weight + torch.exp(-weights[g])
-
-            for (_, dest, generator) in out_edges:
-                transition_probs.append(torch.exp(-weights[g]) / src_weight)
+                src_probs.append(step_distances[g])
+            src_probs = F.softmin(torch.stack(src_probs, dim=0), dim=0)
+            transition_probs.append(src_probs)
 
         transition = transition.index_put((torch.LongTensor(row_indices),
                                            torch.LongTensor(column_indices)),
-                                          torch.cat(transition_probs, dim=0))
-        transition = transition / transition.sum(dim=-1, keepdim=True)
+                                          torch.cat(transition_probs, dim=0),
+                                          accumulate=True)
+        transition_sum = transition.sum(dim=-1, keepdim=True)
+        transition = transition / transition_sum
         return util.expm(transition.unsqueeze(0)).squeeze(0)
 
     def _object_by_dim(self, latent, dims, infer={}):
