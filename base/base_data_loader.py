@@ -113,9 +113,9 @@ class BaseTargetBatchDataLoader(DataLoader):
         train_idx = np.delete(idx_full, np.arange(0, len_valid))
 
         train_sampler = TargetBatchRandomSampler(train_idx, targets[train_idx],
-                                                 batch_size)
+                                                 batch_size, True)
         valid_sampler = TargetBatchRandomSampler(valid_idx, targets[valid_idx],
-                                                 batch_size)
+                                                 batch_size, True)
 
         # turn off shuffle option which is mutually exclusive with sampler
         self.shuffle = False
@@ -152,9 +152,10 @@ class TargetBatchRandomSampler(Sampler):
             if len(batches[target]) == self.batch_size:
                 yield batches[target]
                 batches[target] = []
-        for target, batch in batches.items():
-            if len(batch) > 0 and not self.drop_last:
-                yield batch
+        remainders = list(batches.values())
+        for idx in torch.randperm(len(remainders)):
+            if len(remainders[idx]) > 0 and not self.drop_last:
+                yield remainders[idx]
 
     def __len__(self):
         if self.drop_last:
