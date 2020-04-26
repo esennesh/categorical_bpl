@@ -70,7 +70,9 @@ class BaseTargetBatchDataLoader(DataLoader):
     """
     Base class for data loaders that batch over classes
     """
-    def __init__(self, dataset, batch_size, shuffle, validation_split, num_workers, collate_fn=default_collate):
+    def __init__(self, dataset, batch_size, shuffle, validation_split,
+                 num_workers, targets, collate_fn=default_collate,
+                 drop_train_last=True, drop_valid_last=True):
         self.validation_split = validation_split
         self.shuffle = shuffle
 
@@ -78,8 +80,9 @@ class BaseTargetBatchDataLoader(DataLoader):
         self.n_samples = len(dataset)
 
         self.sampler, self.valid_sampler = self._split_sampler(self.validation_split,
-                                                               dataset.targets,
-                                                               batch_size)
+                                                               targets, batch_size,
+                                                               drop_train_last,
+                                                               drop_valid_last)
         self._batch_length = batch_size
         self.init_kwargs = {
             'dataset': dataset,
@@ -93,7 +96,8 @@ class BaseTargetBatchDataLoader(DataLoader):
     def batch_length(self):
         return self._batch_length
 
-    def _split_sampler(self, split, targets, batch_size):
+    def _split_sampler(self, split, targets, batch_size, drop_train_last=True,
+                       drop_valid_last=True):
         if split == 0.0:
             return None, None
 
@@ -113,9 +117,9 @@ class BaseTargetBatchDataLoader(DataLoader):
         train_idx = np.delete(idx_full, np.arange(0, len_valid))
 
         train_sampler = TargetBatchRandomSampler(train_idx, targets[train_idx],
-                                                 batch_size, True)
+                                                 batch_size, drop_train_last)
         valid_sampler = TargetBatchRandomSampler(valid_idx, targets[valid_idx],
-                                                 batch_size, True)
+                                                 batch_size, drop_valid_last)
 
         # turn off shuffle option which is mutually exclusive with sampler
         self.shuffle = False
