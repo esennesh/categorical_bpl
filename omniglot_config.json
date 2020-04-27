@@ -10,10 +10,10 @@
         }
     },
     "data_loader": {
-        "type": "OmniglotTargetBatchDataLoader",
+        "type": "OmniglotDataLoader",
         "args":{
             "data_dir": "data/",
-            "batch_size": 20,
+            "batch_size": 128,
             "shuffle": true,
             "validation_split": 0.1,
             "num_workers": 2
@@ -23,7 +23,7 @@
         "type": "Adam",
         "args":{
             "optim_args": {
-              "lr": 1e-3,
+              "lr": 1e-4,
               "weight_decay": 0,
               "amsgrad": true
             }
