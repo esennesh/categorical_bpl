@@ -5,12 +5,17 @@ import pyro
 from pyro.contrib.autoname import name_count
 import pyro.distributions as dist
 import torch
+import torch.distributions
 import torch.distributions.constraints as constraints
 import torch.nn as nn
 import torch.nn.functional as F
 from base import BaseModel, FirstOrderType, TypedModel
 import base.base_type as types
 import utils.util as util
+
+class ContinuousBernoulli(torch.distributions.ContinuousBernoulli,
+                          dist.torch_distribution.TorchDistributionMixin):
+    pass
 
 class DiagonalGaussian(TypedModel):
     def __init__(self, dim, latent_name=None):
@@ -69,7 +74,7 @@ class BernoulliObservation(TypedModel):
     def forward(self, inputs, observations=None):
         with name_count():
             xs = torch.sigmoid(inputs.view(-1, self._obs_dim[0]))
-            bernoulli = dist.Bernoulli(probs=xs).to_event(1)
+            bernoulli = ContinuousBernoulli(probs=xs).to_event(1)
             pyro.sample(self._observable_name, bernoulli, obs=observations)
             return xs
 
