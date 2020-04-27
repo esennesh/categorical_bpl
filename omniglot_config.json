@@ -1,0 +1,51 @@
+{
+    "name": "Omniglot_VaeCategory",
+    "n_gpu": 1,
+
+    "arch": {
+        "type": "VAECategoryModel",
+        "args": {
+          "data_dim": 784,
+          "hidden_dim": 64
+        }
+    },
+    "data_loader": {
+        "type": "OmniglotDataLoader",
+        "args":{
+            "data_dir": "data/",
+            "batch_size": 128,
+            "shuffle": true,
+            "validation_split": 0.1,
+            "num_workers": 2
+        }
+    },
+    "optimizer": {
+        "type": "Adam",
+        "args":{
+            "optim_args": {
+              "lr": 1e-4,
+              "weight_decay": 0,
+              "amsgrad": true
+            }
+        }
+    },
+    "lr_scheduler": {
+        "type": "ReduceLROnPlateau",
+        "args": {
+            "patience": 10,
+            "factor": 0.1
+        }
+    },
+    "trainer": {
+        "epochs": 100,
+
+        "save_dir": "saved/",
+        "save_period": 5,
+        "verbosity": 2,
+
+        "monitor": "min val_loss",
+        "early_stop": 20,
+
+        "tensorboard": true
+    }
+}
