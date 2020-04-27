@@ -33,6 +33,15 @@ flip = lambda x : - x
 resizing = lambda x: x.resize((28,28))
 omni_transforms = transforms.Compose([resizing, transforms.ToTensor(), rescaling, flip])
 
+class OmniglotDataLoader(BaseDataLoader):
+    """
+    Omniglot data loading batched by label using BaseTargetBatchDataLoader
+    """
+    def __init__(self, data_dir, batch_size, shuffle=True, validation_split=0.0, num_workers=1, background=True):
+        self.data_dir = data_dir
+        self.dataset = datasets.Omniglot(self.data_dir, background=background, download=True, transform=omni_transforms)
+        super().__init__(self.dataset, batch_size, shuffle, validation_split, num_workers)
+
 class OmniglotTargetBatchDataLoader(BaseTargetBatchDataLoader):
     """
     Omniglot data loading batched by label using BaseTargetBatchDataLoader
