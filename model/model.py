@@ -291,6 +291,22 @@ class VAECategoryModel(BaseModel):
 
         return morphisms[k.item()]
 
+    def sample_path_between(self, src, dest, distances, confidence, infer={}):
+        location = src
+        prior = self._morphism_by_distance(FirstOrderType.TOPT(), src,
+                                           distances, confidence, infer=infer)
+
+        path = [prior]
+        with pyro.markov():
+            while location != dest:
+                (location, morphism) = self._morphism_by_distance(src, dest,
+                                                                  distances,
+                                                                  confidence,
+                                                                  k=len(path))
+                path.append(morphism)
+
+        return path
+
     def model(self, observations=None):
         if isinstance(observations, dict):
             data = observations['X^{%d}' % self._data_dim]
