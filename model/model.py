@@ -126,27 +126,35 @@ class LayersGraph:
         self._prototype = nx.complete_graph(spaces)
         self._data_space = data_dim
 
+    @property
+    def spaces(self):
+        return set(self._prototype.nodes())
+
+    @property
     def latent_spaces(self):
         return {n for n in self._prototype.nodes() if n != self._data_space}
 
     def likelihoods(self):
         # Use the data space to construct likelihood layers
-        for source in self.latent_spaces():
+        for source in self.latent_spaces:
             yield PathDensityNet([(source, self._data_space)],
                                  dist_layer=BernoulliObservation)
 
     def encoders(self):
         # Use the data space to construct likelihood layers
-        for dest in self.latent_spaces():
+        for dest in self.latent_spaces:
             yield PathDensityNet([(self._data_space, dest)],
                                  dist_layer=DiagonalGaussian)
 
     def priors(self):
         for obj in self._prototype:
-            yield StandardNormal(obj)
+            yield self.prior(obj)
+
+    def prior(self, obj):
+        return StandardNormal(obj)
 
     def latent_maps(self):
-        for z1, z2 in itertools.permutations(self.latent_spaces(), 2):
+        for z1, z2 in itertools.permutations(self.latent_spaces, 2):
             yield PathDensityNet([(z1, z2)], dist_layer=DiagonalGaussian)
 
 class VAECategoryModel(BaseModel):
