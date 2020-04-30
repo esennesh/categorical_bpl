@@ -26,6 +26,7 @@ class DiagonalGaussian(TypedModel):
         self._latent_name = latent_name
         self.parameterization = nn.Linear(self._dim[0], self._dim[0] * 2)
 
+    @property
     def type(self):
         return FirstOrderType.ARROWT(
             FirstOrderType.TENSORT(torch.float, self._dim),
@@ -45,6 +46,7 @@ class StandardNormal(TypedModel):
         self._latent_name = latent_name
         self._dim = dim
 
+    @property
     def type(self):
         return FirstOrderType.ARROWT(
             FirstOrderType.TOPT(),
@@ -65,6 +67,7 @@ class BernoulliObservation(TypedModel):
             observable_name = 'X^{%d}' % self._obs_dim[0]
         self._observable_name = observable_name
 
+    @property
     def type(self):
         return FirstOrderType.ARROWT(
             FirstOrderType.TENSORT(torch.float, self._obs_dim),
@@ -104,6 +107,7 @@ class PathDensityNet(TypedModel):
     def __len__(self):
         return self._num_spaces
 
+    @property
     def type(self):
         return FirstOrderType.ARROWT(
             FirstOrderType.TENSORT(torch.float, self._in_dim),
@@ -203,7 +207,7 @@ class VAECategoryModel(BaseModel):
         self._generators[name] = generator
         self.add_module(name, generator)
 
-        l, r = generator.type().arrowt()
+        l, r = generator.type.arrowt()
         self._category.add_edge(l, r, generator)
 
     def draw(self):
@@ -266,7 +270,7 @@ class VAECategoryModel(BaseModel):
         weights = torch.unbind(weights, dim=0)
         src_dest_weights = []
         for (g, _), w in zip(self._generators.values(), weights):
-            if g.type() == FirstOrderType.ARROWT(src, dest):
+            if g.type == FirstOrderType.ARROWT(src, dest):
                 src_dest_weights += [w]
         src_dest_weights = torch.stack(src_dest_weights, dim=0) * confidence
         morphisms_cat = dist.Categorical(probs=F.softmax(src_dest_weights,
