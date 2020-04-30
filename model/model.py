@@ -317,8 +317,6 @@ class VAECategoryModel(BaseModel):
         if data is None:
             data = torch.zeros(1, self._data_dim)
         data = data.view(data.shape[0], self._data_dim)
-        data_space = FirstOrderType.TENSORT(torch.float,
-                                            torch.Size([self._data_dim]))
 
         alpha = pyro.param('confidence_alpha', data.new_ones(1),
                            constraint=constraints.positive)
@@ -337,32 +335,23 @@ class VAECategoryModel(BaseModel):
         weights = torch.cat(weights, dim=0)
         distances = self._intuitive_distances(weights)
 
-        location = self._object_by_dim(True, self.latent_dims, confidence)
-        prior = self._morphism_by_weight(FirstOrderType.TOPT(), location,
-                                         weights, confidence)
+        origin = self._object_by_dim(True, self.latent_dims, confidence)
+        prior = self._morphism_by_weight(FirstOrderType.TOPT(), origin, weights,
+                                         confidence)
+        path = self.sample_path_between(origin, self.data_space, distances,
+                                        confidence)
 
-        path = [prior]
-        with pyro.markov():
-            while location != data_space:
-                (location, morphism) = self._morphism_by_distance(
-                    location, self.data_space, distances, confidence,
-                    k=len(path),
-                )
-                path.append(morphism)
-
-        latent = None
         with pyro.plate('data', len(data)):
             with pyro.markov():
                 with name_count():
+                    latent = prior(data)
                     for i, morphism in enumerate(path):
                         if i == len(path) - 1:
                             latent = morphism(latent, observations=data)
-                        elif i == 0:
-                            latent = morphism(data)
                         else:
                             latent = morphism(latent)
 
-            return latent
+        return latent
 
     def guide(self, observations=None):
         if isinstance(observations, dict):
@@ -388,25 +377,22 @@ class VAECategoryModel(BaseModel):
         distances = self._intuitive_distances(weights)
 
         latent_dims = self.guide_latent_weights(data).mean(dim=0)
-        location = self._object_by_dim(True, latent_dims, confidence)
-        self._morphism_by_weight(FirstOrderType.TOPT(), location, weights,
-                                 confidence)
+        origin = self._object_by_dim(True, latent_dims, confidence)
+        prior = self._morphism_by_weight(FirstOrderType.TOPT(), origin,
+                                         weights, confidence)
+        path = self.sample_path_between(origin, self.data_space, distances,
+                                        confidence)
 
         encoders = []
         # Cycle through while the location is not the data space, finding
         # a path there via intuitive distance softmin.
         with pyro.markov():
-            while location != self.data_space:
-                encoder = self._morphism_by_weight(
-                    self.data_space, location, weights, confidence,
-                    infer={'is_auxiliary': True}
-                )
+            for arrow in path:
+                location = types.unfold_arrow(arrow.type)[0]
+                encoder = self._morphism_by_weight(self.data_space, location,
+                                                   weights, confidence,
+                                                   infer={'is_auxiliary': True})
                 encoders.append(encoder)
-                (location, _) = self._morphism_by_distance(location,
-                                                           self.data_space,
-                                                           distances,
-                                                           confidence,
-                                                           k=len(encoders))
 
         with pyro.plate('data', len(data)):
             with name_count():
