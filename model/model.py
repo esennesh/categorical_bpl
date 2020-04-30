@@ -313,6 +313,27 @@ class VAECategoryModel(BaseModel):
 
         return morphisms[k.item()]
 
+    def sample_generator_between(self, src, dest, edge_distances, confidence,
+                                 infer={}, name='generator'):
+        generators = list(self._category[src][dest].keys())
+        if len(generators) == 1:
+            return generators[0]
+
+        edge_distances = torch.unbind(edge_distances, dim=0)
+        between_distances = []
+
+        for generator in generators:
+            g = self._generators.values().index(generator)
+            between_distances.append(edge_distances[g])
+        between_distances = torch.stack(between_distances, dim=0)
+
+        generators_cat = dist.Categorical(
+            probs=F.softmin(between_distances * confidence, dim=0)
+        )
+        g_idx = pyro.sample('%s_{%s -> %s}' % (name, src, dest), generators_cat,
+                            infer=infer)
+        return generators[g_idx.item()]
+
     def sample_path_between(self, src, dest, distances, confidence, infer={}):
         location = src
         path = []
