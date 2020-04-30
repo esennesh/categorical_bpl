@@ -276,36 +276,26 @@ class VAECategoryModel(BaseModel):
         transition = transition / transition_sum
         return -torch.log(transition)
 
-    def _object_by_dim(self, latent, dims, confidence, infer={}):
-        spaces = list(self._category.nodes())
+    def sample_global_element(self, dims, weights, confidence, latent=False,
+                              infer={}):
+        spaces = self._spaces.copy()
         if latent:
-            nonlatent_spaces = [FirstOrderType.TOPT(), FirstOrderType.TENSORT(
-                torch.float, torch.Size([self._data_dim])
-            )]
-            for s in nonlatent_spaces:
-                spaces.remove(s)
+            data_idx = spaces.index(self.data_space)
+            spaces.remove(self.data_space)
+            dims = torch.cat((dims[0:data_idx], dims[data_idx+1:]), dim=0)
 
         dims = F.softmin(dims * confidence, dim=0)
-        obj = pyro.sample('category_object', dist.Categorical(probs=dims),
-                          infer=infer)
+        obj_idx = pyro.sample('global_object', dist.Categorical(probs=dims),
+                              infer=infer)
+        obj = spaces[obj_idx.item()]
 
-        return spaces[obj.item()]
-
-    def _morphism_by_weight(self, src, dest, weights, confidence, infer={}):
-        morphisms = list(self._category[src][dest].keys())
-        if len(morphisms) == 1:
-            return morphisms[0]
-        weights = torch.unbind(weights, dim=0)
-        src_dest_weights = []
-        for (g, _), w in zip(self._generators.values(), weights):
-            if g.type == FirstOrderType.ARROWT(src, dest):
-                src_dest_weights += [w]
-        src_dest_weights = torch.stack(src_dest_weights, dim=0) * confidence
-        morphisms_cat = dist.Categorical(probs=F.softmax(src_dest_weights,
-                                                         dim=0))
-        k = pyro.sample('morphism_{%s -> %s}' % (src, dest), morphisms_cat,
-                        infer=infer)
-        return morphisms[k.item()]
+        elements_cat = dist.Categorical(
+            probs=F.softmax(weights[obj] * confidence, dim=0)
+        )
+        elt_idx = pyro.sample('global_element_{%s}' % obj, elements_cat,
+                                  infer=infer)
+        element = self._category.nodes[obj]['global_elements'][elt_idx.item()]
+        return obj, element
 
     def _morphism_by_distance(self, src, dest, distances, confidence, k=0,
                               infer={}):
