@@ -357,6 +357,26 @@ class VAECategoryModel(BaseModel):
             data = torch.zeros(1, self._data_dim)
         data = data.view(data.shape[0], self._data_dim)
 
+        distances = []
+        for (src, dest, generator) in self._category.edges(keys=True):
+            pyro.module('generator_{%s -> %s}' % (src, dest), generator)
+            d = pyro.param('generator_weight_{%s -> %s}' % (src, dest),
+                           data.new_ones(1), constraint=constraints.positive)
+            distances.append(d)
+        distances = self._intuitive_distances(torch.cat(distances, dim=0))
+
+        prior_weights = {}
+        for obj in self._category.nodes:
+            prior_weights[obj] = []
+            global_elements = self._category.nodes[obj]['global_elements']
+            for k, element in enumerate(global_elements):
+                pyro.module('global_element_%s_%d' % (obj, k), element)
+                weight = pyro.param('global_element_weight_%s_%s' % (obj, k),
+                                    data.new_ones(1),
+                                    constraint=constraints.positive)
+                prior_weights[obj].append(weight)
+            prior_weights[obj] = torch.stack(prior_weights[obj], dim=0)
+
         alpha = pyro.param('confidence_alpha', data.new_ones(1),
                            constraint=constraints.positive)
         beta = pyro.param('confidence_beta', data.new_ones(1),
@@ -365,18 +385,9 @@ class VAECategoryModel(BaseModel):
         confidence = pyro.sample('generators_confidence',
                                  confidence_gamma.to_event(0))
 
-        weights = []
-        for (src, dest, generator) in self._category.edges(keys=True):
-            pyro.module('generator_{%s -> %s}' % (src, dest), generator)
-            w = pyro.param('generator_weight_{%s -> %s}' % (src, dest),
-                           data.new_ones(1), constraint=constraints.positive)
-            weights.append(w)
-        weights = torch.cat(weights, dim=0)
-        distances = self._intuitive_distances(weights)
-
-        origin = self._object_by_dim(True, self.latent_dims, confidence)
-        prior = self._morphism_by_weight(FirstOrderType.TOPT(), origin, weights,
-                                         confidence)
+        origin, prior = self.sample_global_element(self.dimensionalities,
+                                                   prior_weights, confidence,
+                                                   latent=True)
         path = self.sample_path_between(origin, self.data_space, distances,
                                         confidence)
 
@@ -384,11 +395,11 @@ class VAECategoryModel(BaseModel):
             with pyro.markov():
                 with name_count():
                     latent = prior(data)
-                    for i, morphism in enumerate(path):
+                    for i, generator in enumerate(path):
                         if i == len(path) - 1:
-                            latent = morphism(latent, observations=data)
+                            latent = generator(latent, observations=data)
                         else:
-                            latent = morphism(latent)
+                            latent = generator(latent)
 
         return latent
 
