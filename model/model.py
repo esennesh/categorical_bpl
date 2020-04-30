@@ -1,4 +1,4 @@
-from collections import OrderedDict
+from indexed import IndexedOrderedDict
 import itertools
 import networkx as nx
 import pyro
@@ -162,8 +162,8 @@ class VAECategoryModel(BaseModel):
         super().__init__()
         self._data_dim = data_dim
         self._category = nx.MultiDiGraph()
-        self._category.add_node(FirstOrderType.TOPT())
-        self._generators = OrderedDict()
+        self._generators = IndexedOrderedDict()
+        self._spaces = []
         if not guide_hidden_dim:
             guide_hidden_dim = data_dim // 4
 
@@ -171,9 +171,12 @@ class VAECategoryModel(BaseModel):
         # hidden_dim and data_dim.
         layers_graph = LayersGraph(util.powers_of(2, hidden_dim, data_dim),
                                    data_dim)
-        for k, generator in enumerate(layers_graph.priors()):
-            name = 'prior_%d' % k
-            self.add_generating_morphism(name, generator)
+        for dim in layers_graph.spaces:
+            space = FirstOrderType.TENSORT(torch.float, torch.Size([dim]))
+            self._category.add_node(space, global_elements=tuple())
+            self._spaces.append(space)
+        for prior in layers_graph.priors():
+            self.add_global_element(prior)
         for k, generator in enumerate(layers_graph.likelihoods()):
             name = 'likelihood_%d' % k
             self.add_generating_morphism(name, generator)
@@ -184,29 +187,45 @@ class VAECategoryModel(BaseModel):
             name = 'encoder_%d' % k
             self.add_generating_morphism(name, generator)
 
-        latent_dims = torch.ones(len(self._category) - 2)
-        latent = lambda s: s != FirstOrderType.TOPT() and s != self.data_space
-        latent_subgraph = nx.subgraph_view(self._category, latent)
-        for k, space in enumerate(latent_subgraph.nodes()):
-            latent_dims[k] = space.tensort()[1][0]
-        self.register_buffer('latent_dims', latent_dims)
+        dimensionalities = torch.ones(len(self._category))
+        for k, space in enumerate(self._category.nodes()):
+            dimensionalities[k] = space.tensort()[1][0]
+        self.register_buffer('dimensionalities', dimensionalities)
 
-        self.guide_generator_confidence = nn.Sequential(
+        self.guide_confidence = nn.Sequential(
             nn.Linear(data_dim, guide_hidden_dim), nn.ReLU(),
             nn.Linear(guide_hidden_dim, 2), nn.Softplus(),
         )
-        self.guide_generator_weights = nn.Sequential(
+        self.guide_prior_weights = nn.Sequential(
             nn.Linear(data_dim, guide_hidden_dim), nn.ReLU(),
-            nn.Linear(guide_hidden_dim, len(self._generators)), nn.Softplus(),
+            nn.Linear(guide_hidden_dim, len(list(layers_graph.priors()))),
+            nn.Softplus(),
         )
-        self.guide_latent_weights = nn.Sequential(
+        self.guide_distances = nn.Sequential(
             nn.Linear(data_dim, guide_hidden_dim), nn.ReLU(),
-            nn.Linear(guide_hidden_dim, len(self._category) - 2), nn.Softplus(),
+            nn.Linear(guide_hidden_dim, len(self._generators)),
+            nn.Softplus(),
+        )
+        self.guide_dimensionalities = nn.Sequential(
+            nn.Linear(data_dim, guide_hidden_dim), nn.ReLU(),
+            nn.Linear(guide_hidden_dim, len(self._category)), nn.Softplus(),
         )
 
     @property
     def data_space(self):
         return FirstOrderType.TENSORT(torch.float, torch.Size([self._data_dim]))
+
+    def add_global_element(self, element):
+        assert isinstance(element, TypedModel)
+        assert element.type.arrowt()[0] == FirstOrderType.TOPT()
+
+        obj = element.type.arrowt()[1]
+        elements = list(self._category.nodes[obj]['global_elements'])
+
+        self.add_module('global_element_{%s, %d}' % (obj, len(elements)),
+                        element)
+        elements.append(element)
+        self._category.add_node(obj, global_elements=tuple(elements))
 
     def add_generating_morphism(self, name, generator):
         assert name not in self._generators
@@ -220,13 +239,11 @@ class VAECategoryModel(BaseModel):
 
     def draw(self):
         diagram = nx.MultiDiGraph(incoming_graph_data=self._category)
-        diagram.remove_node(FirstOrderType.TOPT())
         node_labels = {object: str(object) for object in diagram.nodes()}
         nx.draw(diagram, labels=node_labels, pos=nx.spring_layout(diagram))
 
     def _object_index(self, obj):
-        spaces = list(self._category.nodes())
-        return spaces.index(obj)
+        return self._spaces.index(obj)
 
     def _intuitive_distances(self, step_distances):
         transition = step_distances.new_zeros(torch.Size([len(self._category),
