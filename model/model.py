@@ -410,12 +410,12 @@ class VAECategoryModel(BaseModel):
             data = observations
         data = data.view(data.shape[0], self._data_dim)
 
-        pyro.module('guide_generator_confidence',
-                    self.guide_generator_confidence)
-        pyro.module('guide_generator_weights', self.guide_generator_weights)
-        pyro.module('guide_latent_weights', self.guide_latent_weights)
+        pyro.module('guide_confidence', self.guide_confidence)
+        pyro.module('guide_distances', self.guide_distances)
+        pyro.module('guide_prior_weights', self.guide_prior_weights)
+        pyro.module('guide_dimensionalities', self.guide_dimensionalities)
 
-        generators_confidence = self.guide_generator_confidence(data).mean(
+        generators_confidence = self.guide_confidence(data).mean(
             dim=0
         )
         confidence_gamma = dist.Gamma(generators_confidence[0],
@@ -423,26 +423,36 @@ class VAECategoryModel(BaseModel):
         confidence = pyro.sample('generators_confidence',
                                  confidence_gamma.to_event(0))
 
-        weights = self.guide_generator_weights(data).mean(dim=0)
-        distances = self._intuitive_distances(weights)
+        weights = self.guide_prior_weights(data).mean(dim=0)
+        prior_weights = {}
+        n_prior_weights = 0
+        for obj in self._category.nodes:
+            prior_weights[obj] = []
+            global_elements = self._category.nodes[obj]['global_elements']
+            for element in global_elements:
+                prior_weights[obj].append(weights[n_prior_weights])
+                n_prior_weights += 1
+            prior_weights[obj] = torch.stack(prior_weights[obj], dim=0)
 
-        latent_dims = self.guide_latent_weights(data).mean(dim=0)
-        origin = self._object_by_dim(True, latent_dims, confidence)
-        prior = self._morphism_by_weight(FirstOrderType.TOPT(), origin,
-                                         weights, confidence)
+        edge_distances = self.guide_distances(data).mean(dim=0)
+        distances = self._intuitive_distances(edge_distances)
+
+        dimensionalities = self.guide_dimensionalities(data).mean(dim=0)
+        origin, prior = self.sample_global_element(self.dimensionalities,
+                                                   prior_weights, confidence,
+                                                   latent=True)
         path = self.sample_path_between(origin, self.data_space, distances,
                                         confidence)
 
         encoders = []
         # Cycle through while the location is not the data space, finding
         # a path there via intuitive distance softmin.
-        with pyro.markov():
-            for arrow in path:
-                location = types.unfold_arrow(arrow.type)[0]
-                encoder = self._morphism_by_weight(self.data_space, location,
-                                                   weights, confidence,
-                                                   infer={'is_auxiliary': True})
-                encoders.append(encoder)
+        for k, arrow in enumerate(path):
+            location = types.unfold_arrow(arrow.type)[0]
+            encoder = self.sample_generator_between(
+                self.data_space, location, edge_distances, confidence,
+                infer={'is_auxiliary': True}, name='encoder')
+            encoders.append(encoder)
 
         with pyro.plate('data', len(data)):
             with name_count():
