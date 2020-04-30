@@ -245,8 +245,8 @@ class VAECategoryModel(BaseModel):
     def _object_index(self, obj):
         return self._spaces.index(obj)
 
-    def _intuitive_distances(self, step_distances):
-        transition = step_distances.new_zeros(torch.Size([len(self._category),
+    def _intuitive_distances(self, edge_distances):
+        transition = edge_distances.new_zeros(torch.Size([len(self._category),
                                                    len(self._category)]))
         generators = list(self._generators.values())
         row_indices = []
@@ -261,7 +261,7 @@ class VAECategoryModel(BaseModel):
                 g = generators.index(generator)
                 row_indices.append(i)
                 column_indices.append(j)
-                src_probs.append(step_distances[g])
+                src_probs.append(edge_distances[g])
             src_probs = F.softmin(torch.stack(src_probs, dim=0), dim=0)
             transition_probs.append(src_probs)
 
@@ -271,7 +271,10 @@ class VAECategoryModel(BaseModel):
                                           accumulate=True)
         transition_sum = transition.sum(dim=-1, keepdim=True)
         transition = transition / transition_sum
-        return util.expm(transition.unsqueeze(0)).squeeze(0)
+        transition = util.expm(transition.unsqueeze(0)).squeeze(0)
+        transition_sum = transition.sum(dim=-1, keepdim=True)
+        transition = transition / transition_sum
+        return -torch.log(transition)
 
     def _object_by_dim(self, latent, dims, confidence, infer={}):
         spaces = list(self._category.nodes())
