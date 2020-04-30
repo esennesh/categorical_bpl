@@ -298,7 +298,7 @@ class VAECategoryModel(BaseModel):
         return obj, element
 
     def _morphism_by_distance(self, src, dest, distances, confidence, k=0,
-                              infer={}):
+                              infer={}, name='arrow'):
         dest_idx = self._object_index(dest)
 
         morphisms = [(neighbor, m) for (_, neighbor, m) in
@@ -308,8 +308,8 @@ class VAECategoryModel(BaseModel):
         j = torch.LongTensor([self._object_index(neighbor) for (neighbor, _) in
                               morphisms]).to(device=distances.device)
         to_dest = distances.index_select(0, j)[:, dest_idx] * confidence
-        morphism_cat = dist.Categorical(probs=F.softmax(to_dest, dim=0))
-        k = pyro.sample('arrow_%d' % k, morphism_cat, infer=infer)
+        morphism_cat = dist.Categorical(probs=F.softmin(to_dest, dim=0))
+        k = pyro.sample('%s_%d' % (name, k), morphism_cat, infer=infer)
 
         return morphisms[k.item()]
 
