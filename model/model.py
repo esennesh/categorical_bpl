@@ -231,7 +231,7 @@ class VAECategoryModel(BaseModel):
         assert name not in self._generators
         assert isinstance(generator, TypedModel)
 
-        self._generators[name] = generator
+        self._generators[generator] = name
         self.add_module(name, generator)
 
         l, r = generator.type.arrowt()
