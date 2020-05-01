@@ -245,6 +245,9 @@ class VAECategoryModel(BaseModel):
     def _object_index(self, obj):
         return self._spaces.index(obj)
 
+    def _generator_index(self, generator):
+        return self._generators.keys().index(generator)
+
     def _intuitive_distances(self, edge_distances):
         transition = edge_distances.new_zeros(torch.Size([len(self._category),
                                                    len(self._category)]))
