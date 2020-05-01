@@ -376,11 +376,10 @@ class VAECategoryModel(BaseModel):
         path = []
         with pyro.markov():
             while location != dest:
-                (location, morphism) = self._morphism_by_distance(location,
-                                                                  dest,
-                                                                  distances,
-                                                                  confidence,
-                                                                  k=len(path))
+                (location, morphism) = self.navigate_morphism(location, dest,
+                                                              distances,
+                                                              confidence,
+                                                              k=len(path))
                 path.append(morphism)
 
         return path
@@ -422,9 +421,10 @@ class VAECategoryModel(BaseModel):
         confidence = pyro.sample('generators_confidence',
                                  confidence_gamma.to_event(0))
 
-        origin, prior = self.sample_global_element(self.dimensionalities,
-                                                   prior_weights, confidence,
-                                                   latent=True)
+        origin = self.sample_object(self.dimensionalities, confidence,
+                                    latent=True)
+        prior = self.sample_global_element(origin, prior_weights, confidence,
+                                           latent=True)
         path = self.sample_path_between(origin, self.data_space, distances,
                                         confidence)
 
@@ -475,20 +475,21 @@ class VAECategoryModel(BaseModel):
         distances = self._intuitive_distances(edge_distances)
 
         dimensionalities = self.guide_dimensionalities(data).mean(dim=0)
-        origin, prior = self.sample_global_element(self.dimensionalities,
-                                                   prior_weights, confidence,
-                                                   latent=True)
+        origin = self.sample_object(dimensionalities, confidence, latent=True)
+        prior = self.sample_global_element(origin, prior_weights, confidence,
+                                           latent=True)
         path = self.sample_path_between(origin, self.data_space, distances,
                                         confidence)
 
         encoders = []
-        # Cycle through while the location is not the data space, finding
-        # a path there via intuitive distance softmin.
+        # Walk through the sampled path, obtaining an independent encoder from
+        # the data space for each step.
         for k, arrow in enumerate(path):
             location = types.unfold_arrow(arrow.type)[0]
             encoder = self.sample_generator_between(
-                self.data_space, location, edge_distances, confidence,
-                infer={'is_auxiliary': True}, name='encoder')
+                edge_distances, confidence, src=self.data_space, dest=location,
+                infer={'is_auxiliary': True}, name='encoder'
+            )
             encoders.append(encoder)
 
         with pyro.plate('data', len(data)):
