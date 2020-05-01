@@ -299,33 +299,68 @@ class VAECategoryModel(BaseModel):
                               infer=infer)
         return self._category.nodes[obj]['global_elements'][elt_idx.item()]
 
-    def _morphism_by_distance(self, src, dest, distances, confidence, k=0,
-                              infer={}, name='arrow'):
+    def edge_navigation_distances(self, object_distances, dest, forward=True):
         dest_idx = self._object_index(dest)
 
-        morphisms = [(neighbor, m) for (_, neighbor, m) in
-                     self._category.out_edges(src, keys=True)]
-        if len(morphisms) == 1:
-            return morphisms[0]
-        j = torch.LongTensor([self._object_index(neighbor) for (neighbor, _) in
-                              morphisms]).to(device=distances.device)
-        to_dest = distances.index_select(0, j)[:, dest_idx] * confidence
-        morphism_cat = dist.Categorical(probs=F.softmin(to_dest, dim=0))
-        k = pyro.sample('%s_%d' % (name, k), morphism_cat, infer=infer)
+        if forward:
+            rows = torch.LongTensor([self._object_index(v) for (_, v)
+                                     in self._category.edges()])
+            rows = rows.to(device=object_distances.device)
+            edge_distances = object_distances[rows, dest_idx]
+            assert edge_distances.shape[0] == len(rows)
+        else:
+            cols = torch.LongTensor([self._object_index(u) for (u, _)
+                                     in self._category.edges()])
+            cols = cols.to(device=object_distances.device)
+            edge_distances = object_distances[dest_idx, cols]
+            assert edge_distances.shape[0] == len(cols)
 
-        return morphisms[k.item()]
+        return edge_distances
 
-    def sample_generator_between(self, src, dest, edge_distances, confidence,
-                                 infer={}, name='generator'):
-        generators = list(self._category[src][dest].keys())
+    def navigate_morphism(self, src, dest, object_distances, confidence, k=0,
+                          infer={}, name='arrow', forward=True):
+        edge_distances = self.edge_navigation_distances(object_distances, dest,
+                                                        forward=forward)
+
+        if forward:
+            morphisms = [(v, g) for (_, v, g) in
+                         self._category.out_edges(src, keys=True)]
+        else:
+            morphisms = [(u, g) for (u, _, g) in
+                         self._category.in_edges(src, keys=True)]
+        indices = [self._generator_index(g) for (_, g) in morphisms]
+        indices = torch.LongTensor(indices).to(device=confidence.device)
+        edge_distances = edge_distances[indices]
+
+        morphism_cat = dist.Categorical(probs=F.softmin(
+            edge_distances * confidence, dim=0
+        ))
+        idx = pyro.sample('%s_%d' % (name, k), morphism_cat, infer=infer)
+
+        return morphisms[idx.item()]
+
+    def sample_generator_between(self, edge_distances, confidence, src=None,
+                                 dest=None, infer={}, name='generator',
+                                 exclude=[]):
+        assert src or dest
+        if src and dest:
+            generators = list(self._category[src][dest].keys())
+        elif src:
+            generators = [(v, g) for (_, v, g) in
+                          self._category.out_edges(src, keys=True)
+                          if v not in exclude]
+        elif dest:
+            generators = [(u, g) for (u, _, g) in
+                          self._category.in_edges(dest, keys=True)
+                          if u not in exclude]
         if len(generators) == 1:
             return generators[0]
 
         edge_distances = torch.unbind(edge_distances, dim=0)
         between_distances = []
 
-        for generator in generators:
-            g = self._generators.values().index(generator)
+        for (_, generator) in generators:
+            g = self._generator_index(generator)
             between_distances.append(edge_distances[g])
         between_distances = torch.stack(between_distances, dim=0)
 
