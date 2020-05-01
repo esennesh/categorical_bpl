@@ -278,8 +278,7 @@ class VAECategoryModel(BaseModel):
         transition = transition / transition_sum
         return -torch.log(transition)
 
-    def sample_global_element(self, dims, weights, confidence, latent=False,
-                              infer={}):
+    def sample_object(self, dims, confidence, latent=False, infer={}):
         spaces = self._spaces.copy()
         if latent:
             data_idx = spaces.index(self.data_space)
@@ -289,15 +288,16 @@ class VAECategoryModel(BaseModel):
         dims = F.softmin(dims * confidence, dim=0)
         obj_idx = pyro.sample('global_object', dist.Categorical(probs=dims),
                               infer=infer)
-        obj = spaces[obj_idx.item()]
+        return spaces[obj_idx.item()]
 
+    def sample_global_element(self, obj, weights, confidence, latent=False,
+                              infer={}):
         elements_cat = dist.Categorical(
             probs=F.softmax(weights[obj] * confidence, dim=0)
         )
         elt_idx = pyro.sample('global_element_{%s}' % obj, elements_cat,
-                                  infer=infer)
-        element = self._category.nodes[obj]['global_elements'][elt_idx.item()]
-        return obj, element
+                              infer=infer)
+        return self._category.nodes[obj]['global_elements'][elt_idx.item()]
 
     def _morphism_by_distance(self, src, dest, distances, confidence, k=0,
                               infer={}, name='arrow'):
