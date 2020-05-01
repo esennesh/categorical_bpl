@@ -250,8 +250,7 @@ class VAECategoryModel(BaseModel):
 
     def _intuitive_distances(self, edge_distances):
         transition = edge_distances.new_zeros(torch.Size([len(self._category),
-                                                   len(self._category)]))
-        generators = list(self._generators.values())
+                                                          len(self._category)]))
         row_indices = []
         column_indices = []
         transition_probs = []
@@ -261,7 +260,7 @@ class VAECategoryModel(BaseModel):
             src_probs = []
             for (_, dest, generator) in out_edges:
                 j = self._object_index(dest)
-                g = generators.index(generator)
+                g = self._generator_index(generator)
                 row_indices.append(i)
                 column_indices.append(j)
                 src_probs.append(edge_distances[g])
