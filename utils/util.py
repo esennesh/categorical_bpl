@@ -39,7 +39,7 @@ class MetricTracker:
         self.writer = writer
         self._data = pd.DataFrame(index=keys, columns=['total', 'counts', 'average'])
         self.reset()
-        
+
     def reset(self):
         for col in self._data.columns:
             self._data[col].values[:] = 0
@@ -53,6 +53,6 @@ class MetricTracker:
 
     def avg(self, key):
         return self._data.average[key]
-    
+
     def result(self):
         return dict(self._data.average)
