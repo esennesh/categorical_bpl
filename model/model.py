@@ -371,6 +371,24 @@ class VAECategoryModel(BaseModel):
                             infer=infer)
         return generators[g_idx.item()]
 
+    def sample_path_to(self, dest, edge_distances, confidence, infer={}):
+        bernoulli = dist.Bernoulli(probs=(-(1. / confidence)).exp())
+
+        location = dest
+        path = []
+        loop = torch.tensor([True]).to(dtype=torch.bool,
+                                       device=confidence.device)
+        with pyro.markov():
+            while loop.item():
+                (location, morphism) = self.sample_generator_between(
+                    edge_distances, confidence, dest=location, infer=infer,
+                    name='generator_%d' % -len(path), exclude=[dest]
+                )
+                path.append(morphism)
+                loop = pyro.sample('path_continues_%d' % len(path), bernoulli)
+                loop = loop.to(dtype=torch.bool)
+        return list(reversed(path))
+
     def sample_path_between(self, src, dest, distances, confidence, infer={}):
         location = src
         path = []
