@@ -7,6 +7,7 @@ import pyro.distributions as dist
 import torch
 import torch.distributions
 import torch.distributions.constraints as constraints
+import torch_expm.expm_taylor as expm
 import torch.nn as nn
 import torch.nn.functional as F
 from base import BaseModel, FirstOrderType, TypedModel
@@ -273,7 +274,7 @@ class VAECategoryModel(BaseModel):
                                           accumulate=True)
         transition_sum = transition.sum(dim=-1, keepdim=True)
         transition = transition / transition_sum
-        transition = util.expm(transition.unsqueeze(0)).squeeze(0)
+        transition = expm.expm(transition.unsqueeze(0)).squeeze(0)
         transition_sum = transition.sum(dim=-1, keepdim=True)
         transition = transition / transition_sum
         return -torch.log(transition)
