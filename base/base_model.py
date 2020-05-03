@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from abc import abstractmethod
+from abc import abstractmethod, abstractproperty
 
 
 class BaseModel(nn.Module):
@@ -36,7 +36,7 @@ class BaseModel(nn.Module):
         self.load_state_dict(checkpoint['state_dict'])
 
 class TypedModel(BaseModel):
-    @abstractmethod
+    @abstractproperty
     def type(self):
         """
         Type signature for the layer as an arrow between two vector spaces
