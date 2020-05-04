@@ -4,10 +4,10 @@ import networkx as nx
 import pyro
 from pyro.contrib.autoname import name_count
 import pyro.distributions as dist
+import pytorch_expm.expm_taylor as expm
 import torch
 import torch.distributions
 import torch.distributions.constraints as constraints
-import torch_expm.expm_taylor as expm
 import torch.nn as nn
 import torch.nn.functional as F
 from base import BaseModel, FirstOrderType, TypedModel
