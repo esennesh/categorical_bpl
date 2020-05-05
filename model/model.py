@@ -400,6 +400,17 @@ class VAECategoryModel(BaseModel):
 
         return path
 
+    def edge_distances(self, data):
+        distances = []
+
+        for (src, dest, generator) in self._category.edges(keys=True):
+            pyro.module('generator_{%s -> %s}' % (src, dest), generator)
+            d = pyro.param('generator_distance_{%s -> %s}' % (src, dest),
+                           data.new_ones(1), constraint=constraints.positive)
+            distances.append(d)
+
+        return torch.cat(distances, dim=0)
+
     def model(self, observations=None):
         if isinstance(observations, dict):
             data = observations['X^{%d}' % self._data_dim]
