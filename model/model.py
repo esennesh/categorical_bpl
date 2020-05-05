@@ -420,13 +420,17 @@ class VAECategoryModel(BaseModel):
             data = torch.zeros(1, self._data_dim)
         data = data.view(data.shape[0], self._data_dim)
 
-        distances = []
-        for (src, dest, generator) in self._category.edges(keys=True):
-            pyro.module('generator_{%s -> %s}' % (src, dest), generator)
-            d = pyro.param('generator_weight_{%s -> %s}' % (src, dest),
-                           data.new_ones(1), constraint=constraints.positive)
-            distances.append(d)
-        distances = self._intuitive_distances(torch.cat(distances, dim=0))
+        distances = self._intuitive_distances(self.edge_distances(data))
+
+        alpha = pyro.param('dimensionalities_alpha', data.new_ones(1),
+                           constraint=constraints.positive)
+        beta = pyro.param('dimensionalities_beta', data.new_ones(1),
+                          constraint=constraints.positive)
+        confidence_gamma = dist.Gamma(alpha, beta)
+        confidence = pyro.sample('dimensionalities_confidence',
+                                 confidence_gamma.to_event(0))
+        origin = self.sample_object(self.dimensionalities, confidence,
+                                    latent=True)
 
         prior_weights = {}
         for obj in self._category.nodes:
@@ -439,19 +443,21 @@ class VAECategoryModel(BaseModel):
                                     constraint=constraints.positive)
                 prior_weights[obj].append(weight)
             prior_weights[obj] = torch.stack(prior_weights[obj], dim=0)
-
-        alpha = pyro.param('confidence_alpha', data.new_ones(1),
+        alpha = pyro.param('priors_alpha', data.new_ones(1),
                            constraint=constraints.positive)
-        beta = pyro.param('confidence_beta', data.new_ones(1),
+        beta = pyro.param('priors_beta', data.new_ones(1),
                           constraint=constraints.positive)
-        confidence_gamma = dist.Gamma(alpha, beta)
-        confidence = pyro.sample('generators_confidence',
-                                 confidence_gamma.to_event(0))
-
-        origin = self.sample_object(self.dimensionalities, confidence,
-                                    latent=True)
+        confidence = pyro.sample('prior_weights_confidence',
+                                 dist.Gamma(alpha, beta).to_event(0))
         prior = self.sample_global_element(origin, prior_weights, confidence,
                                            latent=True)
+
+        alpha = pyro.param('distances_alpha', data.new_ones(1),
+                           constraint=constraints.positive)
+        beta = pyro.param('distances_beta', data.new_ones(1),
+                          constraint=constraints.positive)
+        confidence = pyro.sample('distances_confidence',
+                                 dist.Gamma(alpha, beta).to_event(0))
         path = self.sample_path_between(origin, self.data_space, distances,
                                         confidence)
 
