@@ -480,20 +480,16 @@ class VAECategoryModel(BaseModel):
             data = observations
         data = data.view(data.shape[0], self._data_dim)
 
-        pyro.module('guide_confidence', self.guide_confidence)
-        pyro.module('guide_distances', self.guide_distances)
+        pyro.module('guide_embedding', self.guide_embedding)
+        pyro.module('guide_confidences', self.guide_confidences)
         pyro.module('guide_prior_weights', self.guide_prior_weights)
         pyro.module('guide_dimensionalities', self.guide_dimensionalities)
 
-        generators_confidence = self.guide_confidence(data).mean(
-            dim=0
-        )
-        confidence_gamma = dist.Gamma(generators_confidence[0],
-                                      generators_confidence[1])
-        confidence = pyro.sample('generators_confidence',
-                                 confidence_gamma.to_event(0))
+        embedding = self.guide_embedding(data).mean(dim=0)
 
-        weights = self.guide_prior_weights(data).mean(dim=0)
+        confidences = self.guide_confidences(embedding).view(3, 2)
+
+        weights = self.guide_prior_weights(embedding)
         prior_weights = {}
         n_prior_weights = 0
         for obj in self._category.nodes:
@@ -504,13 +500,25 @@ class VAECategoryModel(BaseModel):
                 n_prior_weights += 1
             prior_weights[obj] = torch.stack(prior_weights[obj], dim=0)
 
-        edge_distances = self.guide_distances(data).mean(dim=0)
+        edge_distances = self.edge_distances(data)
         distances = self._intuitive_distances(edge_distances)
 
-        dimensionalities = self.guide_dimensionalities(data).mean(dim=0)
+        dimensionalities = self.guide_dimensionalities(embedding)
+        confidence_gamma = dist.Gamma(confidences[0, 0],
+                                      confidences[0, 1]).to_event(0)
+        confidence = pyro.sample('dimensionalities_confidence',
+                                 confidence_gamma)
         origin = self.sample_object(dimensionalities, confidence, latent=True)
+
+        confidence_gamma = dist.Gamma(confidences[1, 0],
+                                      confidences[1, 1]).to_event(0)
+        confidence = pyro.sample('prior_weights_confidence', confidence_gamma)
         prior = self.sample_global_element(origin, prior_weights, confidence,
                                            latent=True)
+
+        confidence_gamma = dist.Gamma(confidences[2, 0],
+                                      confidences[2, 1]).to_event(0)
+        confidence = pyro.sample('distances_confidence', confidence_gamma)
         path = self.sample_path_between(origin, self.data_space, distances,
                                         confidence)
 
