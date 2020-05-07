@@ -297,52 +297,29 @@ class VAECategoryModel(BaseModel):
                               infer=infer)
         return self._category.nodes[obj]['global_elements'][elt_idx.item()]
 
-    def edge_navigation_distances(self, object_distances, dest, forward=True):
+    def navigate_morphism(self, src, dest, object_distances,
+                          confidence, k=0, infer={}, name='arrow',
+                          forward=True):
         dest_idx = self._object_index(dest)
-
         if forward:
-            rows = torch.LongTensor([self._object_index(v) for (_, v)
-                                     in self._category.edges()])
-            rows = rows.to(device=object_distances.device)
-            edge_distances = object_distances[rows, dest_idx]
-            assert edge_distances.shape[0] == len(rows)
+            object_distances = object_distances[:, dest_idx]
         else:
-            cols = torch.LongTensor([self._object_index(u) for (u, _)
-                                     in self._category.edges()])
-            cols = cols.to(device=object_distances.device)
-            edge_distances = object_distances[dest_idx, cols]
-            assert edge_distances.shape[0] == len(cols)
+            object_distances = object_distances[dest_idx, :]
+        loc = self.sample_object(object_distances, confidence, exclude=[src],
+                                 k=k, infer=infer)
 
-        return edge_distances
-
-    def navigate_morphism(self, src, dest, object_distances, confidence, k=0,
-                          infer={}, name='arrow', forward=True):
-        edge_distances = self.edge_navigation_distances(object_distances, dest,
-                                                        forward=forward)
-
-        if forward:
-            morphisms = [(v, g) for (_, v, g) in
-                         self._category.out_edges(src, keys=True)]
-        else:
-            morphisms = [(u, g) for (u, _, g) in
-                         self._category.in_edges(src, keys=True)]
-        indices = [self._generator_index(g) for (_, g) in morphisms]
-        indices = torch.LongTensor(indices).to(device=confidence.device)
-        edge_distances = edge_distances[indices]
-
-        morphism_cat = dist.Categorical(probs=F.softmin(
-            edge_distances * confidence, dim=0
-        ))
-        idx = pyro.sample('%s_%d' % (name, k), morphism_cat, infer=infer)
-
-        return morphisms[idx.item()]
+        morphism = self.sample_generator_between(
+            self.edge_distances(confidence), confidence, src=src, dest=loc,
+            infer=infer, name='generator_%d' % k
+        )
+        return loc, morphism
 
     def sample_generator_between(self, edge_distances, confidence, src=None,
                                  dest=None, infer={}, name='generator',
                                  exclude=[]):
         assert src or dest
         if src and dest:
-            generators = list(self._category[src][dest].keys())
+            generators = list(self._category[src][dest])
         elif src:
             generators = [(v, g) for (_, v, g) in
                           self._category.out_edges(src, keys=True)
