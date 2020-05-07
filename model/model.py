@@ -209,6 +209,12 @@ class VAECategoryModel(BaseModel):
             nn.Linear(guide_hidden_dim, len(self._category)), nn.Softplus(),
         )
 
+        self.register_buffer('edge_distances',
+                             torch.zeros(len(self._category.edges)))
+        self.register_buffer('object_distances',
+                             torch.zeros(len(self._category),
+                                         len(self._category)))
+
     @property
     def data_space(self):
         return FirstOrderType.TENSORT(torch.float, torch.Size([self._data_dim]))
@@ -246,9 +252,9 @@ class VAECategoryModel(BaseModel):
     def _generator_index(self, generator):
         return self._generators.keys().index(generator)
 
-    def _intuitive_distances(self, edge_distances):
-        transition = edge_distances.new_zeros(torch.Size([len(self._category),
-                                                          len(self._category)]))
+    def get_object_distances(self):
+        transition = self.edge_distances.new_zeros((len(self._category),
+                                                    len(self._category)))
         row_indices = []
         column_indices = []
         transition_probs = []
@@ -261,7 +267,7 @@ class VAECategoryModel(BaseModel):
                 g = self._generator_index(generator)
                 row_indices.append(i)
                 column_indices.append(j)
-                src_probs.append(edge_distances[g])
+                src_probs.append(self.edge_distances[g])
             src_probs = F.softmin(torch.stack(src_probs, dim=0), dim=0)
             transition_probs.append(src_probs)
 
@@ -274,7 +280,8 @@ class VAECategoryModel(BaseModel):
         transition = expm.expm(transition.unsqueeze(0)).squeeze(0)
         transition_sum = transition.sum(dim=-1, keepdim=True)
         transition = transition / transition_sum
-        return -torch.log(transition)
+        self.object_distances = -torch.log(transition)
+        return self.object_distances
 
     def sample_object(self, dims, confidence, exclude=[], k=None, infer={}):
         spaces = self._spaces.copy()
@@ -308,10 +315,10 @@ class VAECategoryModel(BaseModel):
         loc = self.sample_object(object_distances, confidence, exclude=[src],
                                  k=k, infer=infer)
 
-        morphism = self.sample_generator_between(
-            self.edge_distances(confidence), confidence, src=src, dest=loc,
-            infer=infer, name='generator_%d' % k
-        )
+        morphism = self.sample_generator_between(self.edge_distances,
+                                                 confidence, src=src, dest=loc,
+                                                 infer=infer,
+                                                 name='generator_%d' % k)
         return loc, morphism
 
     def sample_generator_between(self, edge_distances, confidence, src=None,
@@ -377,16 +384,18 @@ class VAECategoryModel(BaseModel):
 
         return path
 
-    def edge_distances(self, data):
+    def get_edge_distances(self):
         distances = []
 
         for (src, dest, generator) in self._category.edges(keys=True):
             pyro.module('generator_{%s -> %s}' % (src, dest), generator)
             d = pyro.param('generator_distance_{%s -> %s}' % (src, dest),
-                           data.new_ones(1), constraint=constraints.positive)
+                           self.edge_distances.new_ones(1),
+                           constraint=constraints.positive)
             distances.append(d)
 
-        return torch.cat(distances, dim=0)
+        self.edge_distances = torch.cat(distances, dim=0)
+        return self.edge_distances
 
     def model(self, observations=None):
         if isinstance(observations, dict):
@@ -397,7 +406,8 @@ class VAECategoryModel(BaseModel):
             data = torch.zeros(1, self._data_dim)
         data = data.view(data.shape[0], self._data_dim)
 
-        distances = self._intuitive_distances(self.edge_distances(data))
+        self.get_edge_distances()
+        distances = self.get_object_distances()
 
         alpha = pyro.param('dimensionalities_alpha', data.new_ones(1),
                            constraint=constraints.positive)
@@ -477,8 +487,8 @@ class VAECategoryModel(BaseModel):
                 n_prior_weights += 1
             prior_weights[obj] = torch.stack(prior_weights[obj], dim=0)
 
-        edge_distances = self.edge_distances(data)
-        distances = self._intuitive_distances(edge_distances)
+        self.get_edge_distances()
+        distances = self.get_object_distances()
 
         dimensionalities = self.guide_dimensionalities(embedding)
         confidence_gamma = dist.Gamma(confidences[0, 0],
@@ -506,8 +516,8 @@ class VAECategoryModel(BaseModel):
         for k, arrow in enumerate(path):
             location = types.unfold_arrow(arrow.type)[0]
             encoder = self.sample_generator_between(
-                edge_distances, confidence, src=self.data_space, dest=location,
-                infer={'is_auxiliary': True}, name='encoder'
+                self.edge_distances, confidence, src=self.data_space,
+                dest=location, infer={'is_auxiliary': True}, name='encoder'
             )
             encoders.append(encoder)
 
