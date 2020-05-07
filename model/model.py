@@ -276,16 +276,16 @@ class VAECategoryModel(BaseModel):
         transition = transition / transition_sum
         return -torch.log(transition)
 
-    def sample_object(self, dims, confidence, latent=False, infer={}):
+    def sample_object(self, dims, confidence, exclude=[], k=None, infer={}):
         spaces = self._spaces.copy()
-        if latent:
-            data_idx = spaces.index(self.data_space)
-            spaces.remove(self.data_space)
-            dims = torch.cat((dims[0:data_idx], dims[data_idx+1:]), dim=0)
+        for space in exclude:
+            space_idx = spaces.index(space)
+            spaces.remove(space)
+            dims = torch.cat((dims[0:space_idx], dims[space_idx+1:]), dim=0)
 
         dims = F.softmin(dims * confidence, dim=0)
-        obj_idx = pyro.sample('global_object', dist.Categorical(probs=dims),
-                              infer=infer)
+        name = 'global_object' if k is None else 'global_object_%d' % k
+        obj_idx = pyro.sample(name, dist.Categorical(probs=dims), infer=infer)
         return spaces[obj_idx.item()]
 
     def sample_global_element(self, obj, weights, confidence, latent=False,
