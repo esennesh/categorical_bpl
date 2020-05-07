@@ -430,7 +430,7 @@ class VAECategoryModel(BaseModel):
         confidence = pyro.sample('dimensionalities_confidence',
                                  confidence_gamma.to_event(0))
         origin = self.sample_object(self.dimensionalities, confidence,
-                                    latent=True)
+                                    exclude=[self.data_space])
 
         prior_weights = {}
         for obj in self._category.nodes:
@@ -508,7 +508,8 @@ class VAECategoryModel(BaseModel):
                                       confidences[0, 1]).to_event(0)
         confidence = pyro.sample('dimensionalities_confidence',
                                  confidence_gamma)
-        origin = self.sample_object(dimensionalities, confidence, latent=True)
+        origin = self.sample_object(dimensionalities, confidence,
+                                    exclude=[self.data_space])
 
         confidence_gamma = dist.Gamma(confidences[1, 0],
                                       confidences[1, 1]).to_event(0)
