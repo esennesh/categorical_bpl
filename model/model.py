@@ -208,6 +208,12 @@ class VAECategoryModel(BaseModel):
         self.guide_dimensionalities = nn.Sequential(
             nn.Linear(guide_hidden_dim, len(self._category)), nn.Softplus(),
         )
+        self.guide_edge_composer = nn.GRUCell(len(self._category),
+                                              guide_hidden_dim)
+        self.guide_edge_costs = nn.Sequential(
+            nn.Linear(guide_hidden_dim, len(self._category.edges())),
+            nn.Tanhshrink(),
+        )
 
         self.register_buffer('edge_distances',
                              torch.zeros(len(self._category.edges)))
@@ -306,7 +312,10 @@ class VAECategoryModel(BaseModel):
 
     def navigate_morphism(self, src, dest, object_distances,
                           confidence, k=0, infer={}, name='arrow',
-                          forward=True):
+                          forward=True, edge_costs=None):
+        if edge_costs is None:
+            edge_costs = self.edge_distances
+
         dest_idx = self._object_index(dest)
         if forward:
             object_distances = object_distances[:, dest_idx]
@@ -315,13 +324,12 @@ class VAECategoryModel(BaseModel):
         loc = self.sample_object(object_distances, confidence, exclude=[src],
                                  k=k, infer=infer)
 
-        morphism = self.sample_generator_between(self.edge_distances,
-                                                 confidence, src=src, dest=loc,
-                                                 infer=infer,
+        morphism = self.sample_generator_between(edge_costs, confidence,
+                                                 src=src, dest=loc, infer=infer,
                                                  name='generator_%d' % k)
         return loc, morphism
 
-    def sample_generator_between(self, edge_distances, confidence, src=None,
+    def sample_generator_between(self, edge_costs, confidence, src=None,
                                  dest=None, infer={}, name='generator',
                                  exclude=[]):
         assert src or dest
@@ -338,12 +346,12 @@ class VAECategoryModel(BaseModel):
         if len(generators) == 1:
             return generators[0]
 
-        edge_distances = torch.unbind(edge_distances, dim=0)
+        edge_costs = torch.unbind(edge_costs, dim=0)
         between_distances = []
 
         for (_, generator) in generators:
             g = self._generator_index(generator)
-            between_distances.append(edge_distances[g])
+            between_distances.append(edge_costs[g])
         between_distances = torch.stack(between_distances, dim=0)
 
         generators_cat = dist.Categorical(
@@ -371,15 +379,25 @@ class VAECategoryModel(BaseModel):
                 loop = loop.to(dtype=torch.bool)
         return list(reversed(path))
 
-    def sample_path_between(self, src, dest, distances, confidence, infer={}):
+    def sample_path_between(self, src, dest, distances, confidence, infer={},
+                            embedding=None):
+        if embedding is not None:
+            embedding = embedding.unsqueeze(0)
         location = src
         path = []
         with pyro.markov():
             while location != dest:
-                (location, morphism) = self.navigate_morphism(location, dest,
-                                                              distances,
-                                                              confidence,
-                                                              k=len(path))
+                if embedding is not None:
+                    eye = torch.eye(len(self._category)).to(distances)
+                    onehot_loc = eye[self._object_index(location)].unsqueeze(0)
+                    embedding = self.guide_edge_composer(onehot_loc, embedding)
+                    edge_costs = self.guide_edge_costs(embedding).squeeze(0)
+                else:
+                    edge_costs = None
+                (location, morphism) = self.navigate_morphism(
+                    location, dest, distances, confidence, k=len(path),
+                    edge_costs=edge_costs
+                )
                 path.append(morphism)
 
         return path
@@ -471,6 +489,8 @@ class VAECategoryModel(BaseModel):
         pyro.module('guide_confidences', self.guide_confidences)
         pyro.module('guide_prior_weights', self.guide_prior_weights)
         pyro.module('guide_dimensionalities', self.guide_dimensionalities)
+        pyro.module('guide_edge_composer', self.guide_edge_composer)
+        pyro.module('guide_edge_costs', self.guide_edge_costs)
 
         embedding = self.guide_embedding(data).mean(dim=0)
 
@@ -508,7 +528,7 @@ class VAECategoryModel(BaseModel):
                                       confidences[2, 1]).to_event(0)
         confidence = pyro.sample('distances_confidence', confidence_gamma)
         path = self.sample_path_between(origin, self.data_space, distances,
-                                        confidence)
+                                        confidence, embedding=embedding)
 
         encoders = []
         # Walk through the sampled path, obtaining an independent encoder from
