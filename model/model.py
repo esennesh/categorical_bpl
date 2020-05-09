@@ -485,17 +485,20 @@ class VAECategoryModel(BaseModel):
         path = self.sample_path_between(origin, self.data_space, distances,
                                         confidence)
 
+        rvs = []
         with pyro.plate('data', len(data)):
             with pyro.markov():
                 with name_count():
                     latent = prior(data)
+                    rvs.append(latent)
                     for i, generator in enumerate(path):
                         if i == len(path) - 1:
-                            latent = generator(latent, observations=data)
+                            rvs.append(generator(latent, observations=data))
                         else:
                             latent = generator(latent)
+                            rvs.append(latent)
 
-        return latent
+        return path, rvs[:-1], rvs[-1]
 
     def guide(self, observations=None):
         if isinstance(observations, dict):
@@ -560,12 +563,13 @@ class VAECategoryModel(BaseModel):
             )
             encoders.append(encoder)
 
+        latents = []
         with pyro.plate('data', len(data)):
             with name_count():
                 for encoder in encoders:
-                    latent = encoder(data)
+                    latents.append(encoder(data))
 
-        return latent
+        return path, latents
 
     def forward(self, observations=None):
         if observations is not None:
