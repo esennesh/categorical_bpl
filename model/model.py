@@ -35,10 +35,13 @@ class DiagonalGaussian(TypedModel):
             FirstOrderType.TENSORT(torch.float, self._dim)
         )
 
-    def forward(self, inputs, observations=None):
+    def forward(self, inputs, observations=None, sample=True):
         zs = self.parameterization(inputs).view(-1, 2, self._dim[0])
-        normal = dist.Normal(zs[:, 0], F.softplus(zs[:, 1])).to_event(1)
-        return pyro.sample(self._latent_name, normal, obs=observations)
+        if sample:
+            normal = dist.Normal(zs[:, 0], F.softplus(zs[:, 1])).to_event(1)
+            return pyro.sample(self._latent_name, normal, obs=observations)
+        else:
+            return zs[:, 0], F.softplus(zs[:, 1])
 
 class StandardNormal(TypedModel):
     def __init__(self, dim, latent_name=None):
@@ -76,11 +79,12 @@ class BernoulliObservation(TypedModel):
             FirstOrderType.TENSORT(torch.float, self._obs_dim)
         )
 
-    def forward(self, inputs, observations=None):
+    def forward(self, inputs, observations=None, sample=True):
         with name_count():
             xs = torch.sigmoid(inputs.view(-1, self._obs_dim[0]))
-            bernoulli = ContinuousBernoulli(probs=xs).to_event(1)
-            pyro.sample(self._observable_name, bernoulli, obs=observations)
+            if sample:
+                bernoulli = ContinuousBernoulli(probs=xs).to_event(1)
+                pyro.sample(self._observable_name, bernoulli, obs=observations)
             return xs
 
 class PathDensityNet(TypedModel):
@@ -116,12 +120,12 @@ class PathDensityNet(TypedModel):
             FirstOrderType.TENSORT(torch.float, self._out_dim)
         )
 
-    def forward(self, inputs, observations=None):
+    def forward(self, inputs, observations=None, sample=True):
         layers = dict(self.named_children())
         latent = inputs
         for i in range(self._num_spaces):
             latent = layers['layer_%d' % i](latent)
-        return self.distribution(latent, observations)
+        return self.distribution(latent, observations, sample)
 
 class LayersGraph:
     def __init__(self, spaces, data_dim):
