@@ -162,7 +162,4 @@ class TargetBatchRandomSampler(Sampler):
                 yield remainders[idx]
 
     def __len__(self):
-        if self.drop_last:
-            return len(self.indices) // self.batch_size
-        else:
-            return (len(self.indices) + self.batch_size - 1) // self.batch_size
+        return len([batch for batch in self])
