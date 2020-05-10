@@ -35,10 +35,13 @@ class DiagonalGaussian(TypedModel):
             FirstOrderType.TENSORT(torch.float, self._dim)
         )
 
-    def forward(self, inputs, observations=None):
+    def forward(self, inputs, observations=None, sample=True):
         zs = self.parameterization(inputs).view(-1, 2, self._dim[0])
-        normal = dist.Normal(zs[:, 0], F.softplus(zs[:, 1])).to_event(1)
-        return pyro.sample(self._latent_name, normal, obs=observations)
+        if sample:
+            normal = dist.Normal(zs[:, 0], F.softplus(zs[:, 1])).to_event(1)
+            return pyro.sample(self._latent_name, normal, obs=observations)
+        else:
+            return zs[:, 0], F.softplus(zs[:, 1])
 
 class StandardNormal(TypedModel):
     def __init__(self, dim, latent_name=None):
@@ -76,11 +79,12 @@ class BernoulliObservation(TypedModel):
             FirstOrderType.TENSORT(torch.float, self._obs_dim)
         )
 
-    def forward(self, inputs, observations=None):
+    def forward(self, inputs, observations=None, sample=True):
         with name_count():
             xs = torch.sigmoid(inputs.view(-1, self._obs_dim[0]))
-            bernoulli = ContinuousBernoulli(probs=xs).to_event(1)
-            pyro.sample(self._observable_name, bernoulli, obs=observations)
+            if sample:
+                bernoulli = ContinuousBernoulli(probs=xs).to_event(1)
+                pyro.sample(self._observable_name, bernoulli, obs=observations)
             return xs
 
 class PathDensityNet(TypedModel):
@@ -116,12 +120,12 @@ class PathDensityNet(TypedModel):
             FirstOrderType.TENSORT(torch.float, self._out_dim)
         )
 
-    def forward(self, inputs, observations=None):
+    def forward(self, inputs, observations=None, sample=True):
         layers = dict(self.named_children())
         latent = inputs
         for i in range(self._num_spaces):
             latent = layers['layer_%d' % i](latent)
-        return self.distribution(latent, observations)
+        return self.distribution(latent, observations, sample)
 
 class LayersGraph:
     def __init__(self, spaces, data_dim):
@@ -208,12 +212,6 @@ class VAECategoryModel(BaseModel):
         )
         self.guide_dimensionalities = nn.Sequential(
             nn.Linear(guide_hidden_dim, len(self._category)), nn.Softplus(),
-        )
-        self.guide_edge_composer = nn.GRUCell(len(self._category),
-                                              guide_hidden_dim)
-        self.guide_edge_costs = nn.Sequential(
-            nn.Linear(guide_hidden_dim, len(self._category.edges())),
-            nn.Tanhshrink(),
         )
 
         self.register_buffer('edge_distances',
@@ -406,17 +404,10 @@ class VAECategoryModel(BaseModel):
         path = []
         with pyro.markov():
             while location != dest:
-                if embedding is not None:
-                    eye = torch.eye(len(self._category)).to(distances)
-                    onehot_loc = eye[self._object_index(location)].unsqueeze(0)
-                    embedding = self.guide_edge_composer(onehot_loc, embedding)
-                    edge_costs = self.guide_edge_costs(embedding).squeeze(0)
-                else:
-                    edge_costs = None
-                (location, morphism) = self.navigate_morphism(
-                    location, dest, distances, confidence, k=len(path),
-                    edge_costs=edge_costs
-                )
+                (location, morphism) = self.navigate_morphism(location, dest,
+                                                              distances,
+                                                              confidence,
+                                                              k=len(path))
                 path.append(morphism)
 
         return path
@@ -511,8 +502,6 @@ class VAECategoryModel(BaseModel):
         pyro.module('guide_confidences', self.guide_confidences)
         pyro.module('guide_prior_weights', self.guide_prior_weights)
         pyro.module('guide_dimensionalities', self.guide_dimensionalities)
-        pyro.module('guide_edge_composer', self.guide_edge_composer)
-        pyro.module('guide_edge_costs', self.guide_edge_costs)
 
         embedding = self.guide_embedding(data).mean(dim=0)
 
@@ -550,24 +539,38 @@ class VAECategoryModel(BaseModel):
                                       confidences[2, 1]).to_event(0)
         confidence = pyro.sample('distances_confidence', confidence_gamma)
         path = self.sample_path_between(origin, self.data_space, distances,
-                                        confidence, embedding=embedding)
-
-        encoders = []
-        # Walk through the sampled path, obtaining an independent encoder from
-        # the data space for each step.
-        for k, arrow in enumerate(path):
-            location = types.unfold_arrow(arrow.type)[0]
-            encoder = self.sample_generator_between(
-                self.edge_distances, confidence, src=self.data_space,
-                dest=location, infer={'is_auxiliary': True}, name='encoder'
-            )
-            encoders.append(encoder)
+                                        confidence)
 
         latents = []
+        # Walk through the sampled path, obtaining an independent encoder from
+        # the data space for each step, and fusing its prediction with that from
+        # the generative model.
         with pyro.plate('data', len(data)):
-            with name_count():
-                for encoder in encoders:
-                    latents.append(encoder(data))
+            with pyro.markov():
+                with name_count():
+                    for k in range(len(path)):
+                        location = types.unfold_arrow(path[k].type)[0]
+                        encoder = self.sample_generator_between(
+                            self.edge_distances, confidence,
+                            src=self.data_space, dest=location,
+                            infer={'is_auxiliary': True}, name='encoder'
+                        )
+
+                        if latents:
+                            encoding = encoder(data, sample=False)
+                            prediction = path[k-1](latents[-1], sample=False)
+
+                            precision = encoding[1] ** -2 + prediction[1] ** -2
+                            std_dev = (1 / precision).sqrt()
+                            mean = encoding[0] * (encoding[1] ** -2) +\
+                                   prediction[0] * (prediction[1] ** -2) /\
+                                   precision
+                            normal = dist.Normal(mean, std_dev).to_event(1)
+                            latent_name = path[k-1].distribution._latent_name
+                            latent = pyro.sample(latent_name, normal)
+                            latents.append(latent)
+                        else:
+                            latents.append(encoder(data))
 
         return path, latents
 
