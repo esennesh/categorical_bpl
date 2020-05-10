@@ -556,22 +556,36 @@ class VAECategoryModel(BaseModel):
         path = self.sample_path_between(origin, self.data_space, distances,
                                         confidence, embedding=embedding)
 
-        encoders = []
-        # Walk through the sampled path, obtaining an independent encoder from
-        # the data space for each step.
-        for k, arrow in enumerate(path):
-            location = types.unfold_arrow(arrow.type)[0]
-            encoder = self.sample_generator_between(
-                self.edge_distances, confidence, src=self.data_space,
-                dest=location, infer={'is_auxiliary': True}, name='encoder'
-            )
-            encoders.append(encoder)
-
         latents = []
+        # Walk through the sampled path, obtaining an independent encoder from
+        # the data space for each step, and fusing its prediction with that from
+        # the generative model.
         with pyro.plate('data', len(data)):
-            with name_count():
-                for encoder in encoders:
-                    latents.append(encoder(data))
+            with pyro.markov():
+                with name_count():
+                    for k in range(len(path)):
+                        location = types.unfold_arrow(path[k].type)[0]
+                        encoder = self.sample_generator_between(
+                            self.edge_distances, confidence,
+                            src=self.data_space, dest=location,
+                            infer={'is_auxiliary': True}, name='encoder'
+                        )
+
+                        if latents:
+                            encoding = encoder(data, sample=False)
+                            prediction = path[k-1](latents[-1], sample=False)
+
+                            precision = encoding[1] ** -2 + prediction[1] ** -2
+                            std_dev = (1 / precision).sqrt()
+                            mean = encoding[0] * (encoding[1] ** -2) +\
+                                   prediction[0] * (prediction[1] ** -2) /\
+                                   precision
+                            normal = dist.Normal(mean, std_dev).to_event(1)
+                            latent_name = path[k-1].distribution._latent_name
+                            latent = pyro.sample(latent_name, normal)
+                            latents.append(latent)
+                        else:
+                            latents.append(encoder(data))
 
         return path, latents
 
