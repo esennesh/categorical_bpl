@@ -213,12 +213,6 @@ class VAECategoryModel(BaseModel):
         self.guide_dimensionalities = nn.Sequential(
             nn.Linear(guide_hidden_dim, len(self._category)), nn.Softplus(),
         )
-        self.guide_edge_composer = nn.GRUCell(len(self._category),
-                                              guide_hidden_dim)
-        self.guide_edge_costs = nn.Sequential(
-            nn.Linear(guide_hidden_dim, len(self._category.edges())),
-            nn.Tanhshrink(),
-        )
 
         self.register_buffer('edge_distances',
                              torch.zeros(len(self._category.edges)))
@@ -410,17 +404,10 @@ class VAECategoryModel(BaseModel):
         path = []
         with pyro.markov():
             while location != dest:
-                if embedding is not None:
-                    eye = torch.eye(len(self._category)).to(distances)
-                    onehot_loc = eye[self._object_index(location)].unsqueeze(0)
-                    embedding = self.guide_edge_composer(onehot_loc, embedding)
-                    edge_costs = self.guide_edge_costs(embedding).squeeze(0)
-                else:
-                    edge_costs = None
-                (location, morphism) = self.navigate_morphism(
-                    location, dest, distances, confidence, k=len(path),
-                    edge_costs=edge_costs
-                )
+                (location, morphism) = self.navigate_morphism(location, dest,
+                                                              distances,
+                                                              confidence,
+                                                              k=len(path))
                 path.append(morphism)
 
         return path
@@ -515,8 +502,6 @@ class VAECategoryModel(BaseModel):
         pyro.module('guide_confidences', self.guide_confidences)
         pyro.module('guide_prior_weights', self.guide_prior_weights)
         pyro.module('guide_dimensionalities', self.guide_dimensionalities)
-        pyro.module('guide_edge_composer', self.guide_edge_composer)
-        pyro.module('guide_edge_costs', self.guide_edge_costs)
 
         embedding = self.guide_embedding(data).mean(dim=0)
 
@@ -554,7 +539,7 @@ class VAECategoryModel(BaseModel):
                                       confidences[2, 1]).to_event(0)
         confidence = pyro.sample('distances_confidence', confidence_gamma)
         path = self.sample_path_between(origin, self.data_space, distances,
-                                        confidence, embedding=embedding)
+                                        confidence)
 
         latents = []
         # Walk through the sampled path, obtaining an independent encoder from
