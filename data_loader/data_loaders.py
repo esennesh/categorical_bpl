@@ -1,4 +1,5 @@
 import numpy as np
+import os.path as path
 from torchvision import datasets, transforms
 from base import BaseDataLoader, BaseTargetBatchDataLoader
 
@@ -26,6 +27,19 @@ rescaling = lambda x : (x - .5) * 2.
 flip = lambda x : - x
 resizing = lambda x: x.resize((28,28))
 omni_transforms = transforms.Compose([resizing, transforms.ToTensor(), rescaling, flip])
+
+class OmniglotTargetTransform:
+    def __init__(self, data_dir, background=True):
+        target_folder = 'images_background' if background else 'images_evaluation'
+        target_folder = path.join(data_dir + '/omniglot-py', target_folder)
+        self._character_alphabets = []
+        for a, alphabet in enumerate(datasets.utils.list_dir(target_folder)):
+            alphabet_dir = path.join(target_folder, alphabet)
+            for character in datasets.utils.list_dir(alphabet_dir):
+                self._character_alphabets.append(a)
+
+    def __call__(self, flat_character_class):
+        return self._character_alphabets[flat_character_class]
 
 class OmniglotDataLoader(BaseDataLoader):
     """
