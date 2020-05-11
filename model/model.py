@@ -197,8 +197,6 @@ class VAECategoryModel(BaseModel):
             dimensionalities[k] = space.tensort()[1][0]
         self.register_buffer('dimensionalities', dimensionalities)
 
-        max_options = max([len(self._category.out_edges(object))
-                           for object in self._category])
         self.guide_confidences = nn.Sequential(
             nn.Linear(guide_hidden_dim, 3 * 2), nn.Softplus(),
         )
@@ -512,7 +510,7 @@ class VAECategoryModel(BaseModel):
         for obj in self._category.nodes:
             prior_weights[obj] = []
             global_elements = self._category.nodes[obj]['global_elements']
-            for element in global_elements:
+            for _ in global_elements:
                 prior_weights[obj].append(weights[n_prior_weights])
                 n_prior_weights += 1
             prior_weights[obj] = torch.stack(prior_weights[obj], dim=0)
