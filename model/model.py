@@ -95,7 +95,6 @@ class PathDensityNet(TypedModel):
         self._in_dim = torch.Size([spaces_path[0][0]])
         self._out_dim = torch.Size([spaces_path[-1][-1]])
 
-        layers = []
         for i, (u, v) in enumerate(spaces_path):
             h = u + v // 2
             if i == len(spaces_path) - 1:
