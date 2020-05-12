@@ -197,15 +197,16 @@ class VAECategoryModel(BaseModel):
             dimensionalities[k] = space.tensort()[1][0]
         self.register_buffer('dimensionalities', dimensionalities)
 
+        self.guide_embedding = nn.Sequential(
+            nn.Linear(data_dim, guide_hidden_dim),
+            nn.BatchNorm1d(guide_hidden_dim), nn.LeakyReLU(),
+        )
         self.guide_confidences = nn.Sequential(
             nn.Linear(guide_hidden_dim, 3 * 2), nn.Softplus(),
         )
         self.guide_prior_weights = nn.Sequential(
             nn.Linear(guide_hidden_dim, len(list(layers_graph.priors()))),
             nn.Softplus(),
-        )
-        self.guide_embedding = nn.Sequential(
-            nn.Linear(data_dim, guide_hidden_dim), nn.ReLU(),
         )
         self.guide_dimensionalities = nn.Sequential(
             nn.Linear(guide_hidden_dim, len(self._category)), nn.Softplus(),
