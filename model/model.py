@@ -555,11 +555,10 @@ class VAECategoryModel(BaseModel):
                             encoding = encoder(data, sample=False)
                             prediction = path[k-1](latents[-1], sample=False)
 
-                            precision = encoding[1] ** -2 + prediction[1] ** -2
-                            std_dev = (1 / precision).sqrt()
-                            mean = encoding[0] * (encoding[1] ** -2) +\
-                                   prediction[0] * (prediction[1] ** -2) /\
-                                   precision
+                            precision = encoding[1] + prediction[1]
+                            mean = (encoding[0] * encoding[1] +\
+                                    prediction[0] * prediction[1]) / precision
+                            std_dev = 1. / precision.sqrt()
                             normal = dist.Normal(mean, std_dev).to_event(1)
                             latent_name = path[k-1].distribution.latent_name
                             latent = pyro.sample(latent_name, normal)
