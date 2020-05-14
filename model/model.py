@@ -88,43 +88,29 @@ class BernoulliObservation(TypedModel):
             return xs
 
 class PathDensityNet(TypedModel):
-    def __init__(self, spaces_path, dist_layer=BernoulliObservation):
+    def __init__(self, in_dim, out_dim, dist_layer=BernoulliObservation):
         super().__init__()
-        spaces_path = list(spaces_path)
-        self._num_spaces = len(spaces_path)
-        self._in_dim = torch.Size([spaces_path[0][0]])
-        self._out_dim = torch.Size([spaces_path[-1][-1]])
+        self._in_space = FirstOrderType.TENSORT(torch.float,
+                                                torch.Size([in_dim]))
+        self._out_space = FirstOrderType.TENSORT(torch.float,
+                                                 torch.Size([out_dim]))
 
-        for i, (u, v) in enumerate(spaces_path):
-            h = u + v // 2
-            if i == len(spaces_path) - 1:
-                self.add_module('layer_%d' % i, nn.Sequential(
-                    nn.Linear(u, h), nn.BatchNorm1d(h), nn.LeakyReLU(),
-                    nn.Linear(h, v)
-                ))
-                self.add_module('distribution', dist_layer(v))
-            else:
-                self.add_module('layer_%d' % i, nn.Sequential(
-                    nn.Linear(u, h), nn.BatchNorm1d(h), nn.LeakyReLU(),
-                    nn.Linear(h, v), nn.BatchNorm1d(v), nn.LeakyReLU(),
-                ))
-
-    def __len__(self):
-        return self._num_spaces
+        hidden_dim = in_dim + out_dim // 2
+        self.add_module('residual_layer', nn.Sequential(
+            nn.Linear(in_dim, hidden_dim), nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(), nn.Linear(hidden_dim, out_dim),
+            nn.BatchNorm1d(out_dim), nn.LeakyReLU(),
+        ))
+        self.add_module('identity_layer', nn.Linear(in_dim, out_dim))
+        self.add_module('distribution', dist_layer(out_dim))
 
     @property
     def type(self):
-        return FirstOrderType.ARROWT(
-            FirstOrderType.TENSORT(torch.float, self._in_dim),
-            FirstOrderType.TENSORT(torch.float, self._out_dim)
-        )
+        return FirstOrderType.ARROWT(self._in_space, self._out_space)
 
     def forward(self, inputs, observations=None, sample=True):
-        layers = dict(self.named_children())
-        latent = inputs
-        for i in range(self._num_spaces):
-            latent = layers['layer_%d' % i](latent)
-        return self.distribution(latent, observations, sample)
+        hidden = self.residual_layer(inputs) + self.identity_layer(inputs)
+        return self.distribution(hidden, observations, sample)
 
 class LayersGraph:
     def __init__(self, spaces, data_dim):
