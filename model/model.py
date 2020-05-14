@@ -29,6 +29,10 @@ class DiagonalGaussian(TypedModel):
         self.parameterization = nn.Linear(self._dim[0], self._dim[0] * 2)
 
     @property
+    def latent_name(self):
+        return self._latent_name
+
+    @property
     def type(self):
         return FirstOrderType.ARROWT(
             FirstOrderType.TENSORT(torch.float, self._dim),
@@ -50,6 +54,10 @@ class StandardNormal(TypedModel):
             latent_name = 'Z^{%d}' % dim
         self._latent_name = latent_name
         self._dim = dim
+
+    @property
+    def latent_name(self):
+        return self._latent_name
 
     @property
     def type(self):
@@ -550,7 +558,7 @@ class VAECategoryModel(BaseModel):
                                    prediction[0] * (prediction[1] ** -2) /\
                                    precision
                             normal = dist.Normal(mean, std_dev).to_event(1)
-                            latent_name = path[k-1].distribution._latent_name
+                            latent_name = path[k-1].distribution.latent_name
                             latent = pyro.sample(latent_name, normal)
                             latents.append(latent)
                         else:
