@@ -41,11 +41,14 @@ class DiagonalGaussian(TypedModel):
 
     def forward(self, inputs, observations=None, sample=True):
         zs = self.parameterization(inputs).view(-1, 2, self._dim[0])
+        mean = zs[:, 0]
+        precision = F.softplus(zs[:, 1])
+        std_dev = 1. / precision.sqrt()
         if sample:
-            normal = dist.Normal(zs[:, 0], F.softplus(zs[:, 1])).to_event(1)
+            normal = dist.Normal(mean, std_dev).to_event(1)
             return pyro.sample(self._latent_name, normal, obs=observations)
         else:
-            return zs[:, 0], F.softplus(zs[:, 1])
+            return mean, precision
 
 class StandardNormal(TypedModel):
     def __init__(self, dim, latent_name=None):
