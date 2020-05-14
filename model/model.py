@@ -128,13 +128,13 @@ class LayersGraph:
     def likelihoods(self):
         # Use the data space to construct likelihood layers
         for source in self.latent_spaces:
-            yield PathDensityNet([(source, self._data_space)],
+            yield PathDensityNet(source, self._data_space,
                                  dist_layer=BernoulliObservation)
 
     def encoders(self):
         # Use the data space to construct likelihood layers
         for dest in self.latent_spaces:
-            yield PathDensityNet([(self._data_space, dest)],
+            yield PathDensityNet(self._data_space, dest,
                                  dist_layer=DiagonalGaussian)
 
     def priors(self):
@@ -146,7 +146,7 @@ class LayersGraph:
 
     def latent_maps(self):
         for z1, z2 in itertools.permutations(self.latent_spaces, 2):
-            yield PathDensityNet([(z1, z2)], dist_layer=DiagonalGaussian)
+            yield PathDensityNet(z1, z2, dist_layer=DiagonalGaussian)
 
 class VAECategoryModel(BaseModel):
     def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=None):
