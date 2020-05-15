@@ -29,6 +29,10 @@ class DiagonalGaussian(TypedModel):
         self.parameterization = nn.Linear(self._dim[0], self._dim[0] * 2)
 
     @property
+    def latent_name(self):
+        return self._latent_name
+
+    @property
     def type(self):
         return FirstOrderType.ARROWT(
             FirstOrderType.TENSORT(torch.float, self._dim),
@@ -37,11 +41,14 @@ class DiagonalGaussian(TypedModel):
 
     def forward(self, inputs, observations=None, sample=True):
         zs = self.parameterization(inputs).view(-1, 2, self._dim[0])
+        mean = zs[:, 0]
+        precision = F.softplus(zs[:, 1])
+        std_dev = 1. / precision.sqrt()
         if sample:
-            normal = dist.Normal(zs[:, 0], F.softplus(zs[:, 1])).to_event(1)
+            normal = dist.Normal(mean, std_dev).to_event(1)
             return pyro.sample(self._latent_name, normal, obs=observations)
         else:
-            return zs[:, 0], F.softplus(zs[:, 1])
+            return mean, precision
 
 class StandardNormal(TypedModel):
     def __init__(self, dim, latent_name=None):
@@ -50,6 +57,10 @@ class StandardNormal(TypedModel):
             latent_name = 'Z^{%d}' % dim
         self._latent_name = latent_name
         self._dim = dim
+
+    @property
+    def latent_name(self):
+        return self._latent_name
 
     @property
     def type(self):
@@ -88,44 +99,29 @@ class BernoulliObservation(TypedModel):
             return xs
 
 class PathDensityNet(TypedModel):
-    def __init__(self, spaces_path, dist_layer=BernoulliObservation):
+    def __init__(self, in_dim, out_dim, dist_layer=BernoulliObservation):
         super().__init__()
-        spaces_path = list(spaces_path)
-        self._num_spaces = len(spaces_path)
-        self._in_dim = torch.Size([spaces_path[0][0]])
-        self._out_dim = torch.Size([spaces_path[-1][-1]])
+        self._in_space = FirstOrderType.TENSORT(torch.float,
+                                                torch.Size([in_dim]))
+        self._out_space = FirstOrderType.TENSORT(torch.float,
+                                                 torch.Size([out_dim]))
 
-        layers = []
-        for i, (u, v) in enumerate(spaces_path):
-            h = u + v // 2
-            if i == len(spaces_path) - 1:
-                self.add_module('layer_%d' % i, nn.Sequential(
-                    nn.Linear(u, h), nn.BatchNorm1d(h), nn.ReLU(),
-                    nn.Linear(h, v)
-                ))
-                self.add_module('distribution', dist_layer(v))
-            else:
-                self.add_module('layer_%d' % i, nn.Sequential(
-                    nn.Linear(u, h), nn.BatchNorm1d(h), nn.ReLU(),
-                    nn.Linear(h, v), nn.BatchNorm1d(v), nn.ReLU(),
-                ))
-
-    def __len__(self):
-        return self._num_spaces
+        hidden_dim = in_dim + out_dim // 2
+        self.add_module('residual_layer', nn.Sequential(
+            nn.BatchNorm1d(in_dim), nn.PReLU(), nn.Linear(in_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim), nn.PReLU(),
+            nn.Linear(hidden_dim, out_dim),
+        ))
+        self.add_module('identity_layer', nn.Linear(in_dim, out_dim))
+        self.add_module('distribution', dist_layer(out_dim))
 
     @property
     def type(self):
-        return FirstOrderType.ARROWT(
-            FirstOrderType.TENSORT(torch.float, self._in_dim),
-            FirstOrderType.TENSORT(torch.float, self._out_dim)
-        )
+        return FirstOrderType.ARROWT(self._in_space, self._out_space)
 
     def forward(self, inputs, observations=None, sample=True):
-        layers = dict(self.named_children())
-        latent = inputs
-        for i in range(self._num_spaces):
-            latent = layers['layer_%d' % i](latent)
-        return self.distribution(latent, observations, sample)
+        hidden = self.residual_layer(inputs) + self.identity_layer(inputs)
+        return self.distribution(hidden, observations, sample)
 
 class LayersGraph:
     def __init__(self, spaces, data_dim):
@@ -143,13 +139,13 @@ class LayersGraph:
     def likelihoods(self):
         # Use the data space to construct likelihood layers
         for source in self.latent_spaces:
-            yield PathDensityNet([(source, self._data_space)],
+            yield PathDensityNet(source, self._data_space,
                                  dist_layer=BernoulliObservation)
 
     def encoders(self):
         # Use the data space to construct likelihood layers
         for dest in self.latent_spaces:
-            yield PathDensityNet([(self._data_space, dest)],
+            yield PathDensityNet(self._data_space, dest,
                                  dist_layer=DiagonalGaussian)
 
     def priors(self):
@@ -161,7 +157,7 @@ class LayersGraph:
 
     def latent_maps(self):
         for z1, z2 in itertools.permutations(self.latent_spaces, 2):
-            yield PathDensityNet([(z1, z2)], dist_layer=DiagonalGaussian)
+            yield PathDensityNet(z1, z2, dist_layer=DiagonalGaussian)
 
 class VAECategoryModel(BaseModel):
     def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=None):
@@ -198,17 +194,16 @@ class VAECategoryModel(BaseModel):
             dimensionalities[k] = space.tensort()[1][0]
         self.register_buffer('dimensionalities', dimensionalities)
 
-        max_options = max([len(self._category.out_edges(object))
-                           for object in self._category])
+        self.guide_embedding = nn.Sequential(
+            nn.Linear(data_dim, guide_hidden_dim),
+            nn.BatchNorm1d(guide_hidden_dim), nn.PReLU(),
+        )
         self.guide_confidences = nn.Sequential(
             nn.Linear(guide_hidden_dim, 3 * 2), nn.Softplus(),
         )
         self.guide_prior_weights = nn.Sequential(
             nn.Linear(guide_hidden_dim, len(list(layers_graph.priors()))),
             nn.Softplus(),
-        )
-        self.guide_embedding = nn.Sequential(
-            nn.Linear(data_dim, guide_hidden_dim), nn.ReLU(),
         )
         self.guide_dimensionalities = nn.Sequential(
             nn.Linear(guide_hidden_dim, len(self._category)), nn.Softplus(),
@@ -513,7 +508,7 @@ class VAECategoryModel(BaseModel):
         for obj in self._category.nodes:
             prior_weights[obj] = []
             global_elements = self._category.nodes[obj]['global_elements']
-            for element in global_elements:
+            for _ in global_elements:
                 prior_weights[obj].append(weights[n_prior_weights])
                 n_prior_weights += 1
             prior_weights[obj] = torch.stack(prior_weights[obj], dim=0)
@@ -560,13 +555,12 @@ class VAECategoryModel(BaseModel):
                             encoding = encoder(data, sample=False)
                             prediction = path[k-1](latents[-1], sample=False)
 
-                            precision = encoding[1] ** -2 + prediction[1] ** -2
-                            std_dev = (1 / precision).sqrt()
-                            mean = encoding[0] * (encoding[1] ** -2) +\
-                                   prediction[0] * (prediction[1] ** -2) /\
-                                   precision
+                            precision = encoding[1] + prediction[1]
+                            mean = (encoding[0] * encoding[1] +\
+                                    prediction[0] * prediction[1]) / precision
+                            std_dev = 1. / precision.sqrt()
                             normal = dist.Normal(mean, std_dev).to_event(1)
-                            latent_name = path[k-1].distribution._latent_name
+                            latent_name = path[k-1].distribution.latent_name
                             latent = pyro.sample(latent_name, normal)
                             latents.append(latent)
                         else:
