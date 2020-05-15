@@ -108,9 +108,9 @@ class PathDensityNet(TypedModel):
 
         hidden_dim = in_dim + out_dim // 2
         self.add_module('residual_layer', nn.Sequential(
-            nn.Linear(in_dim, hidden_dim), nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(), nn.Linear(hidden_dim, out_dim),
-            nn.BatchNorm1d(out_dim), nn.LeakyReLU(),
+            nn.BatchNorm1d(in_dim), nn.PReLU(), nn.Linear(in_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim), nn.PReLU(),
+            nn.Linear(hidden_dim, out_dim),
         ))
         self.add_module('identity_layer', nn.Linear(in_dim, out_dim))
         self.add_module('distribution', dist_layer(out_dim))
@@ -196,7 +196,7 @@ class VAECategoryModel(BaseModel):
 
         self.guide_embedding = nn.Sequential(
             nn.Linear(data_dim, guide_hidden_dim),
-            nn.BatchNorm1d(guide_hidden_dim), nn.LeakyReLU(),
+            nn.BatchNorm1d(guide_hidden_dim), nn.PReLU(),
         )
         self.guide_confidences = nn.Sequential(
             nn.Linear(guide_hidden_dim, 3 * 2), nn.Softplus(),
