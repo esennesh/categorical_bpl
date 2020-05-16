@@ -307,8 +307,7 @@ class VAECategoryModel(BaseModel):
         obj_idx = pyro.sample(name, dist.Categorical(probs=dims), infer=infer)
         return spaces[obj_idx.item()]
 
-    def sample_global_element(self, obj, weights, confidence, latent=False,
-                              infer={}):
+    def sample_global_element(self, obj, weights, confidence, infer={}):
         elements_cat = dist.Categorical(
             probs=F.softmax(weights[obj] * confidence, dim=0)
         )
