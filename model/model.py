@@ -205,9 +205,6 @@ class VAECategoryModel(BaseModel):
 
         self.register_buffer('edge_distances',
                              torch.zeros(len(self._category.edges)))
-        self.register_buffer('object_distances',
-                             torch.zeros(len(self._category),
-                                         len(self._category)))
 
     @property
     def data_space(self):
@@ -292,8 +289,7 @@ class VAECategoryModel(BaseModel):
         transition = expm.expm(transition.unsqueeze(0)).squeeze(0)
         transition_sum = transition.sum(dim=-1, keepdim=True)
         transition = transition / transition_sum
-        self.object_distances = -torch.log(transition)
-        return self.object_distances
+        return -torch.log(transition)
 
     def sample_object(self, dims, confidence, exclude=[], k=None, infer={}):
         spaces = self._spaces.copy()
@@ -315,9 +311,8 @@ class VAECategoryModel(BaseModel):
                               infer=infer)
         return self._category.nodes[obj]['global_elements'][elt_idx.item()]
 
-    def navigate_morphism(self, src, dest, object_distances,
-                          confidence, k=0, infer={}, name='arrow',
-                          forward=True, edge_costs=None):
+    def navigate_morphism(self, src, dest, object_distances, confidence, k=0,
+                          infer={}, forward=True, edge_costs=None):
         if edge_costs is None:
             edge_costs = self.edge_distances
 
@@ -395,7 +390,8 @@ class VAECategoryModel(BaseModel):
                 (location, morphism) = self.navigate_morphism(location, dest,
                                                               distances,
                                                               confidence,
-                                                              k=len(path))
+                                                              k=len(path),
+                                                              infer=infer)
                 path.append(morphism)
 
         return path
