@@ -483,11 +483,10 @@ class VAECategoryModel(BaseModel):
         pyro.module('guide_embedding', self.guide_embedding)
         pyro.module('guide_confidences', self.guide_confidences)
         pyro.module('guide_prior_weights', self.guide_prior_weights)
-        pyro.module('guide_dimensionalities', self.guide_dimensionalities)
 
         embedding = self.guide_embedding(data).mean(dim=0)
 
-        confidences = self.guide_confidences(embedding).view(3, 2)
+        confidences = self.guide_confidences(embedding).view(2, 2)
 
         weights = self.guide_prior_weights(embedding)
         prior_weights = {}
@@ -501,27 +500,18 @@ class VAECategoryModel(BaseModel):
             prior_weights[obj] = torch.stack(prior_weights[obj], dim=0)
 
         self.get_edge_distances()
-        distances = self.get_object_distances()
 
-        dimensionalities = self.guide_dimensionalities(embedding)
         confidence_gamma = dist.Gamma(confidences[0, 0],
                                       confidences[0, 1]).to_event(0)
-        confidence = pyro.sample('dimensionalities_confidence',
-                                 confidence_gamma)
-        origin = self.sample_object(dimensionalities, confidence,
-                                    exclude=[self.data_space])
+        confidence = pyro.sample('distances_confidence', confidence_gamma)
+        path = self.sample_path_to(self.data_space, self.edge_distances,
+                                   confidence)
+        origin = path[0].type.arrowt()[0]
 
         confidence_gamma = dist.Gamma(confidences[1, 0],
                                       confidences[1, 1]).to_event(0)
         confidence = pyro.sample('prior_weights_confidence', confidence_gamma)
-        prior = self.sample_global_element(origin, prior_weights, confidence,
-                                           latent=True)
-
-        confidence_gamma = dist.Gamma(confidences[2, 0],
-                                      confidences[2, 1]).to_event(0)
-        confidence = pyro.sample('distances_confidence', confidence_gamma)
-        path = self.sample_path_between(origin, self.data_space, distances,
-                                        confidence)
+        self.sample_global_element(origin, prior_weights, confidence)
 
         latents = []
         # Walk through the sampled path, obtaining an independent encoder from
@@ -530,8 +520,8 @@ class VAECategoryModel(BaseModel):
         with pyro.plate('data', len(data)):
             with pyro.markov():
                 with name_count():
-                    for k in range(len(path)):
-                        location = types.unfold_arrow(path[k].type)[0]
+                    for k, arrow in enumerate(path):
+                        location = types.unfold_arrow(arrow.type)[0]
                         encoder = self.sample_generator_between(
                             self.edge_distances, confidence,
                             src=self.data_space, dest=location,
