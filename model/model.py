@@ -164,7 +164,7 @@ class VAECategoryModel(BaseModel):
         self._generators = IndexedOrderedDict()
         self._spaces = []
         if not guide_hidden_dim:
-            guide_hidden_dim = data_dim // 4
+            guide_hidden_dim = data_dim // 16
 
         # Build up a bunch of torch.Sizes for the powers of two between
         # hidden_dim and data_dim.
