@@ -427,17 +427,6 @@ class VAECategoryModel(BaseModel):
         data = data.view(data.shape[0], self._data_dim)
 
         self.get_edge_distances()
-        distances = self.get_object_distances()
-
-        alpha = pyro.param('dimensionalities_alpha', data.new_ones(1),
-                           constraint=constraints.positive)
-        beta = pyro.param('dimensionalities_beta', data.new_ones(1),
-                          constraint=constraints.positive)
-        confidence_gamma = dist.Gamma(alpha, beta)
-        confidence = pyro.sample('dimensionalities_confidence',
-                                 confidence_gamma.to_event(0))
-        origin = self.sample_object(self.dimensionalities, confidence,
-                                    exclude=[self.data_space])
 
         prior_weights = {}
         for obj in self._category.nodes:
@@ -450,14 +439,6 @@ class VAECategoryModel(BaseModel):
                                     constraint=constraints.positive)
                 prior_weights[obj].append(weight)
             prior_weights[obj] = torch.stack(prior_weights[obj], dim=0)
-        alpha = pyro.param('priors_alpha', data.new_ones(1),
-                           constraint=constraints.positive)
-        beta = pyro.param('priors_beta', data.new_ones(1),
-                          constraint=constraints.positive)
-        confidence = pyro.sample('prior_weights_confidence',
-                                 dist.Gamma(alpha, beta).to_event(0))
-        prior = self.sample_global_element(origin, prior_weights, confidence,
-                                           latent=True)
 
         alpha = pyro.param('distances_alpha', data.new_ones(1),
                            constraint=constraints.positive)
@@ -465,8 +446,17 @@ class VAECategoryModel(BaseModel):
                           constraint=constraints.positive)
         confidence = pyro.sample('distances_confidence',
                                  dist.Gamma(alpha, beta).to_event(0))
-        path = self.sample_path_between(origin, self.data_space, distances,
-                                        confidence)
+        path = self.sample_path_to(self.data_space, self.edge_distances,
+                                   confidence)
+        origin = path[0].type.arrowt()[0]
+
+        alpha = pyro.param('priors_alpha', data.new_ones(1),
+                           constraint=constraints.positive)
+        beta = pyro.param('priors_beta', data.new_ones(1),
+                          constraint=constraints.positive)
+        confidence = pyro.sample('prior_weights_confidence',
+                                 dist.Gamma(alpha, beta).to_event(0))
+        prior = self.sample_global_element(origin, prior_weights, confidence)
 
         rvs = []
         with pyro.plate('data', len(data)):
