@@ -439,17 +439,7 @@ class VAECategoryModel(BaseModel):
 
         self.get_edge_distances()
 
-        prior_weights = {}
-        for obj in self._category.nodes:
-            prior_weights[obj] = []
-            global_elements = self._category.nodes[obj]['global_elements']
-            for k, element in enumerate(global_elements):
-                pyro.module('global_element_%s_%d' % (obj, k), element)
-                weight = pyro.param('global_element_weight_%s_%s' % (obj, k),
-                                    data.new_ones(1),
-                                    constraint=constraints.positive)
-                prior_weights[obj].append(weight)
-            prior_weights[obj] = torch.stack(prior_weights[obj], dim=0)
+        prior_weights = self.global_element_weights()
 
         alpha = pyro.param('distances_alpha', data.new_ones(1),
                            constraint=constraints.positive)
@@ -500,15 +490,7 @@ class VAECategoryModel(BaseModel):
         confidences = self.guide_confidences(embedding).view(2, 2)
 
         weights = self.guide_prior_weights(embedding)
-        prior_weights = {}
-        n_prior_weights = 0
-        for obj in self._category.nodes:
-            prior_weights[obj] = []
-            global_elements = self._category.nodes[obj]['global_elements']
-            for _ in global_elements:
-                prior_weights[obj].append(weights[n_prior_weights])
-                n_prior_weights += 1
-            prior_weights[obj] = torch.stack(prior_weights[obj], dim=0)
+        prior_weights = self.global_element_weights(weights)
 
         self.get_edge_distances()
 
