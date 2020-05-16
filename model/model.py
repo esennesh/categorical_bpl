@@ -222,6 +222,28 @@ class VAECategoryModel(BaseModel):
         elements.append(element)
         self._category.add_node(obj, global_elements=tuple(elements))
 
+    def global_element_weights(self, weights=None):
+        prior_weights = {}
+        if weights is not None:
+            n_prior_weights = 0
+        for obj in self._category.nodes:
+            prior_weights[obj] = []
+            global_elements = self._category.nodes[obj]['global_elements']
+            for k, element in enumerate(global_elements):
+                if weights is not None:
+                    weight = weights[n_prior_weights]
+                    n_prior_weights += 1
+                else:
+                    pyro.module('global_element_%s_%d' % (obj, k), element)
+                    weight_name = 'global_element_weight_%s_%s' % (obj, k)
+                    weight = pyro.param(weight_name,
+                                        self.edge_distances.new_ones(()),
+                                        constraint=constraints.positive)
+                prior_weights[obj].append(weight)
+            prior_weights[obj] = torch.stack(prior_weights[obj], dim=0)
+
+        return prior_weights
+
     def add_generating_morphism(self, name, generator):
         assert name not in self._generators
         assert isinstance(generator, TypedModel)
