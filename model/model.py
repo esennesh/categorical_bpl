@@ -274,15 +274,16 @@ class VAECategoryModel(BaseModel):
         for src in self._category.nodes():
             i = self._object_index(src)
             out_edges = self._category.out_edges(src, keys=True)
-            src_probs = []
+            generators = []
             for (_, dest, generator) in out_edges:
                 j = self._object_index(dest)
-                g = self._generator_index(generator)
                 row_indices.append(i)
                 column_indices.append(j)
-                src_probs.append(self.edge_distances[g])
-            src_probs = F.softmin(torch.stack(src_probs, dim=0), dim=0)
-            transition_probs.append(src_probs)
+                generators.append(generator)
+            transition_probs.append(F.softmin(
+                self._generators(self.edge_distances, generators),
+                dim=0
+            ))
 
         transition = transition.index_put((torch.LongTensor(row_indices),
                                            torch.LongTensor(column_indices)),
@@ -297,12 +298,11 @@ class VAECategoryModel(BaseModel):
 
     def sample_object(self, dims, confidence, exclude=[], k=None, infer={}):
         spaces = self._spaces.copy()
+        spaces_indices = list(range(len(spaces)))
         for space in exclude:
-            space_idx = spaces.index(space)
+            spaces_indices.remove(spaces.index(space))
             spaces.remove(space)
-            dims = torch.cat((dims[0:space_idx], dims[space_idx+1:]), dim=0)
-
-        dims = F.softmin(dims * confidence, dim=0)
+        dims = F.softmin(dims[spaces_indices] * confidence, dim=0)
         name = 'global_object' if k is None else 'global_object_%d' % k
         obj_idx = pyro.sample(name, dist.Categorical(probs=dims), infer=infer)
         return spaces[obj_idx.item()]
@@ -350,14 +350,7 @@ class VAECategoryModel(BaseModel):
         if len(generators) == 1:
             return generators[0]
 
-        edge_costs = torch.unbind(edge_costs, dim=0)
-        between_distances = []
-
-        for (_, generator) in generators:
-            g = self._generator_index(generator)
-            between_distances.append(edge_costs[g])
-        between_distances = torch.stack(between_distances, dim=0)
-
+        between_distances = self._generator_distances(edge_costs, generators)
         generators_cat = dist.Categorical(
             probs=F.softmin(between_distances * confidence, dim=0)
         )
