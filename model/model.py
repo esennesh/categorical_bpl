@@ -280,6 +280,10 @@ class VAECategoryModel(BaseModel):
     def _object_index(self, obj):
         return self._spaces.index(obj)
 
+    def _object_index_onehot(self, obj):
+        eye = torch.eye(len(self._category)).to(self.edge_distances)
+        return eye[self._object_index(obj)]
+
     def _generator_index(self, generator):
         return self._generators.keys().index(generator)
 
