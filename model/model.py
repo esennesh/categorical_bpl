@@ -203,6 +203,17 @@ class VAECategoryModel(BaseModel):
             nn.Softplus(),
         )
 
+        max_generators = 0
+        for obj in self._category:
+            _, num_edges, num_priors = self._object_generators(obj, False)
+            num_generators = num_edges + num_priors
+            if num_generators > max_generators:
+                max_generators = num_generators
+        self.guide_navigator = nn.GRUCell(len(self._category), guide_hidden_dim)
+        self.guide_navigation_decoder = nn.Sequential(
+            nn.Linear(guide_hidden_dim, max_generators), nn.Softplus()
+        )
+
         self.register_buffer('edge_distances',
                              torch.zeros(len(self._category.edges)))
 
@@ -422,12 +433,22 @@ class VAECategoryModel(BaseModel):
         return generators[g_idx.item()]
 
     def sample_path_to(self, dest, edge_distances, prior_weights, confidence,
-                       infer={}):
+                       embedding=None, infer={}):
         location = dest
         path = []
         with pyro.markov():
             exclude = [FirstOrderType.TOPT(), dest]
             while location != FirstOrderType.TOPT():
+                if embedding is not None:
+                    gen_distances = self.guide_navigation_decoder(embedding)
+                    _, num_edges, num_priors = self._object_generators(location,
+                                                                       False,
+                                                                       exclude)
+                    edge_distances = gen_distances[:num_edges]
+                    prior_weights = {
+                        location: -gen_distances[num_edges:num_edges+num_priors]
+                    }
+
                 (location, morphism) = self.sample_generator_to(
                     edge_distances, prior_weights, confidence, location,
                     infer=infer, name='generator_%d' % -len(path),
@@ -435,6 +456,12 @@ class VAECategoryModel(BaseModel):
                 )
                 path.append(morphism)
                 exclude = [dest]
+
+                if embedding is not None and location != FirstOrderType.TOPT():
+                    embedding = embedding.unsqueeze(0)
+                    loc = self._object_index_onehot(location).unsqueeze(0)
+                    embedding = self.guide_navigator(loc, embedding).squeeze(0)
+
         return list(reversed(path))
 
     def sample_path_between(self, src, dest, distances, confidence, infer={},
