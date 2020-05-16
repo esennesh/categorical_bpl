@@ -543,6 +543,8 @@ class VAECategoryModel(BaseModel):
         pyro.module('guide_embedding', self.guide_embedding)
         pyro.module('guide_confidences', self.guide_confidences)
         pyro.module('guide_prior_weights', self.guide_prior_weights)
+        pyro.module('guide_navigator', self.guide_navigator)
+        pyro.module('guide_navigation_decoder', self.guide_navigation_decoder)
 
         embedding = self.guide_embedding(data).mean(dim=0)
 
@@ -557,7 +559,7 @@ class VAECategoryModel(BaseModel):
                                       confidences[0, 1]).to_event(0)
         confidence = pyro.sample('distances_confidence', confidence_gamma)
         path = self.sample_path_to(self.data_space, self.edge_distances,
-                                   prior_weights, confidence)[1:]
+                                   prior_weights, confidence, embedding)[1:]
 
         latents = []
         # Walk through the sampled path, obtaining an independent encoder from
