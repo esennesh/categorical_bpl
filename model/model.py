@@ -196,14 +196,11 @@ class VAECategoryModel(BaseModel):
             nn.BatchNorm1d(guide_hidden_dim), nn.PReLU(),
         )
         self.guide_confidences = nn.Sequential(
-            nn.Linear(guide_hidden_dim, 3 * 2), nn.Softplus(),
+            nn.Linear(guide_hidden_dim, 2 * 2), nn.Softplus(),
         )
         self.guide_prior_weights = nn.Sequential(
             nn.Linear(guide_hidden_dim, len(list(layers_graph.priors()))),
             nn.Softplus(),
-        )
-        self.guide_dimensionalities = nn.Sequential(
-            nn.Linear(guide_hidden_dim, len(self._category)), nn.Softplus(),
         )
 
         self.register_buffer('edge_distances',
