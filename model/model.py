@@ -196,7 +196,7 @@ class VAECategoryModel(BaseModel):
             nn.BatchNorm1d(guide_hidden_dim), nn.PReLU(),
         )
         self.guide_confidences = nn.Sequential(
-            nn.Linear(guide_hidden_dim, 2 * 2), nn.Softplus(),
+            nn.Linear(guide_hidden_dim, 1 * 2), nn.Softplus(),
         )
         self.guide_prior_weights = nn.Sequential(
             nn.Linear(guide_hidden_dim, len(list(layers_graph.priors()))),
@@ -500,7 +500,7 @@ class VAECategoryModel(BaseModel):
 
         embedding = self.guide_embedding(data).mean(dim=0)
 
-        confidences = self.guide_confidences(embedding).view(2, 2)
+        confidences = self.guide_confidences(embedding).view(1, 2)
 
         weights = self.guide_prior_weights(embedding)
         prior_weights = self.global_element_weights(weights)
