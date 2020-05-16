@@ -355,18 +355,33 @@ class VAECategoryModel(BaseModel):
                                                  name='generator_%d' % k)
         return loc, morphism
 
+    def _object_generators(self, obj, forward=True, excluded=[]):
+        edges = self._category.out_edges if forward else self._category.in_edges
+        dir_idx = 1 if forward else 0
+
+        generators = [(generator[dir_idx], generator[2]) for generator
+                      in edges(obj, keys=True)
+                      if generator[dir_idx] not in excluded]
+        num_edges = len(generators)
+        num_priors = 0
+        if not (forward or FirstOrderType.TOPT() in excluded):
+            priors = [(FirstOrderType.TOPT(), prior) for prior
+                      in self._category.nodes[obj]['global_elements']]
+            num_priors += len(priors)
+            generators += priors
+
+        return generators, num_edges, num_priors
+
     def sample_generator_to(self, edge_costs, prior_weights, confidence, dest,
                             infer={}, name='generator', penalty=0,
                             excluded_srcs=[]):
-        generators = [(u, g) for (u, _, g) in
-                      self._category.in_edges(dest, keys=True)
-                      if u not in excluded_srcs]
-        generator_distances = self._generator_distances(edge_costs, generators)
-        generator_distances = generator_distances + penalty
+        generators, num_edges, _ = self._object_generators(dest, False,
+                                                           excluded_srcs)
 
+        generator_distances = self._generator_distances(edge_costs,
+                                                        generators[:num_edges])
+        generator_distances = generator_distances + penalty
         if FirstOrderType.TOPT() not in excluded_srcs:
-            generators += [(FirstOrderType.TOPT(), prior) for prior
-                           in self._category.nodes[dest]['global_elements']]
             generator_distances = torch.cat((generator_distances,
                                              -prior_weights[dest]),
                                             dim=0)
