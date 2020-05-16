@@ -355,6 +355,28 @@ class VAECategoryModel(BaseModel):
                                                  name='generator_%d' % k)
         return loc, morphism
 
+    def sample_generator_to(self, edge_costs, prior_weights, confidence, dest,
+                            infer={}, name='generator', penalty=0,
+                            excluded_srcs=[]):
+        generators = [(u, g) for (u, _, g) in
+                      self._category.in_edges(dest, keys=True)
+                      if u not in excluded_srcs]
+        generator_distances = self._generator_distances(edge_costs, generators)
+        generator_distances = generator_distances + penalty
+
+        if FirstOrderType.TOPT() not in excluded_srcs:
+            generators += [(FirstOrderType.TOPT(), prior) for prior
+                           in self._category.nodes[dest]['global_elements']]
+            generator_distances = torch.cat((generator_distances,
+                                             -prior_weights[dest]),
+                                            dim=0)
+        generators_cat = dist.Categorical(
+            probs=F.softmin(generator_distances * confidence, dim=0)
+        )
+        g_idx = pyro.sample('%s_{ -> %s}' % (name, dest), generators_cat,
+                            infer=infer)
+        return generators[g_idx.item()]
+
     def sample_generator_between(self, edge_costs, confidence, src=None,
                                  dest=None, infer={}, name='generator',
                                  exclude=[]):
