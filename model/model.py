@@ -261,6 +261,10 @@ class VAECategoryModel(BaseModel):
     def _generator_index(self, generator):
         return self._generators.keys().index(generator)
 
+    def _generator_distances(self, edge_distances, generators):
+        generator_indices = [self._generator_index(g) for (_, g) in generators]
+        return edge_distances[generator_indices]
+
     def get_object_distances(self):
         transition = self.edge_distances.new_zeros((len(self._category),
                                                     len(self._category)))
