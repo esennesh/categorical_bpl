@@ -450,20 +450,11 @@ class VAECategoryModel(BaseModel):
         with pyro.markov():
             exclude = [FirstOrderType.TOPT(), dest]
             while location != FirstOrderType.TOPT():
-                if embedding is not None:
-                    gen_distances = self.guide_navigation_decoder(embedding)
-                    _, num_edges, num_priors = self._object_generators(location,
-                                                                       False,
-                                                                       exclude)
-                    edge_distances = gen_distances[:num_edges]
-                    prior_weights = {
-                        location: -gen_distances[num_edges:num_edges+num_priors]
-                    }
-
                 (location, morphism) = self.sample_generator_to(
                     edge_distances, prior_weights, confidence, location,
                     infer=infer, name='generator_%d' % -len(path),
-                    penalty=len(path), excluded_srcs=exclude
+                    penalty=len(path), excluded_srcs=exclude,
+                    embedding=embedding
                 )
                 path.append(morphism)
                 exclude = [dest]
