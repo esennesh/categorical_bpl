@@ -389,12 +389,23 @@ class VAECategoryModel(BaseModel):
 
     def sample_generator_to(self, edge_costs, prior_weights, confidence, dest,
                             infer={}, name='generator', penalty=0,
-                            excluded_srcs=[]):
+                            excluded_srcs=[], embedding=None):
         generators, num_edges, _ = self._object_generators(dest, False,
                                                            excluded_srcs)
 
-        generator_distances = self._generator_distances(edge_costs,
-                                                        generators[:num_edges])
+        if embedding is not None:
+            gen_distances = self.guide_navigation_decoder(embedding)
+            _, num_edges, num_priors = self._object_generators(dest,
+                                                               False,
+                                                               excluded_srcs)
+            generator_distances = gen_distances[:num_edges]
+            prior_weights = {
+                dest: -gen_distances[num_edges:num_edges+num_priors]
+            }
+        else:
+            generator_distances = self._generator_distances(
+                edge_costs, generators[:num_edges]
+            )
         generator_distances = generator_distances + penalty
         if FirstOrderType.TOPT() not in excluded_srcs:
             generator_distances = torch.cat((generator_distances,
