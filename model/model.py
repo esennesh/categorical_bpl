@@ -317,9 +317,10 @@ class VAECategoryModel(BaseModel):
                 row_indices.append(i)
                 column_indices.append(j)
                 generators.append(generator)
+            generator_indices = [self._generators.keys().index(gen)
+                                 for gen in generators]
             transition_probs.append(F.softmin(
-                self._generators(self.edge_distances, generators),
-                dim=0
+                self.edge_distances[generator_indices], dim=0
             ))
 
         transition = transition.index_put((torch.LongTensor(row_indices),
