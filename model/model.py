@@ -310,15 +310,14 @@ class VAECategoryModel(BaseModel):
         transition_probs = []
         for src in self._category.nodes():
             i = self._object_index(src)
-            out_edges = self._category.out_edges(src, keys=True)
-            generators = []
-            for (_, dest, generator) in out_edges:
+            generators, num_edges, _ = self._object_generators(src)
+            generators = generators[:num_edges]
+            for (dest, _) in generators:
                 j = self._object_index(dest)
                 row_indices.append(i)
                 column_indices.append(j)
-                generators.append(generator)
             transition_probs.append(F.softmin(
-                self._generators(self.edge_distances, generators),
+                self._generator_distances(self.edge_distances, generators),
                 dim=0
             ))
 
@@ -387,9 +386,9 @@ class VAECategoryModel(BaseModel):
 
         return generators, num_edges, num_priors
 
-    def sample_generator_to(self, edge_costs, prior_weights, confidence, dest,
-                            infer={}, name='generator', penalty=0,
-                            excluded_srcs=[], embedding=None):
+    def sample_generator_to(self, prior_weights, confidence, dest, infer={},
+                            name='generator', penalty=0, excluded_srcs=[],
+                            embedding=None):
         generators, num_edges, _ = self._object_generators(dest, False,
                                                            excluded_srcs)
 
@@ -404,7 +403,7 @@ class VAECategoryModel(BaseModel):
             }
         else:
             generator_distances = self._generator_distances(
-                edge_costs, generators[:num_edges]
+                self.edge_distances, generators[:num_edges]
             )
         generator_distances = generator_distances + penalty
         if FirstOrderType.TOPT() not in excluded_srcs:
@@ -443,15 +442,15 @@ class VAECategoryModel(BaseModel):
                             infer=infer)
         return generators[g_idx.item()]
 
-    def sample_path_to(self, dest, edge_distances, prior_weights, confidence,
-                       embedding=None, infer={}):
+    def sample_path_to(self, dest, prior_weights, confidence, embedding=None,
+                       infer={}):
         location = dest
         path = []
         with pyro.markov():
             exclude = [FirstOrderType.TOPT(), dest]
             while location != FirstOrderType.TOPT():
                 (location, morphism) = self.sample_generator_to(
-                    edge_distances, prior_weights, confidence, location,
+                    prior_weights, confidence, location,
                     infer=infer, name='generator_%d' % -len(path),
                     penalty=len(path), excluded_srcs=exclude,
                     embedding=embedding
@@ -515,8 +514,7 @@ class VAECategoryModel(BaseModel):
                           constraint=constraints.positive)
         confidence = pyro.sample('distances_confidence',
                                  dist.Gamma(alpha, beta).to_event(0))
-        path = self.sample_path_to(self.data_space, self.edge_distances,
-                                   prior_weights, confidence)
+        path = self.sample_path_to(self.data_space, prior_weights, confidence)
         prior = path[0]
         path = path[1:]
 
@@ -560,8 +558,8 @@ class VAECategoryModel(BaseModel):
         confidence_gamma = dist.Gamma(confidences[0, 0],
                                       confidences[0, 1]).to_event(0)
         confidence = pyro.sample('distances_confidence', confidence_gamma)
-        path = self.sample_path_to(self.data_space, self.edge_distances,
-                                   prior_weights, confidence, embedding)[1:]
+        path = self.sample_path_to(self.data_space, prior_weights, confidence,
+                                   embedding)[1:]
 
         latents = []
         # Walk through the sampled path, obtaining an independent encoder from
