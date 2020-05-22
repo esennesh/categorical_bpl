@@ -387,9 +387,9 @@ class VAECategoryModel(BaseModel):
 
         return generators, num_edges, num_priors
 
-    def sample_generator_to(self, edge_costs, prior_weights, confidence, dest,
-                            infer={}, name='generator', penalty=0,
-                            excluded_srcs=[], embedding=None):
+    def sample_generator_to(self, prior_weights, confidence, dest, infer={},
+                            name='generator', penalty=0, excluded_srcs=[],
+                            embedding=None):
         generators, num_edges, _ = self._object_generators(dest, False,
                                                            excluded_srcs)
 
@@ -404,7 +404,7 @@ class VAECategoryModel(BaseModel):
             }
         else:
             generator_distances = self._generator_distances(
-                edge_costs, generators[:num_edges]
+                self.edge_distances, generators[:num_edges]
             )
         generator_distances = generator_distances + penalty
         if FirstOrderType.TOPT() not in excluded_srcs:
@@ -451,7 +451,7 @@ class VAECategoryModel(BaseModel):
             exclude = [FirstOrderType.TOPT(), dest]
             while location != FirstOrderType.TOPT():
                 (location, morphism) = self.sample_generator_to(
-                    self.edge_distances, prior_weights, confidence, location,
+                    prior_weights, confidence, location,
                     infer=infer, name='generator_%d' % -len(path),
                     penalty=len(path), excluded_srcs=exclude,
                     embedding=embedding
