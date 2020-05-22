@@ -6,14 +6,14 @@
         "type": "VAECategoryModel",
         "args": {
           "data_dim": 784,
-          "hidden_dim": 10
+          "hidden_dim": 64
         }
     },
     "data_loader": {
         "type": "FashionMnistTargetBatchDataLoader",
         "args":{
             "data_dir": "data/",
-            "batch_size": 128,
+            "batch_size": 256,
             "shuffle": true,
             "validation_split": 0.1,
             "num_workers": 2
