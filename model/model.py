@@ -443,15 +443,15 @@ class VAECategoryModel(BaseModel):
                             infer=infer)
         return generators[g_idx.item()]
 
-    def sample_path_to(self, dest, edge_distances, prior_weights, confidence,
-                       embedding=None, infer={}):
+    def sample_path_to(self, dest, prior_weights, confidence, embedding=None,
+                       infer={}):
         location = dest
         path = []
         with pyro.markov():
             exclude = [FirstOrderType.TOPT(), dest]
             while location != FirstOrderType.TOPT():
                 (location, morphism) = self.sample_generator_to(
-                    edge_distances, prior_weights, confidence, location,
+                    self.edge_distances, prior_weights, confidence, location,
                     infer=infer, name='generator_%d' % -len(path),
                     penalty=len(path), excluded_srcs=exclude,
                     embedding=embedding
