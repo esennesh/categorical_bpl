@@ -515,8 +515,7 @@ class VAECategoryModel(BaseModel):
                           constraint=constraints.positive)
         confidence = pyro.sample('distances_confidence',
                                  dist.Gamma(alpha, beta).to_event(0))
-        path = self.sample_path_to(self.data_space, self.edge_distances,
-                                   prior_weights, confidence)
+        path = self.sample_path_to(self.data_space, prior_weights, confidence)
         prior = path[0]
         path = path[1:]
 
@@ -560,8 +559,8 @@ class VAECategoryModel(BaseModel):
         confidence_gamma = dist.Gamma(confidences[0, 0],
                                       confidences[0, 1]).to_event(0)
         confidence = pyro.sample('distances_confidence', confidence_gamma)
-        path = self.sample_path_to(self.data_space, self.edge_distances,
-                                   prior_weights, confidence, embedding)[1:]
+        path = self.sample_path_to(self.data_space, prior_weights, confidence,
+                                   embedding)[1:]
 
         latents = []
         # Walk through the sampled path, obtaining an independent encoder from
