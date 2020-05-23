@@ -345,21 +345,18 @@ class VAECategoryModel(BaseModel):
                               infer=infer)
         return self._category.nodes[obj]['global_elements'][elt_idx.item()]
 
-    def navigate_morphism(self, src, dest, object_distances, confidence, k=0,
-                          infer={}, forward=True, edge_costs=None):
-        if edge_costs is None:
-            edge_costs = self.edge_distances
-
+    def navigate_morphism(self, src, dest, confidence, k=0, infer={},
+                          forward=True):
         dest_idx = self._object_index(dest)
         if forward:
-            object_distances = object_distances[:, dest_idx]
+            object_distances = self.object_distances[:, dest_idx]
         else:
-            object_distances = object_distances[dest_idx, :]
+            object_distances = self.object_distances[dest_idx, :]
         loc = self.sample_object(object_distances, confidence, exclude=[src],
                                  k=k, infer=infer)
 
-        morphism = self.sample_generator_between(edge_costs, confidence,
-                                                 src=src, dest=loc, infer=infer,
+        morphism = self.sample_generator_between(confidence, src, loc,
+                                                 infer=infer,
                                                  name='generator_%d' % k)
         return loc, morphism
 
@@ -411,9 +408,8 @@ class VAECategoryModel(BaseModel):
                             infer=infer)
         return generators[g_idx.item()]
 
-    def sample_generator_between(self, edge_costs, confidence, src=None,
-                                 dest=None, infer={}, name='generator',
-                                 exclude=[]):
+    def sample_generator_between(self, confidence, src, dest, infer={},
+                                 name='generator', exclude=[]):
         assert src or dest
         if src and dest:
             generators = list(self._category[src][dest])
@@ -457,7 +453,7 @@ class VAECategoryModel(BaseModel):
 
         return list(reversed(path))
 
-    def sample_path_between(self, src, dest, distances, confidence, infer={},
+    def sample_path_between(self, src, dest, confidence, infer={},
                             embedding=None):
         if embedding is not None:
             embedding = embedding.unsqueeze(0)
@@ -466,7 +462,6 @@ class VAECategoryModel(BaseModel):
         with pyro.markov():
             while location != dest:
                 (location, morphism) = self.navigate_morphism(location, dest,
-                                                              distances,
                                                               confidence,
                                                               k=len(path),
                                                               infer=infer)
@@ -558,8 +553,7 @@ class VAECategoryModel(BaseModel):
                     for k, arrow in enumerate(path):
                         location = types.unfold_arrow(arrow.type)[0]
                         encoder = self.sample_generator_between(
-                            self.edge_distances, confidence,
-                            src=self.data_space, dest=location,
+                            confidence, self.data_space, location,
                             infer={'is_auxiliary': True}, name='encoder'
                         )
 
