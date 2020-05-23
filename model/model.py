@@ -212,6 +212,9 @@ class VAECategoryModel(BaseModel):
 
         self.register_buffer('edge_distances',
                              torch.zeros(len(self._category.edges)))
+        self.register_buffer('object_distances',
+                             torch.zeros(len(self._category)))
+        self._prior_weights = {}
 
     @property
     def data_space(self):
@@ -229,27 +232,22 @@ class VAECategoryModel(BaseModel):
         elements.append(element)
         self._category.add_node(obj, global_elements=tuple(elements))
 
-    def global_element_weights(self, weights=None):
+    def global_element_weights(self):
         prior_weights = {}
-        if weights is not None:
-            n_prior_weights = 0
         for obj in self._category.nodes:
             prior_weights[obj] = []
             global_elements = self._category.nodes[obj]['global_elements']
             for k, element in enumerate(global_elements):
-                if weights is not None:
-                    weight = weights[n_prior_weights]
-                    n_prior_weights += 1
-                else:
-                    pyro.module('global_element_%s_%d' % (obj, k), element)
-                    weight_name = 'global_element_weight_%s_%s' % (obj, k)
-                    weight = pyro.param(weight_name,
-                                        self.edge_distances.new_ones(()),
-                                        constraint=constraints.positive)
+                pyro.module('global_element_%s_%d' % (obj, k), element)
+                weight_name = 'global_element_weight_%s_%s' % (obj, k)
+                weight = pyro.param(weight_name,
+                                    self.edge_distances.new_ones(()),
+                                    constraint=constraints.positive)
                 prior_weights[obj].append(weight)
             prior_weights[obj] = torch.stack(prior_weights[obj], dim=0)
 
-        return prior_weights
+        self._prior_weights = prior_weights
+        return self._prior_weights
 
     def add_generating_morphism(self, name, generator):
         assert name not in self._generators
@@ -325,8 +323,8 @@ class VAECategoryModel(BaseModel):
         transition = transition / transition_sum
         transition = expm.expm(transition.unsqueeze(0)).squeeze(0)
         transition_sum = transition.sum(dim=-1, keepdim=True)
-        transition = transition / transition_sum
-        return -torch.log(transition)
+        self.object_distances = -torch.log(transition / transition_sum)
+        return self.object_distances
 
     def sample_object(self, dims, confidence, exclude=[], k=None, infer={}):
         spaces = self._spaces.copy()
