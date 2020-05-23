@@ -198,10 +198,6 @@ class VAECategoryModel(BaseModel):
         self.guide_confidences = nn.Sequential(
             nn.Linear(guide_hidden_dim, 1 * 2), nn.Softplus(),
         )
-        self.guide_prior_weights = nn.Sequential(
-            nn.Linear(guide_hidden_dim, len(list(layers_graph.priors()))),
-            nn.Softplus(),
-        )
 
         max_generators = 0
         for obj in self._category:
@@ -542,7 +538,6 @@ class VAECategoryModel(BaseModel):
 
         pyro.module('guide_embedding', self.guide_embedding)
         pyro.module('guide_confidences', self.guide_confidences)
-        pyro.module('guide_prior_weights', self.guide_prior_weights)
         pyro.module('guide_navigator', self.guide_navigator)
         pyro.module('guide_navigation_decoder', self.guide_navigation_decoder)
 
@@ -550,8 +545,7 @@ class VAECategoryModel(BaseModel):
 
         confidences = self.guide_confidences(embedding).view(1, 2)
 
-        weights = self.guide_prior_weights(embedding)
-        prior_weights = self.global_element_weights(weights)
+        prior_weights = self.global_element_weights()
 
         self.get_edge_distances()
 
