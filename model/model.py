@@ -337,9 +337,9 @@ class VAECategoryModel(BaseModel):
         obj_idx = pyro.sample(name, dist.Categorical(probs=dims), infer=infer)
         return spaces[obj_idx.item()]
 
-    def sample_global_element(self, obj, weights, confidence, infer={}):
+    def sample_global_element(self, obj, confidence, infer={}):
         elements_cat = dist.Categorical(
-            probs=F.softmax(weights[obj] * confidence, dim=0)
+            probs=F.softmax(self._prior_weights[obj] * confidence, dim=0)
         )
         elt_idx = pyro.sample('global_element_{%s}' % obj, elements_cat,
                               infer=infer)
@@ -380,9 +380,8 @@ class VAECategoryModel(BaseModel):
 
         return generators, num_edges, num_priors
 
-    def sample_generator_to(self, prior_weights, confidence, dest, infer={},
-                            name='generator', penalty=0, excluded_srcs=[],
-                            embedding=None):
+    def sample_generator_to(self, confidence, dest, infer={}, name='generator',
+                            penalty=0, excluded_srcs=[], embedding=None):
         generators, num_edges, _ = self._object_generators(dest, False,
                                                            excluded_srcs)
 
@@ -399,6 +398,7 @@ class VAECategoryModel(BaseModel):
             generator_distances = self._generator_distances(
                 self.edge_distances, generators[:num_edges]
             )
+            prior_weights = self._prior_weights
         generator_distances = generator_distances + penalty
         if FirstOrderType.TOPT() not in excluded_srcs:
             generator_distances = torch.cat((generator_distances,
@@ -436,18 +436,16 @@ class VAECategoryModel(BaseModel):
                             infer=infer)
         return generators[g_idx.item()]
 
-    def sample_path_to(self, dest, prior_weights, confidence, embedding=None,
-                       infer={}):
+    def sample_path_to(self, dest, confidence, embedding=None, infer={}):
         location = dest
         path = []
         with pyro.markov():
             exclude = [FirstOrderType.TOPT(), dest]
             while location != FirstOrderType.TOPT():
                 (location, morphism) = self.sample_generator_to(
-                    prior_weights, confidence, location,
-                    infer=infer, name='generator_%d' % -len(path),
-                    penalty=len(path), excluded_srcs=exclude,
-                    embedding=embedding
+                    confidence, location, infer=infer,
+                    name='generator_%d' % -len(path), penalty=len(path),
+                    excluded_srcs=exclude, embedding=embedding
                 )
                 path.append(morphism)
                 exclude = [dest]
@@ -498,9 +496,8 @@ class VAECategoryModel(BaseModel):
             data = torch.zeros(1, self._data_dim)
         data = data.view(data.shape[0], self._data_dim)
 
+        self.global_element_weights()
         self.get_edge_distances()
-
-        prior_weights = self.global_element_weights()
 
         alpha = pyro.param('distances_alpha', data.new_ones(1),
                            constraint=constraints.positive)
@@ -508,7 +505,7 @@ class VAECategoryModel(BaseModel):
                           constraint=constraints.positive)
         confidence = pyro.sample('distances_confidence',
                                  dist.Gamma(alpha, beta).to_event(0))
-        path = self.sample_path_to(self.data_space, prior_weights, confidence)
+        path = self.sample_path_to(self.data_space, confidence)
         prior = path[0]
         path = path[1:]
 
@@ -543,15 +540,13 @@ class VAECategoryModel(BaseModel):
 
         confidences = self.guide_confidences(embedding).view(1, 2)
 
-        prior_weights = self.global_element_weights()
-
+        self.global_element_weights()
         self.get_edge_distances()
 
         confidence_gamma = dist.Gamma(confidences[0, 0],
                                       confidences[0, 1]).to_event(0)
         confidence = pyro.sample('distances_confidence', confidence_gamma)
-        path = self.sample_path_to(self.data_space, prior_weights, confidence,
-                                   embedding)[1:]
+        path = self.sample_path_to(self.data_space, confidence, embedding)[1:]
 
         latents = []
         # Walk through the sampled path, obtaining an independent encoder from
