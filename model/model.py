@@ -41,7 +41,7 @@ class DiagonalGaussian(TypedModel):
 
     def forward(self, inputs, observations=None, sample=True):
         zs = self.parameterization(inputs).view(-1, 2, self._dim[0])
-        mean, std_dev = zs[:, 0], F.softplus(zs[:, 1].exp())
+        mean, std_dev = zs[:, 0], F.softplus(zs[:, 1])
         if sample:
             normal = dist.Normal(mean, std_dev).to_event(1)
             return pyro.sample(self._latent_name, normal, obs=observations)
@@ -198,10 +198,6 @@ class VAECategoryModel(BaseModel):
         self.guide_confidences = nn.Sequential(
             nn.Linear(guide_hidden_dim, 1 * 2), nn.Softplus(),
         )
-        self.guide_prior_weights = nn.Sequential(
-            nn.Linear(guide_hidden_dim, len(list(layers_graph.priors()))),
-            nn.Softplus(),
-        )
 
         max_generators = 0
         for obj in self._category:
@@ -216,6 +212,9 @@ class VAECategoryModel(BaseModel):
 
         self.register_buffer('edge_distances',
                              torch.zeros(len(self._category.edges)))
+        self.register_buffer('object_distances',
+                             torch.zeros(len(self._category)))
+        self._prior_distances = {}
 
     @property
     def data_space(self):
@@ -233,27 +232,22 @@ class VAECategoryModel(BaseModel):
         elements.append(element)
         self._category.add_node(obj, global_elements=tuple(elements))
 
-    def global_element_weights(self, weights=None):
-        prior_weights = {}
-        if weights is not None:
-            n_prior_weights = 0
+    def global_element_distances(self):
+        prior_distances = {}
         for obj in self._category.nodes:
-            prior_weights[obj] = []
+            prior_distances[obj] = []
             global_elements = self._category.nodes[obj]['global_elements']
             for k, element in enumerate(global_elements):
-                if weights is not None:
-                    weight = weights[n_prior_weights]
-                    n_prior_weights += 1
-                else:
-                    pyro.module('global_element_%s_%d' % (obj, k), element)
-                    weight_name = 'global_element_weight_%s_%s' % (obj, k)
-                    weight = pyro.param(weight_name,
-                                        self.edge_distances.new_ones(()),
-                                        constraint=constraints.positive)
-                prior_weights[obj].append(weight)
-            prior_weights[obj] = torch.stack(prior_weights[obj], dim=0)
+                pyro.module('global_element_%s_%d' % (obj, k), element)
+                weight_name = 'global_element_weight_%s_%s' % (obj, k)
+                weight = pyro.param(weight_name,
+                                    self.edge_distances.new_ones(()),
+                                    constraint=constraints.positive)
+                prior_distances[obj].append(weight)
+            prior_distances[obj] = torch.stack(prior_distances[obj], dim=0)
 
-        return prior_weights
+        self._prior_distances = prior_distances
+        return self._prior_distances
 
     def add_generating_morphism(self, name, generator):
         assert name not in self._generators
@@ -298,9 +292,9 @@ class VAECategoryModel(BaseModel):
     def _generator_index(self, generator):
         return self._generators.keys().index(generator)
 
-    def _generator_distances(self, edge_distances, generators):
+    def _generator_distances(self, generators):
         generator_indices = [self._generator_index(g) for (_, g) in generators]
-        return edge_distances[generator_indices]
+        return self.edge_distances[generator_indices]
 
     def get_object_distances(self):
         transition = self.edge_distances.new_zeros((len(self._category),
@@ -317,7 +311,7 @@ class VAECategoryModel(BaseModel):
                 row_indices.append(i)
                 column_indices.append(j)
             transition_probs.append(F.softmin(
-                self._generator_distances(self.edge_distances, generators),
+                self._generator_distances(generators),
                 dim=0
             ))
 
@@ -329,8 +323,8 @@ class VAECategoryModel(BaseModel):
         transition = transition / transition_sum
         transition = expm.expm(transition.unsqueeze(0)).squeeze(0)
         transition_sum = transition.sum(dim=-1, keepdim=True)
-        transition = transition / transition_sum
-        return -torch.log(transition)
+        self.object_distances = -torch.log(transition / transition_sum)
+        return self.object_distances
 
     def sample_object(self, dims, confidence, exclude=[], k=None, infer={}):
         spaces = self._spaces.copy()
@@ -343,29 +337,26 @@ class VAECategoryModel(BaseModel):
         obj_idx = pyro.sample(name, dist.Categorical(probs=dims), infer=infer)
         return spaces[obj_idx.item()]
 
-    def sample_global_element(self, obj, weights, confidence, infer={}):
+    def sample_global_element(self, obj, confidence, infer={}):
         elements_cat = dist.Categorical(
-            probs=F.softmax(weights[obj] * confidence, dim=0)
+            probs=F.softmin(self._prior_distances[obj] * confidence, dim=0)
         )
         elt_idx = pyro.sample('global_element_{%s}' % obj, elements_cat,
                               infer=infer)
         return self._category.nodes[obj]['global_elements'][elt_idx.item()]
 
-    def navigate_morphism(self, src, dest, object_distances, confidence, k=0,
-                          infer={}, forward=True, edge_costs=None):
-        if edge_costs is None:
-            edge_costs = self.edge_distances
-
+    def navigate_morphism(self, src, dest, confidence, k=0, infer={},
+                          forward=True):
         dest_idx = self._object_index(dest)
         if forward:
-            object_distances = object_distances[:, dest_idx]
+            object_distances = self.object_distances[:, dest_idx]
         else:
-            object_distances = object_distances[dest_idx, :]
+            object_distances = self.object_distances[dest_idx, :]
         loc = self.sample_object(object_distances, confidence, exclude=[src],
                                  k=k, infer=infer)
 
-        morphism = self.sample_generator_between(edge_costs, confidence,
-                                                 src=src, dest=loc, infer=infer,
+        morphism = self.sample_generator_between(confidence, src, loc,
+                                                 infer=infer,
                                                  name='generator_%d' % k)
         return loc, morphism
 
@@ -386,9 +377,8 @@ class VAECategoryModel(BaseModel):
 
         return generators, num_edges, num_priors
 
-    def sample_generator_to(self, prior_weights, confidence, dest, infer={},
-                            name='generator', penalty=0, excluded_srcs=[],
-                            embedding=None):
+    def sample_generator_to(self, confidence, dest, infer={}, name='generator',
+                            penalty=0, excluded_srcs=[], embedding=None):
         generators, num_edges, _ = self._object_generators(dest, False,
                                                            excluded_srcs)
 
@@ -398,17 +388,18 @@ class VAECategoryModel(BaseModel):
                                                                False,
                                                                excluded_srcs)
             generator_distances = gen_distances[:num_edges]
-            prior_weights = {
-                dest: -gen_distances[num_edges:num_edges+num_priors]
+            prior_distances = {
+                dest: gen_distances[num_edges:num_edges+num_priors]
             }
         else:
             generator_distances = self._generator_distances(
-                self.edge_distances, generators[:num_edges]
+                generators[:num_edges]
             )
+            prior_distances = self._prior_distances
         generator_distances = generator_distances + penalty
         if FirstOrderType.TOPT() not in excluded_srcs:
             generator_distances = torch.cat((generator_distances,
-                                             -prior_weights[dest]),
+                                             prior_distances[dest]),
                                             dim=0)
         generators_cat = dist.Categorical(
             probs=F.softmin(generator_distances * confidence, dim=0)
@@ -417,9 +408,8 @@ class VAECategoryModel(BaseModel):
                             infer=infer)
         return generators[g_idx.item()]
 
-    def sample_generator_between(self, edge_costs, confidence, src=None,
-                                 dest=None, infer={}, name='generator',
-                                 exclude=[]):
+    def sample_generator_between(self, confidence, src, dest, infer={},
+                                 name='generator', exclude=[]):
         assert src or dest
         if src and dest:
             generators = list(self._category[src][dest])
@@ -434,7 +424,7 @@ class VAECategoryModel(BaseModel):
         if len(generators) == 1:
             return generators[0]
 
-        between_distances = self._generator_distances(edge_costs, generators)
+        between_distances = self._generator_distances(generators)
         generators_cat = dist.Categorical(
             probs=F.softmin(between_distances * confidence, dim=0)
         )
@@ -442,18 +432,16 @@ class VAECategoryModel(BaseModel):
                             infer=infer)
         return generators[g_idx.item()]
 
-    def sample_path_to(self, dest, prior_weights, confidence, embedding=None,
-                       infer={}):
+    def sample_path_to(self, dest, confidence, embedding=None, infer={}):
         location = dest
         path = []
         with pyro.markov():
             exclude = [FirstOrderType.TOPT(), dest]
             while location != FirstOrderType.TOPT():
                 (location, morphism) = self.sample_generator_to(
-                    prior_weights, confidence, location,
-                    infer=infer, name='generator_%d' % -len(path),
-                    penalty=len(path), excluded_srcs=exclude,
-                    embedding=embedding
+                    confidence, location, infer=infer,
+                    name='generator_%d' % -len(path), penalty=len(path),
+                    excluded_srcs=exclude, embedding=embedding
                 )
                 path.append(morphism)
                 exclude = [dest]
@@ -465,7 +453,7 @@ class VAECategoryModel(BaseModel):
 
         return list(reversed(path))
 
-    def sample_path_between(self, src, dest, distances, confidence, infer={},
+    def sample_path_between(self, src, dest, confidence, infer={},
                             embedding=None):
         if embedding is not None:
             embedding = embedding.unsqueeze(0)
@@ -474,7 +462,6 @@ class VAECategoryModel(BaseModel):
         with pyro.markov():
             while location != dest:
                 (location, morphism) = self.navigate_morphism(location, dest,
-                                                              distances,
                                                               confidence,
                                                               k=len(path),
                                                               infer=infer)
@@ -504,9 +491,8 @@ class VAECategoryModel(BaseModel):
             data = torch.zeros(1, self._data_dim)
         data = data.view(data.shape[0], self._data_dim)
 
+        self.global_element_distances()
         self.get_edge_distances()
-
-        prior_weights = self.global_element_weights()
 
         alpha = pyro.param('distances_alpha', data.new_ones(1),
                            constraint=constraints.positive)
@@ -514,7 +500,7 @@ class VAECategoryModel(BaseModel):
                           constraint=constraints.positive)
         confidence = pyro.sample('distances_confidence',
                                  dist.Gamma(alpha, beta).to_event(0))
-        path = self.sample_path_to(self.data_space, prior_weights, confidence)
+        path = self.sample_path_to(self.data_space, confidence)
         prior = path[0]
         path = path[1:]
 
@@ -528,7 +514,7 @@ class VAECategoryModel(BaseModel):
                         if i == len(path) - 1:
                             rvs.append(generator(latent, observations=data))
                         else:
-                            latent = generator(latent)
+                            latent = generator(latent, sample=False)[0]
                             rvs.append(latent)
 
         return path, rvs[:-1], rvs[-1]
@@ -542,7 +528,6 @@ class VAECategoryModel(BaseModel):
 
         pyro.module('guide_embedding', self.guide_embedding)
         pyro.module('guide_confidences', self.guide_confidences)
-        pyro.module('guide_prior_weights', self.guide_prior_weights)
         pyro.module('guide_navigator', self.guide_navigator)
         pyro.module('guide_navigation_decoder', self.guide_navigation_decoder)
 
@@ -550,16 +535,13 @@ class VAECategoryModel(BaseModel):
 
         confidences = self.guide_confidences(embedding).view(1, 2)
 
-        weights = self.guide_prior_weights(embedding)
-        prior_weights = self.global_element_weights(weights)
-
+        self.global_element_distances()
         self.get_edge_distances()
 
         confidence_gamma = dist.Gamma(confidences[0, 0],
                                       confidences[0, 1]).to_event(0)
         confidence = pyro.sample('distances_confidence', confidence_gamma)
-        path = self.sample_path_to(self.data_space, prior_weights, confidence,
-                                   embedding)[1:]
+        path = self.sample_path_to(self.data_space, confidence, embedding)
 
         latents = []
         # Walk through the sampled path, obtaining an independent encoder from
@@ -568,28 +550,12 @@ class VAECategoryModel(BaseModel):
         with pyro.plate('data', len(data)):
             with pyro.markov():
                 with name_count():
-                    for k, arrow in enumerate(path):
-                        location = types.unfold_arrow(arrow.type)[0]
-                        encoder = self.sample_generator_between(
-                            self.edge_distances, confidence,
-                            src=self.data_space, dest=location,
-                            infer={'is_auxiliary': True}, name='encoder'
-                        )
-
-                        if latents:
-                            encoding = encoder(data, sample=False)
-                            prediction = path[k-1](latents[-1], sample=False)
-
-                            precision = encoding[1] + prediction[1]
-                            mean = (encoding[0] * encoding[1] +\
-                                    prediction[0] * prediction[1]) / precision
-                            std_dev = 1. / precision.sqrt()
-                            normal = dist.Normal(mean, std_dev).to_event(1)
-                            latent_name = path[k-1].distribution.latent_name
-                            latent = pyro.sample(latent_name, normal)
-                            latents.append(latent)
-                        else:
-                            latents.append(encoder(data))
+                    prior_space = types.unfold_arrow(path[0].type)[1]
+                    encoder = self.sample_generator_between(
+                        confidence, self.data_space, prior_space,
+                        infer={'is_auxiliary': True}, name='encoder'
+                    )
+                    latents.append(encoder(data))
 
         return path, latents
 
