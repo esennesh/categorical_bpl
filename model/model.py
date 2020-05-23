@@ -214,7 +214,7 @@ class VAECategoryModel(BaseModel):
                              torch.zeros(len(self._category.edges)))
         self.register_buffer('object_distances',
                              torch.zeros(len(self._category)))
-        self._prior_weights = {}
+        self._prior_distances = {}
 
     @property
     def data_space(self):
@@ -232,10 +232,10 @@ class VAECategoryModel(BaseModel):
         elements.append(element)
         self._category.add_node(obj, global_elements=tuple(elements))
 
-    def global_element_weights(self):
-        prior_weights = {}
+    def global_element_distances(self):
+        prior_distances = {}
         for obj in self._category.nodes:
-            prior_weights[obj] = []
+            prior_distances[obj] = []
             global_elements = self._category.nodes[obj]['global_elements']
             for k, element in enumerate(global_elements):
                 pyro.module('global_element_%s_%d' % (obj, k), element)
@@ -243,11 +243,11 @@ class VAECategoryModel(BaseModel):
                 weight = pyro.param(weight_name,
                                     self.edge_distances.new_ones(()),
                                     constraint=constraints.positive)
-                prior_weights[obj].append(weight)
-            prior_weights[obj] = torch.stack(prior_weights[obj], dim=0)
+                prior_distances[obj].append(weight)
+            prior_distances[obj] = torch.stack(prior_distances[obj], dim=0)
 
-        self._prior_weights = prior_weights
-        return self._prior_weights
+        self._prior_distances = prior_distances
+        return self._prior_distances
 
     def add_generating_morphism(self, name, generator):
         assert name not in self._generators
@@ -339,7 +339,7 @@ class VAECategoryModel(BaseModel):
 
     def sample_global_element(self, obj, confidence, infer={}):
         elements_cat = dist.Categorical(
-            probs=F.softmax(self._prior_weights[obj] * confidence, dim=0)
+            probs=F.softmin(self._prior_distances[obj] * confidence, dim=0)
         )
         elt_idx = pyro.sample('global_element_{%s}' % obj, elements_cat,
                               infer=infer)
@@ -391,18 +391,18 @@ class VAECategoryModel(BaseModel):
                                                                False,
                                                                excluded_srcs)
             generator_distances = gen_distances[:num_edges]
-            prior_weights = {
-                dest: -gen_distances[num_edges:num_edges+num_priors]
+            prior_distances = {
+                dest: gen_distances[num_edges:num_edges+num_priors]
             }
         else:
             generator_distances = self._generator_distances(
                 self.edge_distances, generators[:num_edges]
             )
-            prior_weights = self._prior_weights
+            prior_distances = self._prior_distances
         generator_distances = generator_distances + penalty
         if FirstOrderType.TOPT() not in excluded_srcs:
             generator_distances = torch.cat((generator_distances,
-                                             -prior_weights[dest]),
+                                             prior_distances[dest]),
                                             dim=0)
         generators_cat = dist.Categorical(
             probs=F.softmin(generator_distances * confidence, dim=0)
@@ -496,7 +496,7 @@ class VAECategoryModel(BaseModel):
             data = torch.zeros(1, self._data_dim)
         data = data.view(data.shape[0], self._data_dim)
 
-        self.global_element_weights()
+        self.global_element_distances()
         self.get_edge_distances()
 
         alpha = pyro.param('distances_alpha', data.new_ones(1),
@@ -540,7 +540,7 @@ class VAECategoryModel(BaseModel):
 
         confidences = self.guide_confidences(embedding).view(1, 2)
 
-        self.global_element_weights()
+        self.global_element_distances()
         self.get_edge_distances()
 
         confidence_gamma = dist.Gamma(confidences[0, 0],
