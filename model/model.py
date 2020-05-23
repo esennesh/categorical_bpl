@@ -292,9 +292,9 @@ class VAECategoryModel(BaseModel):
     def _generator_index(self, generator):
         return self._generators.keys().index(generator)
 
-    def _generator_distances(self, edge_distances, generators):
+    def _generator_distances(self, generators):
         generator_indices = [self._generator_index(g) for (_, g) in generators]
-        return edge_distances[generator_indices]
+        return self.edge_distances[generator_indices]
 
     def get_object_distances(self):
         transition = self.edge_distances.new_zeros((len(self._category),
@@ -311,7 +311,7 @@ class VAECategoryModel(BaseModel):
                 row_indices.append(i)
                 column_indices.append(j)
             transition_probs.append(F.softmin(
-                self._generator_distances(self.edge_distances, generators),
+                self._generator_distances(generators),
                 dim=0
             ))
 
@@ -396,7 +396,7 @@ class VAECategoryModel(BaseModel):
             }
         else:
             generator_distances = self._generator_distances(
-                self.edge_distances, generators[:num_edges]
+                generators[:num_edges]
             )
             prior_distances = self._prior_distances
         generator_distances = generator_distances + penalty
@@ -428,7 +428,7 @@ class VAECategoryModel(BaseModel):
         if len(generators) == 1:
             return generators[0]
 
-        between_distances = self._generator_distances(edge_costs, generators)
+        between_distances = self._generator_distances(generators)
         generators_cat = dist.Categorical(
             probs=F.softmin(between_distances * confidence, dim=0)
         )
