@@ -40,7 +40,7 @@ class Trainer(BaseTrainer):
         :param epoch: Integer, current training epoch.
         :return: A log that contains average loss and metric in this epoch.
         """
-        elbo = TraceGraph_ELBO(vectorize_particles=False)
+        elbo = TraceGraph_ELBO(vectorize_particles=False, num_particles=4)
         svi = SVI(self.model.model, self.model.guide, self.optimizer, loss=elbo)
 
         self.model.train()
@@ -82,7 +82,7 @@ class Trainer(BaseTrainer):
         :param epoch: Integer, current training epoch.
         :return: A log that contains information about validation
         """
-        elbo = TraceGraph_ELBO(vectorize_particles=False)
+        elbo = TraceGraph_ELBO(vectorize_particles=False, num_particles=4)
         svi = SVI(self.model.model, self.model.guide, self.optimizer, loss=elbo)
 
         self.model.eval()
