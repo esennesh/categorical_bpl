@@ -409,18 +409,8 @@ class VAECategoryModel(BaseModel):
         return generators[g_idx.item()]
 
     def sample_generator_between(self, confidence, src, dest, infer={},
-                                 name='generator', exclude=[]):
-        assert src or dest
-        if src and dest:
-            generators = list(self._category[src][dest])
-        elif src:
-            generators = [(v, g) for (_, v, g) in
-                          self._category.out_edges(src, keys=True)
-                          if v not in exclude]
-        elif dest:
-            generators = [(u, g) for (u, _, g) in
-                          self._category.in_edges(dest, keys=True)
-                          if u not in exclude]
+                                 name='generator'):
+        generators = list(self._category[src][dest])
         if len(generators) == 1:
             return generators[0]
 
