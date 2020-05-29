@@ -1,5 +1,5 @@
 import numpy as np
-from pyro.infer import SVI, RenyiELBO
+from pyro.infer import SVI, TraceGraph_ELBO
 from pyro.optim import Adam
 import torch
 from torchvision.utils import make_grid
@@ -40,7 +40,7 @@ class Trainer(BaseTrainer):
         :param epoch: Integer, current training epoch.
         :return: A log that contains average loss and metric in this epoch.
         """
-        elbo = RenyiELBO(vectorize_particles=False, num_particles=4)
+        elbo = TraceGraph_ELBO(vectorize_particles=False)
         svi = SVI(self.model.model, self.model.guide, self.optimizer, loss=elbo)
 
         self.model.train()
@@ -82,7 +82,7 @@ class Trainer(BaseTrainer):
         :param epoch: Integer, current training epoch.
         :return: A log that contains information about validation
         """
-        elbo = RenyiELBO(vectorize_particles=False, num_particles=4)
+        elbo = TraceGraph_ELBO(vectorize_particles=False)
         svi = SVI(self.model.model, self.model.guide, self.optimizer, loss=elbo)
 
         self.model.eval()
