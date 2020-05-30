@@ -211,11 +211,6 @@ class VAECategoryModel(BaseModel):
             nn.Linear(guide_hidden_dim, max_generators), nn.Softplus()
         )
 
-        self.edge_distances = pnn.PyroParam(
-            torch.ones(len(self._category.edges)),
-            constraint=constraints.positive
-        )
-
         num_priors = sum([len(self._category.nodes[obj]['global_elements'])
                           for obj in self._category])
         self.global_element_energies = pnn.PyroParam(
@@ -227,6 +222,13 @@ class VAECategoryModel(BaseModel):
         self.confidence_beta = pnn.PyroParam(torch.ones(1),
                                              constraint=constraints.positive)
 
+        edge_distances = torch.ones(len(self._category.edges))
+        for e, (u, v, generator) in enumerate(self._category.edges(keys=True)):
+            u_dim = u.tensort()[1][0]
+            v_dim = v.tensort()[1][0]
+            ratio = u_dim / v_dim if u_dim < v_dim else v_dim / u_dim
+            edge_distances[e] *= ratio
+        self.register_buffer('edge_distances', edge_distances)
         self.register_buffer('object_distances',
                              torch.zeros(len(self._category)))
 
