@@ -1,10 +1,10 @@
+import pyro
 import torch
-import torch.nn as nn
 import numpy as np
 from abc import abstractmethod, abstractproperty
 
 
-class BaseModel(nn.Module):
+class BaseModel(pyro.nn.PyroModule):
     """
     Base class for all models
     """
