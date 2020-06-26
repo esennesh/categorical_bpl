@@ -161,9 +161,6 @@ class VAECategoryModel(BaseModel):
     def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=None):
         super().__init__()
         self._data_dim = data_dim
-        self._category = nx.MultiDiGraph()
-        self._generators = IndexedOrderedDict()
-        self._spaces = []
         if not guide_hidden_dim:
             guide_hidden_dim = data_dim // 16
 
@@ -171,26 +168,17 @@ class VAECategoryModel(BaseModel):
         # hidden_dim and data_dim.
         layers_graph = LayersGraph(util.powers_of(2, hidden_dim, data_dim),
                                    data_dim)
-        for dim in layers_graph.spaces:
-            space = FirstOrderType.TENSORT(torch.float, torch.Size([dim]))
-            self._category.add_node(space, global_elements=tuple())
-            self._spaces.append(space)
-        for prior in layers_graph.priors():
-            self.add_global_element(prior)
-        for k, generator in enumerate(layers_graph.likelihoods()):
-            name = 'likelihood_%d' % k
-            self.add_generating_morphism(name, generator)
-        for k, generator in enumerate(layers_graph.latent_maps()):
-            name = 'latent_map_%d' % k
-            self.add_generating_morphism(name, generator)
-        for k, generator in enumerate(layers_graph.encoders()):
-            name = 'encoder_%d' % k
-            self.add_generating_morphism(name, generator)
-
-        dimensionalities = torch.ones(len(self._category))
-        for k, space in enumerate(self._category.nodes()):
-            dimensionalities[k] = space.tensort()[1][0]
-        self.register_buffer('dimensionalities', dimensionalities)
+        global_elements = [closed.TypedFunction(*prior.type.arrow(), prior)
+                           for prior in layers_graph.priors()]
+        likelihoods = [closed.TypedFunction(*gen.type.arrow(), gen)
+                       for gen in layers_graph.likelihoods()]
+        latent_maps = [closed.TypedFunction(*gen.type.arrow(), gen)
+                       for gen in layers_graph.latent_maps()]
+        encoders = [closed.TypedFunction(*gen.type.arrow(), gen)
+                    for gen in layers_graph.encoders()]
+        self._category = cartesian_cat.CartesianCategory(likelihoods +\
+                                                         latent_maps + encoders,
+                                                         global_elements)
 
         self.guide_embedding = nn.Sequential(
             nn.Linear(data_dim, guide_hidden_dim),
@@ -200,73 +188,15 @@ class VAECategoryModel(BaseModel):
             nn.Linear(guide_hidden_dim, 1 * 2), nn.Softplus(),
         )
 
-        max_generators = 0
-        for obj in self._category:
-            _, num_edges, num_priors = self._object_generators(obj, False)
-            num_generators = num_edges + num_priors
-            if num_generators > max_generators:
-                max_generators = num_generators
-        self.guide_navigator = nn.GRUCell(len(self._category), guide_hidden_dim)
+        self.guide_navigator = nn.GRUCell(len(self._category.obs),
+                                          guide_hidden_dim)
         self.guide_navigation_decoder = nn.Sequential(
-            nn.Linear(guide_hidden_dim, max_generators), nn.Softplus()
+            nn.Linear(guide_hidden_dim, len(self._category.ars)), nn.Softplus()
         )
-
-        num_priors = sum([len(self._category.nodes[obj]['global_elements'])
-                          for obj in self._category])
-        self.global_element_energies = pnn.PyroParam(
-            torch.ones(num_priors), constraint=constraints.positive
-        )
-
-        self.confidence_alpha = pnn.PyroParam(torch.ones(1),
-                                              constraint=constraints.positive)
-        self.confidence_beta = pnn.PyroParam(torch.ones(1),
-                                             constraint=constraints.positive)
-
-        edge_distances = torch.ones(len(self._category.edges))
-        for e, (u, v, generator) in enumerate(self._category.edges(keys=True)):
-            u_dim = u.tensort()[1][0]
-            v_dim = v.tensort()[1][0]
-            ratio = u_dim / v_dim if u_dim < v_dim else v_dim / u_dim
-            edge_distances[e] *= ratio
-        self.register_buffer('edge_distances', edge_distances)
-        self.register_buffer('object_distances',
-                             torch.zeros(len(self._category)))
-
-    @pnn.pyro_method
-    def prior_energies(self):
-        prior_energies = {}
-        e = 0
-        for obj in self._category.nodes:
-            p = len(self._category.nodes[obj]['global_elements'])
-            prior_energies[obj] = self.global_element_energies[e:e+p]
-            e += p
-        return prior_energies
 
     @property
     def data_space(self):
         return FirstOrderType.TENSORT(torch.float, torch.Size([self._data_dim]))
-
-    def add_global_element(self, element):
-        assert isinstance(element, TypedModel)
-        assert element.type.arrowt()[0] == FirstOrderType.TOPT()
-
-        obj = element.type.arrowt()[1]
-        elements = list(self._category.nodes[obj]['global_elements'])
-
-        self.add_module('global_element_{%s, %d}' % (obj, len(elements)),
-                        element)
-        elements.append(element)
-        self._category.add_node(obj, global_elements=tuple(elements))
-
-    def add_generating_morphism(self, name, generator):
-        assert name not in self._generators
-        assert isinstance(generator, TypedModel)
-
-        self._generators[generator] = name
-        self.add_module(name, generator)
-
-        l, r = generator.type.arrowt()
-        self._category.add_edge(l, r, generator)
 
     def draw(self, path=None, filename=None):
         if path:
@@ -290,192 +220,6 @@ class VAECategoryModel(BaseModel):
             plt.savefig(filename)
         else:
             plt.show()
-
-    def _object_index(self, obj):
-        return self._spaces.index(obj)
-
-    def _object_index_onehot(self, obj):
-        eye = torch.eye(len(self._category)).to(self.edge_distances)
-        return eye[self._object_index(obj)]
-
-    def _generator_index(self, generator):
-        return self._generators.keys().index(generator)
-
-    def _generator_distances(self, generators):
-        generator_indices = [self._generator_index(g) for (_, g) in generators]
-        return self.edge_distances[generator_indices]
-
-    @pnn.pyro_method
-    def get_object_distances(self):
-        transition = self.edge_distances.new_zeros((len(self._category),
-                                                    len(self._category)))
-        row_indices = []
-        column_indices = []
-        transition_probs = []
-        for src in self._category.nodes():
-            i = self._object_index(src)
-            generators, num_edges, _ = self._object_generators(src)
-            generators = generators[:num_edges]
-            for (dest, _) in generators:
-                j = self._object_index(dest)
-                row_indices.append(i)
-                column_indices.append(j)
-            transition_probs.append(F.softmin(
-                self._generator_distances(generators),
-                dim=0
-            ))
-
-        transition = transition.index_put((torch.LongTensor(row_indices),
-                                           torch.LongTensor(column_indices)),
-                                          torch.cat(transition_probs, dim=0),
-                                          accumulate=True)
-        transition_sum = transition.sum(dim=-1, keepdim=True)
-        transition = transition / transition_sum
-        transition = expm.expm(transition.unsqueeze(0)).squeeze(0)
-        transition_sum = transition.sum(dim=-1, keepdim=True)
-        self.object_distances = -torch.log(transition / transition_sum)
-        return self.object_distances
-
-    @pnn.pyro_method
-    def sample_object(self, dims, confidence, exclude=[], k=None, infer={}):
-        spaces = self._spaces.copy()
-        spaces_indices = list(range(len(spaces)))
-        for space in exclude:
-            spaces_indices.remove(spaces.index(space))
-            spaces.remove(space)
-        dims = F.softmin(dims[spaces_indices] * confidence, dim=0)
-        name = 'global_object' if k is None else 'global_object_%d' % k
-        obj_idx = pyro.sample(name, dist.Categorical(probs=dims), infer=infer)
-        return spaces[obj_idx.item()]
-
-    @pnn.pyro_method
-    def sample_global_element(self, obj, confidence, infer={}):
-        prior_energies = self.prior_energies()
-        elements_cat = dist.Categorical(
-            probs=F.softmin(prior_energies[obj] * confidence, dim=0)
-        )
-        elt_idx = pyro.sample('global_element_{%s}' % obj, elements_cat,
-                              infer=infer)
-        return self._category.nodes[obj]['global_elements'][elt_idx.item()]
-
-    @pnn.pyro_method
-    def navigate_morphism(self, src, dest, confidence, k=0, infer={},
-                          forward=True):
-        dest_idx = self._object_index(dest)
-        if forward:
-            object_distances = self.object_distances[:, dest_idx]
-        else:
-            object_distances = self.object_distances[dest_idx, :]
-        loc = self.sample_object(object_distances, confidence, exclude=[src],
-                                 k=k, infer=infer)
-
-        morphism = self.sample_generator_between(confidence, src, loc,
-                                                 infer=infer,
-                                                 name='generator_%d' % k)
-        return loc, morphism
-
-    def _object_generators(self, obj, forward=True, excluded=[]):
-        edges = self._category.out_edges if forward else self._category.in_edges
-        dir_idx = 1 if forward else 0
-
-        generators = [(generator[dir_idx], generator[2]) for generator
-                      in edges(obj, keys=True)
-                      if generator[dir_idx] not in excluded]
-        num_edges = len(generators)
-        num_priors = 0
-        if not (forward or FirstOrderType.TOPT() in excluded):
-            priors = [(FirstOrderType.TOPT(), prior) for prior
-                      in self._category.nodes[obj]['global_elements']]
-            num_priors += len(priors)
-            generators += priors
-
-        return generators, num_edges, num_priors
-
-    @pnn.pyro_method
-    def sample_generator_to(self, confidence, dest, infer={}, name='generator',
-                            penalty=0, excluded_srcs=[], embedding=None):
-        generators, num_edges, _ = self._object_generators(dest, False,
-                                                           excluded_srcs)
-
-        if embedding is not None:
-            gen_distances = self.guide_navigation_decoder(embedding)
-            _, num_edges, num_priors = self._object_generators(dest,
-                                                               False,
-                                                               excluded_srcs)
-            generator_distances = gen_distances[:num_edges]
-            prior_energies = {
-                dest: gen_distances[num_edges:num_edges+num_priors]
-            }
-        else:
-            generator_distances = self._generator_distances(
-                generators[:num_edges]
-            )
-            prior_energies = self.prior_energies()
-        generator_distances = generator_distances + penalty
-        if FirstOrderType.TOPT() not in excluded_srcs:
-            generator_distances = torch.cat((generator_distances,
-                                             prior_energies[dest]),
-                                            dim=0)
-        generators_cat = dist.Categorical(
-            probs=F.softmin(generator_distances * confidence, dim=0)
-        )
-        g_idx = pyro.sample('%s_{ -> %s}' % (name, dest), generators_cat,
-                            infer=infer)
-        return generators[g_idx.item()]
-
-    @pnn.pyro_method
-    def sample_generator_between(self, confidence, src, dest, infer={},
-                                 name='generator'):
-        generators = list(self._category[src][dest])
-        if len(generators) == 1:
-            return generators[0]
-
-        between_distances = self._generator_distances(generators)
-        generators_cat = dist.Categorical(
-            probs=F.softmin(between_distances * confidence, dim=0)
-        )
-        g_idx = pyro.sample('%s_{%s -> %s}' % (name, src, dest), generators_cat,
-                            infer=infer)
-        return generators[g_idx.item()]
-
-    @pnn.pyro_method
-    def sample_path_to(self, dest, confidence, embedding=None, infer={}):
-        location = dest
-        path = []
-        with pyro.markov():
-            exclude = [FirstOrderType.TOPT(), dest]
-            while location != FirstOrderType.TOPT():
-                (location, morphism) = self.sample_generator_to(
-                    confidence, location, infer=infer,
-                    name='generator_%d' % -len(path), penalty=len(path),
-                    excluded_srcs=exclude, embedding=embedding
-                )
-                path.append(morphism)
-                exclude = [dest]
-
-                if embedding is not None and location != FirstOrderType.TOPT():
-                    embedding = embedding.unsqueeze(0)
-                    loc = self._object_index_onehot(location).unsqueeze(0)
-                    embedding = self.guide_navigator(loc, embedding).squeeze(0)
-
-        return list(reversed(path))
-
-    @pnn.pyro_method
-    def sample_path_between(self, src, dest, confidence, infer={},
-                            embedding=None):
-        if embedding is not None:
-            embedding = embedding.unsqueeze(0)
-        location = src
-        path = []
-        with pyro.markov():
-            while location != dest:
-                (location, morphism) = self.navigate_morphism(location, dest,
-                                                              confidence,
-                                                              k=len(path),
-                                                              infer=infer)
-                path.append(morphism)
-
-        return path
 
     @pnn.pyro_method
     def model(self, observations=None):
