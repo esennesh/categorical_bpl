@@ -1,3 +1,5 @@
+from discopy import Ty
+from discopyro import cartesian_cat, closed
 from indexed import IndexedOrderedDict
 import itertools
 import matplotlib.pyplot as plt
@@ -12,7 +14,7 @@ import torch.distributions
 import torch.distributions.constraints as constraints
 import torch.nn as nn
 import torch.nn.functional as F
-from base import BaseModel, FirstOrderType, TypedModel
+from base import BaseModel, TypedModel
 import base.base_type as types
 import utils.util as util
 
