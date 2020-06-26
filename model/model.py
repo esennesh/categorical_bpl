@@ -37,9 +37,9 @@ class DiagonalGaussian(TypedModel):
 
     @property
     def type(self):
-        return FirstOrderType.ARROWT(
-            FirstOrderType.TENSORT(torch.float, self._dim),
-            FirstOrderType.TENSORT(torch.float, self._dim)
+        return closed.CartesianClosed.ARROW(
+            types.tensor_type(torch.float, self._dim),
+            types.tensor_type(torch.float, self._dim),
         )
 
     def forward(self, inputs, observations=None, sample=True):
@@ -64,9 +64,9 @@ class StandardNormal(TypedModel):
 
     @property
     def type(self):
-        return FirstOrderType.ARROWT(
-            FirstOrderType.TOPT(),
-            FirstOrderType.TENSORT(torch.float, torch.Size([self._dim]))
+        return closed.CartesianClosed.ARROW(
+            closed.CartesianClosed.BASE(Ty()),
+            types.tensor_type(torch.float, self._dim),
         )
 
     def forward(self, inputs):
@@ -85,9 +85,9 @@ class BernoulliObservation(TypedModel):
 
     @property
     def type(self):
-        return FirstOrderType.ARROWT(
-            FirstOrderType.TENSORT(torch.float, self._obs_dim),
-            FirstOrderType.TENSORT(torch.float, self._obs_dim)
+        return closed.CartesianClosed.ARROW(
+            types.tensor_type(torch.float, self._dim),
+            types.tensor_type(torch.float, self._dim),
         )
 
     def forward(self, inputs, observations=None, sample=True):
@@ -101,10 +101,8 @@ class BernoulliObservation(TypedModel):
 class PathDensityNet(TypedModel):
     def __init__(self, in_dim, out_dim, dist_layer=BernoulliObservation):
         super().__init__()
-        self._in_space = FirstOrderType.TENSORT(torch.float,
-                                                torch.Size([in_dim]))
-        self._out_space = FirstOrderType.TENSORT(torch.float,
-                                                 torch.Size([out_dim]))
+        self._in_space = types.tensor_type(torch.float, torch.Size([in_dim]))
+        self._out_space = types.tensor_type(torch.float, torch.Size([out_dim]))
 
         hidden_dim = in_dim + out_dim // 2
         self.add_module('residual_layer', nn.Sequential(
@@ -117,7 +115,7 @@ class PathDensityNet(TypedModel):
 
     @property
     def type(self):
-        return FirstOrderType.ARROWT(self._in_space, self._out_space)
+        return closed.CartesianClosed.ARROW(self._in_space, self._out_space)
 
     def forward(self, inputs, observations=None, sample=True):
         hidden = self.residual_layer(inputs) + self.identity_layer(inputs)
