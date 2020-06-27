@@ -66,7 +66,7 @@ class StandardNormal(TypedModel):
     def type(self):
         return closed.CartesianClosed.ARROW(
             closed.CartesianClosed.BASE(Ty()),
-            types.tensor_type(torch.float, self._dim),
+            types.tensor_type(torch.float, torch.Size([self._dim])),
         )
 
     def forward(self, inputs):
@@ -86,8 +86,8 @@ class BernoulliObservation(TypedModel):
     @property
     def type(self):
         return closed.CartesianClosed.ARROW(
-            types.tensor_type(torch.float, self._dim),
-            types.tensor_type(torch.float, self._dim),
+            types.tensor_type(torch.float, self._obs_dim),
+            types.tensor_type(torch.float, self._obs_dim),
         )
 
     def forward(self, inputs, observations=None, sample=True):
