@@ -196,30 +196,7 @@ class VAECategoryModel(BaseModel):
 
     @property
     def data_space(self):
-        return FirstOrderType.TENSORT(torch.float, torch.Size([self._data_dim]))
-
-    def draw(self, path=None, filename=None):
-        if path:
-            path = set(path)
-            def filter_node(node):
-                out_keys = {key for (u, v, key) in
-                            self._category.out_edges(node, keys=True)}
-                in_keys = {key for (u, v, key) in
-                           self._category.in_edges(node, keys=True)}
-                return len((out_keys | in_keys) & path) > 0
-            def filter_edge(u, v, g):
-                return g in path
-            diagram = nx.subgraph_view(self._category, filter_node=filter_node,
-                                       filter_edge=filter_edge)
-        else:
-            diagram = self._category
-        node_labels = {object: str(object) for object in diagram.nodes()}
-        nx.draw(diagram, labels=node_labels, pos=nx.spring_layout(diagram))
-
-        if filename:
-            plt.savefig(filename)
-        else:
-            plt.show()
+        return types.tensor_type(torch.float, torch.Size([self._data_dim]))
 
     @pnn.pyro_method
     def model(self, observations=None):
