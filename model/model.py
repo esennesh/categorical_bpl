@@ -208,27 +208,8 @@ class VAECategoryModel(BaseModel):
             data = torch.zeros(1, self._data_dim)
         data = data.view(data.shape[0], self._data_dim)
 
-        confidence = pyro.sample('distances_confidence',
-                                 dist.Gamma(self.confidence_alpha,
-                                            self.confidence_beta).to_event(0))
-        path = self.sample_path_to(self.data_space, confidence)
-        prior = path[0]
-        path = path[1:]
-
-        rvs = []
-        with pyro.plate('data', len(data)):
-            with pyro.markov():
-                with name_count():
-                    latent = prior(data)
-                    rvs.append(latent)
-                    for i, generator in enumerate(path):
-                        if i == len(path) - 1:
-                            rvs.append(generator(latent, observations=data))
-                        else:
-                            latent = generator(latent, sample=False)[0]
-                            rvs.append(latent)
-
-        return path, rvs[:-1], rvs[-1]
+        morphism = self._category(self.data_space, min_depth=1)
+        return morphism, morphism(observations=data)
 
     @pnn.pyro_method
     def guide(self, observations=None):
@@ -245,23 +226,9 @@ class VAECategoryModel(BaseModel):
         confidence_gamma = dist.Gamma(confidences[0, 0],
                                       confidences[0, 1]).to_event(0)
         confidence = pyro.sample('distances_confidence', confidence_gamma)
-        path = self.sample_path_to(self.data_space, confidence, embedding)
 
-        latents = []
-        # Walk through the sampled path, obtaining an independent encoder from
-        # the data space for each step, and fusing its prediction with that from
-        # the generative model.
-        with pyro.plate('data', len(data)):
-            with pyro.markov():
-                with name_count():
-                    prior_space = types.unfold_arrow(path[0].type)[1]
-                    encoder = self.sample_generator_between(
-                        confidence, self.data_space, prior_space,
-                        infer={'is_auxiliary': True}, name='encoder'
-                    )
-                    latents.append(encoder(data))
-
-        return path, latents
+        return self._category(self.data_space, min_depth=1,
+                              confidence=confidence)
 
     def forward(self, observations=None):
         if observations is not None:
