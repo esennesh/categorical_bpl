@@ -69,9 +69,11 @@ class StandardNormal(TypedModel):
             types.tensor_type(torch.float, torch.Size([self._dim])),
         )
 
-    def forward(self, inputs):
-        z_loc = inputs.new_zeros(torch.Size((inputs.shape[0], self._dim)))
-        z_scale = inputs.new_ones(torch.Size((inputs.shape[0], self._dim)))
+    def forward(self):
+        z_loc = self._batch.new_zeros(torch.Size((self._batch.shape[0],
+                                                  self._dim)))
+        z_scale = self._batch.new_ones(torch.Size((self._batch.shape[0],
+                                                   self._dim)))
         normal = dist.Normal(z_loc, z_scale).to_event(1)
         return pyro.sample(self._latent_name, normal)
 
