@@ -211,7 +211,9 @@ class VAECategoryModel(BaseModel):
         data = data.view(data.shape[0], self._data_dim)
 
         morphism = self._category(self.data_space, min_depth=1)
-        return morphism, morphism(observations=data)
+        with name_count():
+            output = morphism()
+        return morphism, output
 
     @pnn.pyro_method
     def guide(self, observations=None):
