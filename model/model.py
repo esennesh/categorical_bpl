@@ -212,9 +212,11 @@ class VAECategoryModel(BaseModel):
         for module in self._category.children():
             module.set_batching(data)
 
-        morphism = self._category(self.data_space, min_depth=1)
-        with name_count():
-            output = morphism()
+        morphism = pyro.condition(self._category(self.data_space, min_depth=1),
+                                  data={'X^{%d}' % self._data_dim: data})
+        with pyro.plate('data', len(data)):
+            with name_count():
+                output = morphism()
         return morphism, output
 
     @pnn.pyro_method
@@ -235,8 +237,13 @@ class VAECategoryModel(BaseModel):
                                       confidences[0, 1]).to_event(0)
         confidence = pyro.sample('distances_confidence', confidence_gamma)
 
-        return self._category(self.data_space, min_depth=1,
-                              confidence=confidence)
+        morphism = self._category(self.data_space, min_depth=1,
+                                  confidence=confidence)
+        with pyro.plate('data', len(data)):
+            with name_count():
+                morphism()
+
+        return morphism
 
     def forward(self, observations=None):
         if observations is not None:
