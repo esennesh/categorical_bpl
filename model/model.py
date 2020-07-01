@@ -143,7 +143,7 @@ class LayersGraph:
                                  dist_layer=ContinuousBernoulliModel)
 
     def encoders(self):
-        # Use the data space to construct likelihood layers
+        # Use the data space to construct encoder layers
         for dest in self.latent_spaces:
             yield PathDensityNet(self._data_space, dest,
                                  dist_layer=DiagonalGaussian)
@@ -253,5 +253,4 @@ class VAECategoryModel(BaseModel):
             return pyro.poutine.replay(self.model, trace=trace)(
                 observations=observations
             )
-        else:
-            return self.model(observations=None)
+        return self.model(observations=None)
