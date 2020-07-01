@@ -129,20 +129,33 @@ class VAECategoryModel(BaseModel):
         if not guide_hidden_dim:
             guide_hidden_dim = data_dim // 16
 
+        generators = []
+        global_elements = []
         # Build up a bunch of torch.Sizes for the powers of two between
         # hidden_dim and data_dim.
-        layers_graph = LayersGraph(util.powers_of(2, hidden_dim, data_dim),
-                                   data_dim)
-        global_elements = [closed.TypedFunction(*prior.type.arrow(), prior)
-                           for prior in layers_graph.priors()]
-        likelihoods = [closed.TypedFunction(*gen.type.arrow(), gen)
-                       for gen in layers_graph.likelihoods()]
-        latent_maps = [closed.TypedFunction(*gen.type.arrow(), gen)
-                       for gen in layers_graph.latent_maps()]
-        encoders = [closed.TypedFunction(*gen.type.arrow(), gen)
-                    for gen in layers_graph.encoders()]
-        self._category = cartesian_cat.CartesianCategory(likelihoods +\
-                                                         latent_maps + encoders,
+        dims = list(util.powers_of(2, hidden_dim, data_dim))
+        for dim_a, dim_b in itertools.combinations(dims, 2):
+            lower, higher = sorted([dim_a, dim_b])
+            # Construct the decoder
+            if higher == self._data_dim:
+                decoder = PathDensityNet(lower, higher,
+                                         ContinuousBernoulliModel)
+            else:
+                decoder = PathDensityNet(lower, higher, DiagonalGaussian)
+            # Construct the encoder
+            encoder = PathDensityNet(higher, lower, DiagonalGaussian)
+            in_space, out_space = decoder.type.arrow()
+            generator = closed.TypedDaggerFunction(in_space, out_space, decoder,
+                                                   encoder)
+            generators.append(generator)
+        for dim in dims:
+            space = types.tensor_type(torch.float, torch.Size([dim]))
+            global_element = closed.TypedDaggerFunction(closed.TOP, space,
+                                                        StandardNormal(dim),
+                                                        lambda *vals: None)
+            global_elements.append(global_element)
+
+        self._category = cartesian_cat.CartesianCategory(generators,
                                                          global_elements)
 
         self.guide_embedding = nn.Sequential(
