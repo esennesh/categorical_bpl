@@ -8,6 +8,13 @@ class BaseModel(pyro.nn.PyroModule):
     """
     Base class for all models
     """
+    def __init__(self):
+        super().__init__()
+        self._batch = None
+
+    def set_batching(self, batch):
+        self._batch = batch
+
     @abstractmethod
     def forward(self, *inputs):
         """
