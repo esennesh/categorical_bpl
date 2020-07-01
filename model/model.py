@@ -112,7 +112,7 @@ class PathDensityNet(TypedModel):
             nn.BatchNorm1d(hidden_dim), nn.PReLU(),
             nn.Linear(hidden_dim, out_dim),
         ))
-        self.add_module('identity_layer', nn.Linear(in_dim, out_dim))
+        self.add_module('projection_layer', nn.Linear(in_dim, out_dim))
         self.add_module('distribution', dist_layer(out_dim))
 
     @property
@@ -120,7 +120,7 @@ class PathDensityNet(TypedModel):
         return closed.CartesianClosed.ARROW(self._in_space, self._out_space)
 
     def forward(self, inputs, observations=None, sample=True):
-        hidden = self.residual_layer(inputs) + self.identity_layer(inputs)
+        hidden = self.residual_layer(inputs) + self.projection_layer(inputs)
         return self.distribution(hidden, observations, sample)
 
 class LayersGraph:
