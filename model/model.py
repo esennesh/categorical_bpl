@@ -163,15 +163,10 @@ class VAECategoryModel(BaseModel):
         self.guide_embedding = nn.Sequential(
             nn.Linear(data_dim, guide_hidden_dim),
             nn.BatchNorm1d(guide_hidden_dim), nn.PReLU(),
+            nn.Linear(guide_hidden_dim, guide_hidden_dim), nn.PReLU(),
         )
         self.guide_confidences = nn.Sequential(
             nn.Linear(guide_hidden_dim, 1 * 2), nn.Softplus(),
-        )
-
-        self.guide_navigator = nn.GRUCell(len(self._category.obs),
-                                          guide_hidden_dim)
-        self.guide_navigation_decoder = nn.Sequential(
-            nn.Linear(guide_hidden_dim, len(self._category.ars)), nn.Softplus()
         )
 
     @property
@@ -214,7 +209,6 @@ class VAECategoryModel(BaseModel):
         embedding = self.guide_embedding(data).mean(dim=0)
 
         confidences = self.guide_confidences(embedding).view(1, 2)
-
         confidence_gamma = dist.Gamma(confidences[0, 0],
                                       confidences[0, 1]).to_event(0)
         confidence = pyro.sample('distances_confidence', confidence_gamma)
