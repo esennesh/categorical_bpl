@@ -9,7 +9,6 @@ import torch
 def powers_of(base, lower, upper):
     lower_bound = math.ceil(math.log(lower) / math.log(base))
     upper_bound = math.floor(math.log(upper) / math.log(base))
-    yield lower
     for i in range(lower_bound, upper_bound + 1):
         yield base ** i
     yield upper
