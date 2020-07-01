@@ -107,57 +107,20 @@ class PathDensityNet(TypedModel):
         self._out_space = types.tensor_type(torch.float, torch.Size([out_dim]))
 
         hidden_dim = in_dim + out_dim // 2
-        self.add_module('residual_layer', nn.Sequential(
-            nn.BatchNorm1d(in_dim), nn.PReLU(), nn.Linear(in_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim), nn.PReLU(),
+        self.add_module('neural_layers', nn.Sequential(
+            nn.Linear(in_dim, hidden_dim), nn.PReLU(),
+            nn.Linear(hidden_dim, hidden_dim), nn.PReLU(),
             nn.Linear(hidden_dim, out_dim),
         ))
-        self.add_module('projection_layer', nn.Linear(in_dim, out_dim))
         self.add_module('distribution', dist_layer(out_dim))
 
     @property
     def type(self):
         return closed.CartesianClosed.ARROW(self._in_space, self._out_space)
 
-    def forward(self, inputs, observations=None, sample=True):
-        hidden = self.residual_layer(inputs) + self.projection_layer(inputs)
-        return self.distribution(hidden, observations, sample)
-
-class LayersGraph:
-    def __init__(self, spaces, data_dim):
-        self._prototype = nx.complete_graph(spaces)
-        self._data_space = data_dim
-
-    @property
-    def spaces(self):
-        return set(self._prototype.nodes())
-
-    @property
-    def latent_spaces(self):
-        return {n for n in self._prototype.nodes() if n != self._data_space}
-
-    def likelihoods(self):
-        # Use the data space to construct likelihood layers
-        for source in self.latent_spaces:
-            yield PathDensityNet(source, self._data_space,
-                                 dist_layer=ContinuousBernoulliModel)
-
-    def encoders(self):
-        # Use the data space to construct encoder layers
-        for dest in self.latent_spaces:
-            yield PathDensityNet(self._data_space, dest,
-                                 dist_layer=DiagonalGaussian)
-
-    def priors(self):
-        for obj in self._prototype:
-            yield self.prior(obj)
-
-    def prior(self, obj):
-        return StandardNormal(obj)
-
-    def latent_maps(self):
-        for z1, z2 in itertools.permutations(self.latent_spaces, 2):
-            yield PathDensityNet(z1, z2, dist_layer=DiagonalGaussian)
+    def forward(self, inputs, sample=True):
+        hidden = self.neural_layers(inputs)
+        return self.distribution(hidden, sample)
 
 class VAECategoryModel(BaseModel):
     def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=None):
