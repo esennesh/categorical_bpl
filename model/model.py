@@ -217,7 +217,7 @@ class VAECategoryModel(BaseModel):
                                   confidence=confidence)
         with pyro.plate('data', len(data)):
             with name_count():
-                morphism()
+                morphism[::-1](data)
 
         return morphism
 
