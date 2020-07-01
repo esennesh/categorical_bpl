@@ -188,11 +188,15 @@ class VAECategoryModel(BaseModel):
         for module in self._category.children():
             module.set_batching(data)
 
-        morphism = pyro.condition(self._category(self.data_space, min_depth=1),
-                                  data={'X^{%d}' % self._data_dim: data})
+        morphism = self._category(self.data_space, min_depth=1)
+        if observations is not None:
+            conditions = {'X^{%d}' % self._data_dim: data}
+            score_morphism = pyro.condition(morphism, data=conditions)
+        else:
+            score_morphism = morphism
         with pyro.plate('data', len(data)):
             with name_count():
-                output = morphism()
+                output = score_morphism()
         return morphism, output
 
     @pnn.pyro_method
