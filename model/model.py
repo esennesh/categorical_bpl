@@ -129,11 +129,11 @@ class VAECategoryModel(BaseModel):
         if not guide_hidden_dim:
             guide_hidden_dim = data_dim // 16
 
-        generators = []
-        global_elements = []
         # Build up a bunch of torch.Sizes for the powers of two between
         # hidden_dim and data_dim.
         dims = list(util.powers_of(2, hidden_dim, data_dim))
+
+        generators = []
         for dim_a, dim_b in itertools.combinations(dims, 2):
             lower, higher = sorted([dim_a, dim_b])
             # Construct the decoder
@@ -148,6 +148,8 @@ class VAECategoryModel(BaseModel):
             generator = closed.TypedDaggerFunction(in_space, out_space, decoder,
                                                    encoder)
             generators.append(generator)
+
+        global_elements = []
         for dim in dims:
             space = types.tensor_type(torch.float, torch.Size([dim]))
             global_element = closed.TypedDaggerFunction(closed.TOP, space,
