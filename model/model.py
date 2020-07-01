@@ -77,7 +77,7 @@ class StandardNormal(TypedModel):
         normal = dist.Normal(z_loc, z_scale).to_event(1)
         return pyro.sample(self._latent_name, normal)
 
-class BernoulliObservation(TypedModel):
+class ContinuousBernoulliModel(TypedModel):
     def __init__(self, obs_dim, observable_name=None):
         super().__init__()
         self._obs_dim = torch.Size([obs_dim])
@@ -101,7 +101,7 @@ class BernoulliObservation(TypedModel):
             return xs
 
 class PathDensityNet(TypedModel):
-    def __init__(self, in_dim, out_dim, dist_layer=BernoulliObservation):
+    def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel):
         super().__init__()
         self._in_space = types.tensor_type(torch.float, torch.Size([in_dim]))
         self._out_space = types.tensor_type(torch.float, torch.Size([out_dim]))
@@ -140,7 +140,7 @@ class LayersGraph:
         # Use the data space to construct likelihood layers
         for source in self.latent_spaces:
             yield PathDensityNet(source, self._data_space,
-                                 dist_layer=BernoulliObservation)
+                                 dist_layer=ContinuousBernoulliModel)
 
     def encoders(self):
         # Use the data space to construct likelihood layers
