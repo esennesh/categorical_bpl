@@ -42,12 +42,12 @@ class DiagonalGaussian(TypedModel):
             types.tensor_type(torch.float, self._dim),
         )
 
-    def forward(self, inputs, observations=None, sample=True):
+    def forward(self, inputs, sample=True):
         zs = self.parameterization(inputs).view(-1, 2, self._dim[0])
         mean, std_dev = zs[:, 0], F.softplus(zs[:, 1])
         if sample:
             normal = dist.Normal(mean, std_dev).to_event(1)
-            return pyro.sample(self._latent_name, normal, obs=observations)
+            return pyro.sample(self._latent_name, normal)
         return mean, std_dev
 
 class StandardNormal(TypedModel):
@@ -92,12 +92,12 @@ class BernoulliObservation(TypedModel):
             types.tensor_type(torch.float, self._obs_dim),
         )
 
-    def forward(self, inputs, observations=None, sample=True):
+    def forward(self, inputs, sample=True):
         with name_count():
             xs = torch.sigmoid(inputs.view(-1, self._obs_dim[0]))
             if sample:
                 bernoulli = ContinuousBernoulli(probs=xs).to_event(1)
-                pyro.sample(self._observable_name, bernoulli, obs=observations)
+                pyro.sample(self._observable_name, bernoulli)
             return xs
 
 class PathDensityNet(TypedModel):
