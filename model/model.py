@@ -162,11 +162,13 @@ class VAECategoryModel(BaseModel):
             lower, higher = sorted([dim_a, dim_b])
             # Construct the decoder
             if higher == self._data_dim:
-                decoder = DensityNet(lower, higher, ContinuousBernoulliModel)
+                decoder = DensityDecoder(lower, higher, False,
+                                         ContinuousBernoulliModel)
             else:
-                decoder = DensityNet(lower, higher, DiagonalGaussian)
+                decoder = DensityDecoder(lower, higher, True,
+                                         StandardNormal)
             # Construct the encoder
-            encoder = DensityNet(higher, lower, DiagonalGaussian)
+            encoder = DensityEncoder(higher, lower, DiagonalGaussian)
             in_space, out_space = decoder.type.arrow()
             generator = closed.TypedDaggerFunction(in_space, out_space, decoder,
                                                    encoder)
