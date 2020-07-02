@@ -106,7 +106,7 @@ class PathDensityNet(TypedModel):
         self._in_space = types.tensor_type(torch.float, torch.Size([in_dim]))
         self._out_space = types.tensor_type(torch.float, torch.Size([out_dim]))
 
-        hidden_dim = in_dim + out_dim // 2
+        hidden_dim = (in_dim + out_dim) // 2
         self.add_module('neural_layers', nn.Sequential(
             nn.Linear(in_dim, hidden_dim), nn.PReLU(),
             nn.Linear(hidden_dim, hidden_dim), nn.PReLU(),
