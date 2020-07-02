@@ -111,13 +111,40 @@ class DensityNet(TypedModel):
         ))
         self.add_module('distribution', dist_layer(out_dim))
 
+    def set_batching(self, batch):
+        super().set_batching(batch)
+        self.distribution.set_batching(batch)
+
     @property
     def type(self):
         return closed.CartesianClosed.ARROW(self._in_space, self._out_space)
 
+class DensityDecoder(DensityNet):
+    def __init__(self, in_dim, out_dim, latent=True,
+                 dist_layer=ContinuousBernoulliModel):
+        super().__init__(in_dim, out_dim, dist_layer)
+        self._latent = latent
+        if self._latent:
+            self.add_module('combination_layer', nn.Sequential(
+                nn.Linear(out_dim * 2, out_dim), nn.PReLU(),
+                nn.Linear(out_dim, out_dim)
+            ))
+
     def forward(self, inputs):
         hidden = self.neural_layers(inputs)
+        if self._latent:
+            noise = self.distribution()
+            return self.combination_layer(torch.cat((hidden, noise), dim=-1))
         return self.distribution(hidden)
+
+class DensityEncoder(DensityNet):
+    def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel):
+        super().__init__(in_dim, out_dim, dist_layer)
+
+    def forward(self, inputs):
+        out_hidden = self.neural_layers(inputs)
+        self.distribution(out_hidden)
+        return out_hidden
 
 class VAECategoryModel(BaseModel):
     def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=None):
@@ -135,11 +162,13 @@ class VAECategoryModel(BaseModel):
             lower, higher = sorted([dim_a, dim_b])
             # Construct the decoder
             if higher == self._data_dim:
-                decoder = DensityNet(lower, higher, ContinuousBernoulliModel)
+                decoder = DensityDecoder(lower, higher, False,
+                                         ContinuousBernoulliModel)
             else:
-                decoder = DensityNet(lower, higher, DiagonalGaussian)
+                decoder = DensityDecoder(lower, higher, True,
+                                         StandardNormal)
             # Construct the encoder
-            encoder = DensityNet(higher, lower, DiagonalGaussian)
+            encoder = DensityEncoder(higher, lower, DiagonalGaussian)
             in_space, out_space = decoder.type.arrow()
             generator = closed.TypedDaggerFunction(in_space, out_space, decoder,
                                                    encoder)
