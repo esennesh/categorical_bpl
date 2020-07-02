@@ -115,9 +115,9 @@ class PathDensityNet(TypedModel):
     def type(self):
         return closed.CartesianClosed.ARROW(self._in_space, self._out_space)
 
-    def forward(self, inputs, sample=True):
+    def forward(self, inputs):
         hidden = self.neural_layers(inputs)
-        return self.distribution(hidden, sample)
+        return self.distribution(hidden)
 
 class VAECategoryModel(BaseModel):
     def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=None):
