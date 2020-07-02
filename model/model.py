@@ -119,6 +119,33 @@ class DensityNet(TypedModel):
     def type(self):
         return closed.CartesianClosed.ARROW(self._in_space, self._out_space)
 
+class DensityDecoder(DensityNet):
+    def __init__(self, in_dim, out_dim, latent=True,
+                 dist_layer=ContinuousBernoulliModel):
+        super().__init__(in_dim, out_dim, dist_layer)
+        self._latent = latent
+        if self._latent:
+            self.add_module('combination_layer', nn.Sequential(
+                nn.Linear(out_dim * 2, out_dim), nn.PReLU(),
+                nn.Linear(out_dim, out_dim)
+            ))
+
+    def forward(self, inputs):
+        hidden = self.neural_layers(inputs)
+        if self._latent:
+            noise = self.distribution()
+            return self.combination_layer(torch.cat((hidden, noise), dim=-1))
+        return self.distribution(hidden)
+
+class DensityEncoder(DensityNet):
+    def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel):
+        super().__init__(in_dim, out_dim, dist_layer)
+
+    def forward(self, inputs):
+        out_hidden = self.neural_layers(inputs)
+        self.distribution(out_hidden)
+        return out_hidden
+
 class VAECategoryModel(BaseModel):
     def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=None):
         super().__init__()
