@@ -111,6 +111,10 @@ class DensityNet(TypedModel):
         ))
         self.add_module('distribution', dist_layer(out_dim))
 
+    def set_batching(self, batch):
+        super().set_batching(batch)
+        self.distribution.set_batching(batch)
+
     @property
     def type(self):
         return closed.CartesianClosed.ARROW(self._in_space, self._out_space)
