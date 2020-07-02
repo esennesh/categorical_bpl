@@ -97,7 +97,7 @@ class ContinuousBernoulliModel(TypedModel):
             pyro.sample(self._observable_name, bernoulli)
             return xs
 
-class PathDensityNet(TypedModel):
+class DensityNet(TypedModel):
     def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel):
         super().__init__()
         self._in_space = types.tensor_type(torch.float, torch.Size([in_dim]))
@@ -135,12 +135,11 @@ class VAECategoryModel(BaseModel):
             lower, higher = sorted([dim_a, dim_b])
             # Construct the decoder
             if higher == self._data_dim:
-                decoder = PathDensityNet(lower, higher,
-                                         ContinuousBernoulliModel)
+                decoder = DensityNet(lower, higher, ContinuousBernoulliModel)
             else:
-                decoder = PathDensityNet(lower, higher, DiagonalGaussian)
+                decoder = DensityNet(lower, higher, DiagonalGaussian)
             # Construct the encoder
-            encoder = PathDensityNet(higher, lower, DiagonalGaussian)
+            encoder = DensityNet(higher, lower, DiagonalGaussian)
             in_space, out_space = decoder.type.arrow()
             generator = closed.TypedDaggerFunction(in_space, out_space, decoder,
                                                    encoder)
