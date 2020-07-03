@@ -137,11 +137,12 @@ class DensityNet(TypedModel):
 class DensityDecoder(DensityNet):
     def __init__(self, in_dim, out_dim, latent=True,
                  dist_layer=ContinuousBernoulliModel):
-        super().__init__(in_dim, out_dim, dist_layer)
+        super().__init__(in_dim, out_dim, dist_layer, nn.LayerNorm)
         self._latent = latent
         if self._latent:
             self.add_module('combination_layer', nn.Sequential(
-                nn.Linear(out_dim * 2, out_dim), nn.PReLU(),
+                nn.Linear(out_dim * 2, out_dim), nn.LayerNorm(out_dim),
+                nn.PReLU(),
                 nn.Linear(out_dim, out_dim)
             ))
 
