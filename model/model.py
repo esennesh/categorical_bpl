@@ -150,7 +150,7 @@ class DensityDecoder(DensityNet):
         return self.distribution(hidden)
 
 class DensityEncoder(DensityNet):
-    def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel):
+    def __init__(self, in_dim, out_dim, dist_layer=DiagonalGaussian):
         super().__init__(in_dim, out_dim, dist_layer)
 
     def forward(self, inputs):
