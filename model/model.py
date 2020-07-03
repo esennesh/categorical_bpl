@@ -182,16 +182,16 @@ class VAECategoryModel(BaseModel):
             # Construct the encoder
             encoder = DensityEncoder(higher, lower, DiagonalGaussian)
             in_space, out_space = decoder.type.arrow()
-            generator = closed.TypedDaggerFunction(in_space, out_space, decoder,
-                                                   encoder)
+            generator = closed.TypedDaggerBox(decoder.density_name, in_space,
+                                              out_space, decoder, encoder)
             generators.append(generator)
 
         global_elements = []
         for dim in dims:
             space = types.tensor_type(torch.float, torch.Size([dim]))
-            global_element = closed.TypedDaggerFunction(closed.TOP, space,
-                                                        StandardNormal(dim),
-                                                        lambda *vals: None)
+            prior = StandardNormal(dim)
+            name = 'p(%s)' % prior.random_var_name
+            global_element = closed.TypedBox(name, closed.TOP, space, prior)
             global_elements.append(global_element)
 
         self._category = cartesian_cat.CartesianCategory(generators,
