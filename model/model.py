@@ -104,6 +104,8 @@ class ContinuousBernoulliModel(TypedModel):
 class DensityNet(TypedModel):
     def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel):
         super().__init__()
+        self._in_dim = in_dim
+        self._out_dim = out_dim
         self._in_space = types.tensor_type(torch.float, torch.Size([in_dim]))
         self._out_space = types.tensor_type(torch.float, torch.Size([out_dim]))
 
@@ -122,6 +124,12 @@ class DensityNet(TypedModel):
     @property
     def type(self):
         return closed.CartesianClosed.ARROW(self._in_space, self._out_space)
+
+    @property
+    def density_name(self):
+        sample_name = self.distribution.random_var_name
+        condition_name = 'Z^{%d}' % self._in_dim
+        return 'p(%s | %s)' % (sample_name, condition_name)
 
 class DensityDecoder(DensityNet):
     def __init__(self, in_dim, out_dim, latent=True,
