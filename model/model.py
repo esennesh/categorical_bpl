@@ -32,7 +32,7 @@ class DiagonalGaussian(TypedModel):
         self.parameterization = nn.Linear(self._dim[0], self._dim[0] * 2)
 
     @property
-    def latent_name(self):
+    def random_var_name(self):
         return self._latent_name
 
     @property
@@ -57,7 +57,7 @@ class StandardNormal(TypedModel):
         self._dim = dim
 
     @property
-    def latent_name(self):
+    def random_var_name(self):
         return self._latent_name
 
     @property
@@ -82,6 +82,10 @@ class ContinuousBernoulliModel(TypedModel):
         if not observable_name:
             observable_name = 'X^{%d}' % self._obs_dim[0]
         self._observable_name = observable_name
+
+    @property
+    def random_var_name(self):
+        return self._observable_name
 
     @property
     def type(self):
