@@ -32,7 +32,7 @@ class DiagonalGaussian(TypedModel):
         self.parameterization = nn.Linear(self._dim[0], self._dim[0] * 2)
 
     @property
-    def latent_name(self):
+    def random_var_name(self):
         return self._latent_name
 
     @property
@@ -57,7 +57,7 @@ class StandardNormal(TypedModel):
         self._dim = dim
 
     @property
-    def latent_name(self):
+    def random_var_name(self):
         return self._latent_name
 
     @property
@@ -84,6 +84,10 @@ class ContinuousBernoulliModel(TypedModel):
         self._observable_name = observable_name
 
     @property
+    def random_var_name(self):
+        return self._observable_name
+
+    @property
     def type(self):
         return closed.CartesianClosed.ARROW(
             types.tensor_type(torch.float, self._obs_dim),
@@ -100,6 +104,8 @@ class ContinuousBernoulliModel(TypedModel):
 class DensityNet(TypedModel):
     def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel):
         super().__init__()
+        self._in_dim = in_dim
+        self._out_dim = out_dim
         self._in_space = types.tensor_type(torch.float, torch.Size([in_dim]))
         self._out_space = types.tensor_type(torch.float, torch.Size([out_dim]))
 
@@ -118,6 +124,12 @@ class DensityNet(TypedModel):
     @property
     def type(self):
         return closed.CartesianClosed.ARROW(self._in_space, self._out_space)
+
+    @property
+    def density_name(self):
+        sample_name = self.distribution.random_var_name
+        condition_name = 'Z^{%d}' % self._in_dim
+        return 'p(%s | %s)' % (sample_name, condition_name)
 
 class DensityDecoder(DensityNet):
     def __init__(self, in_dim, out_dim, latent=True,
@@ -138,7 +150,7 @@ class DensityDecoder(DensityNet):
         return self.distribution(hidden)
 
 class DensityEncoder(DensityNet):
-    def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel):
+    def __init__(self, in_dim, out_dim, dist_layer=DiagonalGaussian):
         super().__init__(in_dim, out_dim, dist_layer)
 
     def forward(self, inputs):
@@ -170,16 +182,16 @@ class VAECategoryModel(BaseModel):
             # Construct the encoder
             encoder = DensityEncoder(higher, lower, DiagonalGaussian)
             in_space, out_space = decoder.type.arrow()
-            generator = closed.TypedDaggerFunction(in_space, out_space, decoder,
-                                                   encoder)
+            generator = closed.TypedDaggerBox(decoder.density_name, in_space,
+                                              out_space, decoder, encoder)
             generators.append(generator)
 
         global_elements = []
         for dim in dims:
             space = types.tensor_type(torch.float, torch.Size([dim]))
-            global_element = closed.TypedDaggerFunction(closed.TOP, space,
-                                                        StandardNormal(dim),
-                                                        lambda *vals: None)
+            prior = StandardNormal(dim)
+            name = 'p(%s)' % prior.random_var_name
+            global_element = closed.TypedBox(name, closed.TOP, space, prior)
             global_elements.append(global_element)
 
         self._category = cartesian_cat.CartesianCategory(generators,
