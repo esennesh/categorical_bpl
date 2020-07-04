@@ -102,7 +102,8 @@ class ContinuousBernoulliModel(TypedModel):
             return xs
 
 class DensityNet(TypedModel):
-    def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel):
+    def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel,
+                 normalizer_layer=nn.LayerNorm):
         super().__init__()
         self._in_dim = in_dim
         self._out_dim = out_dim
@@ -111,9 +112,11 @@ class DensityNet(TypedModel):
 
         hidden_dim = (in_dim + out_dim) // 2
         self.add_module('neural_layers', nn.Sequential(
-            nn.Linear(in_dim, hidden_dim), nn.PReLU(),
-            nn.Linear(hidden_dim, hidden_dim), nn.PReLU(),
-            nn.Linear(hidden_dim, out_dim),
+            nn.Linear(in_dim, hidden_dim), normalizer_layer(hidden_dim),
+            nn.PReLU(),
+            nn.Linear(hidden_dim, hidden_dim), normalizer_layer(hidden_dim),
+            nn.PReLU(),
+            nn.Linear(hidden_dim, out_dim), normalizer_layer(out_dim),
         ))
         self.add_module('distribution', dist_layer(out_dim))
 
@@ -134,11 +137,12 @@ class DensityNet(TypedModel):
 class DensityDecoder(DensityNet):
     def __init__(self, in_dim, out_dim, latent=True,
                  dist_layer=ContinuousBernoulliModel):
-        super().__init__(in_dim, out_dim, dist_layer)
+        super().__init__(in_dim, out_dim, dist_layer, nn.LayerNorm)
         self._latent = latent
         if self._latent:
             self.add_module('combination_layer', nn.Sequential(
-                nn.Linear(out_dim * 2, out_dim), nn.PReLU(),
+                nn.Linear(out_dim * 2, out_dim), nn.LayerNorm(out_dim),
+                nn.PReLU(),
                 nn.Linear(out_dim, out_dim)
             ))
 
@@ -151,7 +155,7 @@ class DensityDecoder(DensityNet):
 
 class DensityEncoder(DensityNet):
     def __init__(self, in_dim, out_dim, dist_layer=DiagonalGaussian):
-        super().__init__(in_dim, out_dim, dist_layer)
+        super().__init__(in_dim, out_dim, dist_layer, nn.BatchNorm1d)
 
     def forward(self, inputs):
         out_hidden = self.neural_layers(inputs)
