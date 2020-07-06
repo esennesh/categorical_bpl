@@ -137,7 +137,7 @@ class DensityNet(TypedModel):
 class DensityDecoder(DensityNet):
     def __init__(self, in_dim, out_dim, latent=True,
                  dist_layer=ContinuousBernoulliModel):
-        super().__init__(in_dim, out_dim, dist_layer, nn.LayerNorm)
+        super().__init__(in_dim, out_dim, dist_layer)
         self._latent = latent
         if self._latent:
             self.add_module('combination_layer', nn.Sequential(
@@ -155,7 +155,7 @@ class DensityDecoder(DensityNet):
 
 class DensityEncoder(DensityNet):
     def __init__(self, in_dim, out_dim, dist_layer=DiagonalGaussian):
-        super().__init__(in_dim, out_dim, dist_layer, nn.BatchNorm1d)
+        super().__init__(in_dim, out_dim, dist_layer)
 
     def forward(self, inputs):
         out_hidden = self.neural_layers(inputs)
@@ -203,7 +203,7 @@ class VAECategoryModel(BaseModel):
 
         self.guide_embedding = nn.Sequential(
             nn.Linear(data_dim, guide_hidden_dim),
-            nn.BatchNorm1d(guide_hidden_dim), nn.PReLU(),
+            nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
             nn.Linear(guide_hidden_dim, guide_hidden_dim), nn.PReLU(),
         )
         self.guide_confidences = nn.Sequential(

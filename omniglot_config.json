@@ -10,10 +10,10 @@
         }
     },
     "data_loader": {
-        "type": "OmniglotDataLoader",
+        "type": "OmniglotTargetBatchDataLoader",
         "args":{
             "data_dir": "data/",
-            "batch_size": 128,
+            "batch_size": 20,
             "shuffle": true,
             "validation_split": 0.1,
             "num_workers": 2
@@ -32,15 +32,15 @@
     "lr_scheduler": {
         "type": "ReduceLROnPlateau",
         "args": {
-            "patience": 10,
-            "factor": 0.1
+            "patience": 15,
+            "factor": 0.5
         }
     },
     "trainer": {
         "epochs": 100,
 
         "save_dir": "saved/",
-        "save_period": 5,
+        "save_period": 10,
         "verbosity": 2,
 
         "monitor": "min val_loss",
