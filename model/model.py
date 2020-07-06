@@ -203,7 +203,7 @@ class VAECategoryModel(BaseModel):
 
         self.guide_embedding = nn.Sequential(
             nn.Linear(data_dim, guide_hidden_dim),
-            nn.BatchNorm1d(guide_hidden_dim), nn.PReLU(),
+            nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
             nn.Linear(guide_hidden_dim, guide_hidden_dim), nn.PReLU(),
         )
         self.guide_confidences = nn.Sequential(
