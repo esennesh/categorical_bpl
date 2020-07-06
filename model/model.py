@@ -155,7 +155,7 @@ class DensityDecoder(DensityNet):
 
 class DensityEncoder(DensityNet):
     def __init__(self, in_dim, out_dim, dist_layer=DiagonalGaussian):
-        super().__init__(in_dim, out_dim, dist_layer, nn.BatchNorm1d)
+        super().__init__(in_dim, out_dim, dist_layer)
 
     def forward(self, inputs):
         out_hidden = self.neural_layers(inputs)
