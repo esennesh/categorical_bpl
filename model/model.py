@@ -157,6 +157,12 @@ class DensityEncoder(DensityNet):
     def __init__(self, in_dim, out_dim, dist_layer=DiagonalGaussian):
         super().__init__(in_dim, out_dim, dist_layer)
 
+    @property
+    def density_name(self):
+        sample_name = self.distribution.random_var_name
+        condition_name = 'Z^{%d}' % self._in_dim
+        return 'q(%s | %s)' % (sample_name, condition_name)
+
     def forward(self, inputs):
         out_hidden = self.neural_layers(inputs)
         self.distribution(out_hidden)
