@@ -232,7 +232,7 @@ class VAECategoryModel(BaseModel):
         for module in self._category.children():
             module.set_batching(data)
 
-        morphism = self._category(self.data_space, min_depth=1)
+        morphism = self._category(self.data_space, min_depth=2)
         if observations is not None:
             conditions = {'X^{%d}' % self._data_dim: data}
             score_morphism = pyro.condition(morphism, data=conditions)
