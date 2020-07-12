@@ -230,7 +230,8 @@ class VAECategoryModel(BaseModel):
             data = torch.zeros(1, self._data_dim)
         data = data.view(data.shape[0], self._data_dim)
         for module in self._category.children():
-            module.set_batching(data)
+            if isinstance(module, BaseModel):
+                module.set_batching(data)
 
         morphism = self._category(self.data_space, min_depth=2)
         if observations is not None:
@@ -251,7 +252,8 @@ class VAECategoryModel(BaseModel):
             data = observations
         data = data.view(data.shape[0], self._data_dim)
         for module in self._category.children():
-            module.set_batching(data)
+            if isinstance(module, BaseModel):
+                module.set_batching(data)
 
         embedding = self.guide_embedding(data).mean(dim=0)
 
