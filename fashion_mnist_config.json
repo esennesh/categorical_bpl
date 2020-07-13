@@ -6,7 +6,7 @@
         "type": "VAECategoryModel",
         "args": {
           "data_dim": 784,
-          "hidden_dim": 64
+          "hidden_dim": 16
         }
     },
     "data_loader": {
@@ -23,7 +23,7 @@
         "type": "Adam",
         "args":{
             "optim_args": {
-              "lr": 1e-4,
+              "lr": 1e-3,
               "weight_decay": 0,
               "amsgrad": true
             }
