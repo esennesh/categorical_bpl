@@ -171,7 +171,7 @@ class DensityEncoder(DensityNet):
 VAE_MIN_DEPTH = 2
 
 class VAECategoryModel(BaseModel):
-    def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=128):
+    def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=256):
         super().__init__()
         self._data_dim = data_dim
 
