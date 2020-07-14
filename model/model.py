@@ -266,8 +266,11 @@ class VAECategoryModel(BaseModel):
                                       confidences[0, 1]).to_event(0)
         confidence = pyro.sample('distances_confidence', confidence_gamma)
 
+        data_arrow_distances = self.guide_arrow_distances(embedding)
+
         morphism = self._category(self.data_space, min_depth=VAE_MIN_DEPTH,
-                                  confidence=confidence)
+                                  confidence=confidence,
+                                  arrow_distances=data_arrow_distances)
         with pyro.plate('data', len(data)):
             with name_count():
                 morphism[::-1](data)
