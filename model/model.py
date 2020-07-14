@@ -171,11 +171,9 @@ class DensityEncoder(DensityNet):
 VAE_MIN_DEPTH = 2
 
 class VAECategoryModel(BaseModel):
-    def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=None):
+    def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=128):
         super().__init__()
         self._data_dim = data_dim
-        if not guide_hidden_dim:
-            guide_hidden_dim = data_dim // 16
 
         # Build up a bunch of torch.Sizes for the powers of two between
         # hidden_dim and data_dim.
