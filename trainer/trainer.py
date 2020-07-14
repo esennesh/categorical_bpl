@@ -40,11 +40,12 @@ class Trainer(BaseTrainer):
         :param epoch: Integer, current training epoch.
         :return: A log that contains average loss and metric in this epoch.
         """
-        elbo = TraceGraph_ELBO(vectorize_particles=False)
+        elbo = TraceGraph_ELBO(vectorize_particles=False, num_particles=4)
         svi = SVI(self.model.model, self.model.guide, self.optimizer, loss=elbo)
 
         self.model.train()
         self.train_metrics.reset()
+        current = 0
         for batch_idx, (data, target) in enumerate(self.data_loader):
             data, target = data.to(self.device), target.to(self.device)
             loss = svi.step(observations=data)
@@ -54,10 +55,11 @@ class Trainer(BaseTrainer):
             for met in self.metric_ftns:
                 self.train_metrics.update(met.__name__, met(output, target))
 
+            current += len(target)
             if batch_idx % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
                     epoch,
-                    self._progress(batch_idx),
+                    self._progress(batch_idx, current=current),
                     loss))
                 self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
 
@@ -70,7 +72,7 @@ class Trainer(BaseTrainer):
             log.update(**{'val_'+k : v for k, v in val_log.items()})
 
         if self.lr_scheduler is not None:
-            self.lr_scheduler.step()
+            self.lr_scheduler.step(val_log['loss'])
         return log
 
     def _valid_epoch(self, epoch):
@@ -80,7 +82,7 @@ class Trainer(BaseTrainer):
         :param epoch: Integer, current training epoch.
         :return: A log that contains information about validation
         """
-        elbo = TraceGraph_ELBO(vectorize_particles=False)
+        elbo = TraceGraph_ELBO(vectorize_particles=False, num_particles=4)
         svi = SVI(self.model.model, self.model.guide, self.optimizer, loss=elbo)
 
         self.model.eval()
@@ -98,10 +100,11 @@ class Trainer(BaseTrainer):
 
         return self.valid_metrics.result()
 
-    def _progress(self, batch_idx):
+    def _progress(self, batch_idx, current=None):
         base = '[{}/{} ({:.0f}%)]'
         if hasattr(self.data_loader, 'n_samples'):
-            current = batch_idx * self.data_loader.batch_length
+            if current is None:
+                current = batch_idx * self.data_loader.batch_length
             total = self.data_loader.n_samples
         else:
             current = batch_idx

@@ -1,16 +1,16 @@
 {
-    "name": "Mnist_VaeCategory",
+    "name": "FashionMnist_VaeCategory",
     "n_gpu": 1,
 
     "arch": {
         "type": "VAECategoryModel",
         "args": {
           "data_dim": 784,
-          "hidden_dim": 64
+          "hidden_dim": 16
         }
     },
     "data_loader": {
-        "type": "MnistTargetBatchDataLoader",
+        "type": "FashionMnistTargetBatchDataLoader",
         "args":{
             "data_dir": "data/",
             "batch_size": 512,
@@ -32,12 +32,12 @@
     "lr_scheduler": {
         "type": "ReduceLROnPlateau",
         "args": {
-            "patience": 10,
+            "patience": 20,
             "factor": 0.1
         }
     },
     "trainer": {
-        "epochs": 500,
+        "epochs": 1000,
 
         "save_dir": "saved/",
         "save_period": 50,

@@ -1,13 +1,20 @@
+import pyro
 import torch
-import torch.nn as nn
 import numpy as np
-from abc import abstractmethod
+from abc import abstractmethod, abstractproperty
 
 
-class BaseModel(nn.Module):
+class BaseModel(pyro.nn.PyroModule):
     """
     Base class for all models
     """
+    def __init__(self):
+        super().__init__()
+        self._batch = None
+
+    def set_batching(self, batch):
+        self._batch = batch
+
     @abstractmethod
     def forward(self, *inputs):
         """
@@ -36,7 +43,7 @@ class BaseModel(nn.Module):
         self.load_state_dict(checkpoint['state_dict'])
 
 class TypedModel(BaseModel):
-    @abstractmethod
+    @abstractproperty
     def type(self):
         """
         Type signature for the layer as an arrow between two vector spaces
