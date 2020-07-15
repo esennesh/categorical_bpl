@@ -6,7 +6,8 @@
         "type": "VAECategoryModel",
         "args": {
           "data_dim": 784,
-          "hidden_dim": 16
+          "hidden_dim": 16,
+	  "guide_hidden_dim": 512
         }
     },
     "data_loader": {
