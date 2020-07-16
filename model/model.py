@@ -168,6 +168,8 @@ class DensityEncoder(DensityNet):
         self.distribution(out_hidden)
         return out_hidden
 
+VAE_MIN_DEPTH = 2
+
 class VAECategoryModel(BaseModel):
     def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=None):
         super().__init__()
@@ -233,7 +235,7 @@ class VAECategoryModel(BaseModel):
             if isinstance(module, BaseModel):
                 module.set_batching(data)
 
-        morphism = self._category(self.data_space, min_depth=2)
+        morphism = self._category(self.data_space, min_depth=VAE_MIN_DEPTH)
         if observations is not None:
             conditions = {'X^{%d}' % self._data_dim: data}
             score_morphism = pyro.condition(morphism, data=conditions)
@@ -262,7 +264,7 @@ class VAECategoryModel(BaseModel):
                                       confidences[0, 1]).to_event(0)
         confidence = pyro.sample('distances_confidence', confidence_gamma)
 
-        morphism = self._category(self.data_space, min_depth=2,
+        morphism = self._category(self.data_space, min_depth=VAE_MIN_DEPTH,
                                   confidence=confidence)
         with pyro.plate('data', len(data)):
             with name_count():
