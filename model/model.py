@@ -171,11 +171,9 @@ class DensityEncoder(DensityNet):
 VAE_MIN_DEPTH = 2
 
 class VAECategoryModel(BaseModel):
-    def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=None):
+    def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=256):
         super().__init__()
         self._data_dim = data_dim
-        if not guide_hidden_dim:
-            guide_hidden_dim = data_dim // 16
 
         # Build up a bunch of torch.Sizes for the powers of two between
         # hidden_dim and data_dim.
@@ -212,10 +210,14 @@ class VAECategoryModel(BaseModel):
         self.guide_embedding = nn.Sequential(
             nn.Linear(data_dim, guide_hidden_dim),
             nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
-            nn.Linear(guide_hidden_dim, guide_hidden_dim), nn.PReLU(),
         )
         self.guide_confidences = nn.Sequential(
             nn.Linear(guide_hidden_dim, 1 * 2), nn.Softplus(),
+        )
+        self.guide_arrow_distances = nn.Sequential(
+            nn.Linear(guide_hidden_dim, guide_hidden_dim),
+            nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
+            nn.Linear(guide_hidden_dim, len(self._category.ars)), nn.Softplus()
         )
 
     @property
@@ -264,8 +266,11 @@ class VAECategoryModel(BaseModel):
                                       confidences[0, 1]).to_event(0)
         confidence = pyro.sample('distances_confidence', confidence_gamma)
 
+        data_arrow_distances = self.guide_arrow_distances(embedding)
+
         morphism = self._category(self.data_space, min_depth=VAE_MIN_DEPTH,
-                                  confidence=confidence)
+                                  confidence=confidence,
+                                  arrow_distances=data_arrow_distances)
         with pyro.plate('data', len(data)):
             with name_count():
                 morphism[::-1](data)
