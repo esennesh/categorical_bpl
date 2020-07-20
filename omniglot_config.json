@@ -23,7 +23,7 @@
         "type": "Adam",
         "args":{
             "optim_args": {
-              "lr": 1e-4,
+              "lr": 1e-3,
               "weight_decay": 0,
               "amsgrad": true
             }
@@ -33,7 +33,7 @@
         "type": "ReduceLROnPlateau",
         "args": {
             "patience": 15,
-            "factor": 0.5
+            "factor": 0.1
         }
     },
     "trainer": {
