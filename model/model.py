@@ -217,7 +217,9 @@ class VAECategoryModel(BaseModel):
         self.guide_arrow_distances = nn.Sequential(
             nn.Linear(guide_hidden_dim, guide_hidden_dim),
             nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
-            nn.Linear(guide_hidden_dim, len(self._category.ars)), nn.Softplus()
+            nn.Linear(guide_hidden_dim,
+                      self._category.arrow_distances.shape[0]),
+            nn.Softplus()
         )
 
     @property
