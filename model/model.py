@@ -154,8 +154,7 @@ class DensityEncoder(DensityNet):
 
     def forward(self, inputs):
         out_hidden = self.neural_layers(inputs)
-        self.distribution(out_hidden)
-        return out_hidden
+        return self.distribution(out_hidden)
 
 VAE_MIN_DEPTH = 2
 
