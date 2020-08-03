@@ -172,11 +172,10 @@ class VAECategoryModel(BaseModel):
             lower, higher = sorted([dim_a, dim_b])
             # Construct the decoder
             if higher == self._data_dim:
-                decoder = DensityDecoder(lower, higher, False,
+                decoder = DensityDecoder(lower, higher,
                                          ContinuousBernoulliModel)
             else:
-                decoder = DensityDecoder(lower, higher, True,
-                                         StandardNormal)
+                decoder = DensityDecoder(lower, higher, DiagonalGaussian)
             # Construct the encoder
             encoder = DensityEncoder(higher, lower, DiagonalGaussian)
             in_space, out_space = decoder.type.arrow()
