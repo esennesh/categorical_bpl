@@ -53,7 +53,7 @@ class StandardNormal(TypedModel):
     def __init__(self, dim, latent_name=None):
         super().__init__()
         if not latent_name:
-            latent_name = 'Z^{%d}' % dim
+            latent_name = '$Z^{%d}$' % dim
         self._latent_name = latent_name
         self._dim = dim
 
