@@ -185,7 +185,8 @@ class VAECategoryModel(BaseModel):
             encoder = DensityEncoder(higher, lower, DiagonalGaussian)
             in_space, out_space = decoder.type.arrow()
             generator = closed.TypedDaggerBox(decoder.density_name, in_space,
-                                              out_space, decoder, encoder)
+                                              out_space, decoder, encoder,
+                                              encoder.density_name)
             generators.append(generator)
 
         global_elements = []
