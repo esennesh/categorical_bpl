@@ -1,3 +1,4 @@
+from abc import abstractproperty
 from discopy import Ty
 from discopyro import cartesian_cat, closed
 from indexed import IndexedOrderedDict
@@ -128,11 +129,9 @@ class DensityNet(TypedModel):
     def type(self):
         return closed.CartesianClosed.ARROW(self._in_space, self._out_space)
 
-    @property
+    @abstractproperty
     def density_name(self):
-        sample_name = self.distribution.random_var_name
-        condition_name = 'Z^{%d}' % self._in_dim
-        return 'p(%s | %s)' % (sample_name, condition_name)
+        raise NotImplementedError()
 
 class DensityDecoder(DensityNet):
     def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel):
