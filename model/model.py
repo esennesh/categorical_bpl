@@ -164,6 +164,80 @@ class DensityEncoder(DensityNet):
         out_hidden = self.neural_layers(inputs)
         return self.distribution(out_hidden)
 
+class LadderDecoder(TypedModel):
+    def __init__(self, in_dim, out_dim, out_dist, noise_dim=2, channels=1,
+                 conv=False):
+        super().__init__()
+        self._convolve = conv
+        self._in_dim = in_dim
+        self._noise_dim = noise_dim
+        self._out_dim = out_dim
+        self._num_channels = channels
+
+        self.distribution = out_dist(out_dim)
+        final_features = out_dim
+        if out_dist == DiagonalGaussian:
+            final_features *= 2
+
+        self.noise_layer = nn.Sequential(nn.Linear(self._noise_dim, in_dim),
+                                         nn.LayerNorm(in_dim), nn.PReLU())
+        if self._convolve:
+            out_side = int(np.sqrt(self._out_dim))
+            self._multiplier = max(out_side // 4, 1) ** 2
+            channels = self._num_channels
+            if out_dist == DiagonalGaussian:
+                channels *= 2
+            self.dense_layers = nn.Sequential(
+                nn.Linear(self._in_dim * 2, self._multiplier * 2 * out_side),
+                nn.LayerNorm(self._multiplier * 2 * out_side), nn.PReLU(),
+            )
+            self.conv_layers = nn.Sequential(
+                nn.ConvTranspose2d(2 * out_side, out_side, 4, 2, 1),
+                nn.InstanceNorm2d(out_side), nn.PReLU(),
+                nn.ConvTranspose2d(out_side, channels, 4, 2, 1),
+            )
+        else:
+            self.neural_layers = nn.Sequential(
+                nn.Linear(self._in_dim * 2, self._out_dim),
+                nn.LayerNorm(self._out_dim), nn.PReLU(),
+                nn.Linear(self._out_dim, self._out_dim),
+                nn.LayerNorm(self._out_dim), nn.PReLU(),
+                nn.Linear(self._out_dim, self._out_dim),
+                nn.LayerNorm(self._out_dim), nn.PReLU(),
+                nn.Linear(self._out_dim, final_features)
+            )
+
+    @property
+    def type(self):
+        input_space = types.tensor_type(torch.float, self._in_dim)
+        noise_space = types.tensor_type(torch.float, self._noise_dim)
+        return closed.CartesianClosed.ARROW(
+            closed.CartesianClosed.BASE(Ty(input_space, noise_space)),
+            types.tensor_type(torch.float, self._out_dim)
+        )
+
+    @property
+    def name(self):
+        args_name = '(\\mathbb{R}^{%d} \\times \\mathbb{R}^{%d})'
+        args_name = args_name % (self._in_dim, self._noise_dim)
+        name = 'p(%s \\mid %s)' % (self.distribution.random_var_name, args_name)
+        return '$%s$' % name
+
+    def forward(self, ladder_input, noise):
+        hiddens = torch.cat((ladder_input, self.noise_layer(noise)), dim=-1)
+        if self._convolve:
+            multiplier = int(np.sqrt(self._multiplier))
+            out_side = int(np.sqrt(self._out_dim))
+            hiddens = self.dense_layers(hiddens).reshape(-1, out_side * 2,
+                                                         multiplier,
+                                                         multiplier)
+            hiddens = self.conv_layers(hiddens).reshape(-1, out_side,
+                                                        out_side)
+        else:
+            hiddens = self.neural_layers(hiddens)
+
+        return self.distribution(hiddens)
+
 VAE_MIN_DEPTH = 2
 
 class VAECategoryModel(BaseModel):
