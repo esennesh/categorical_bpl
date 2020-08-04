@@ -238,6 +238,92 @@ class LadderDecoder(TypedModel):
 
         return self.distribution(hiddens)
 
+class LadderEncoder(TypedModel):
+    def __init__(self, in_dim, out_dim, out_dist, noise_dist, noise_dim=2,
+                 channels=1, conv=False):
+        super().__init__()
+        self._convolve = conv
+        self._in_dim = in_dim
+        self._noise_dim = noise_dim
+        self._out_dim = out_dim
+        self._num_channels = channels
+
+        self.ladder_distribution = out_dist(out_dim)
+        out_features = out_dim
+        if out_dist == DiagonalGaussian:
+            out_features *= 2
+        self.noise_distribution = noise_dist(noise_dim)
+        noise_features = out_dim
+        if out_dist == DiagonalGaussian:
+            noise_features *= 2
+
+        if self._convolve:
+            in_side = int(np.sqrt(self._in_dim))
+
+            self.noise_convs = nn.Sequential(
+                nn.Conv2d(self._num_channels, in_side, 4, 2, 1),
+                nn.InstanceNorm2d(in_side), nn.PReLU(),
+                nn.Conv2d(in_side, in_side * 2, 4, 2, 1),
+                nn.InstanceNorm2d(in_side * 2), nn.PReLU(),
+            )
+            self.noise_linear = nn.Linear(in_side * 2 * (2 * 4) ** 2,
+                                          noise_features)
+
+            self.ladder_convs = nn.Sequential(
+                nn.Conv2d(self._num_channels, in_side, 4, 2, 1),
+                nn.InstanceNorm2d(in_side), nn.PReLU(),
+                nn.Conv2d(in_side, in_side * 2, 4, 2, 1),
+                nn.InstanceNorm2d(in_side * 2), nn.PReLU(),
+            )
+            self.ladder_linear = nn.Linear(in_side * 2 * (2 * 4) ** 2,
+                                           out_features)
+        else:
+            self.noise_dense = nn.Sequential(
+                nn.Linear(in_dim, in_dim), nn.LayerNorm(in_dim), nn.PReLU(),
+                nn.Linear(in_dim, in_dim), nn.LayerNorm(in_dim), nn.PReLU(),
+                nn.Linear(in_dim, noise_features),
+            )
+            self.ladder_dense = nn.Sequential(
+                nn.Linear(in_dim, in_dim), nn.LayerNorm(in_dim), nn.PReLU(),
+                nn.Linear(in_dim, in_dim), nn.LayerNorm(in_dim), nn.PReLU(),
+                nn.Linear(in_dim, out_features),
+            )
+
+    @property
+    def type(self):
+        output_space = types.tensor_type(torch.float, self._out_dim)
+        noise_space = types.tensor_type(torch.float, self._noise_dim)
+        return closed.CartesianClosed.ARROW(
+            types.tensor_type(torch.float, self._in_dim),
+            closed.CartesianClosed.BASE(Ty(output_space, noise_space)),
+        )
+
+    @property
+    def name(self):
+        args_name = '(\\mathbb{R}^{%d} \\times \\mathbb{R}^{%d})'
+        args_name = args_name % (self._out_dim, self._noise_dim)
+        name = 'q(%s \\mid %s)' % (args_name, '\\mathbb{R}^{%d}' % self._in_dim)
+        return '$%s$' % name
+
+    def forward(self, ladder_input):
+        if self._convolve:
+            in_side = int(np.sqrt(self._in_dim))
+
+            noise = self.noise_convs(ladder_input).reshape(
+                -1, in_side * 2 * (2 * 4) ** 2
+            )
+            noise = self.noise_distribution(self.noise_linear(noise))
+
+            hiddens = self.ladder_convs(ladder_input).reshape(
+                -1, in_side * 2 * (2 * 4) ** 2
+            )
+            hiddens = self.ladder_distribution(self.ladder_linear(hiddens))
+        else:
+            noise = self.noise_distribution(self.noise_dense(ladder_input))
+            hiddens = self.ladder_distribution(self.ladder_dense(ladder_input))
+
+        return hiddens, noise
+
 VAE_MIN_DEPTH = 2
 
 class VAECategoryModel(BaseModel):
