@@ -137,6 +137,12 @@ class DensityDecoder(DensityNet):
     def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel):
         super().__init__(in_dim, out_dim, dist_layer)
 
+    @property
+    def density_name(self):
+        sample_name = self.distribution.random_var_name
+        condition_name = 'Z^{%d}' % self._in_dim
+        return '$p(%s | %s)$' % (sample_name, condition_name)
+
     def forward(self, inputs):
         hidden = self.neural_layers(inputs)
         return self.distribution(hidden)
