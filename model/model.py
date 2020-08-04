@@ -28,7 +28,7 @@ class DiagonalGaussian(TypedModel):
         super().__init__()
         self._dim = torch.Size([dim])
         if not latent_name:
-            latent_name = '$Z^{%d}$' % self._dim[0]
+            latent_name = 'Z^{%d}' % self._dim[0]
         self._latent_name = latent_name
         self.parameterization = nn.Linear(self._dim[0], self._dim[0] * 2)
 
@@ -47,7 +47,7 @@ class DiagonalGaussian(TypedModel):
         zs = self.parameterization(inputs).view(-1, 2, self._dim[0])
         mean, std_dev = zs[:, 0], F.softplus(zs[:, 1])
         normal = dist.Normal(mean, std_dev).to_event(1)
-        return pyro.sample(self._latent_name, normal)
+        return pyro.sample('$%s$' % self._latent_name, normal)
 
 class StandardNormal(TypedModel):
     def __init__(self, dim, latent_name=None):
