@@ -1,3 +1,4 @@
+from abc import abstractproperty
 from discopy import Ty
 from discopyro import cartesian_cat, closed
 from indexed import IndexedOrderedDict
@@ -27,7 +28,7 @@ class DiagonalGaussian(TypedModel):
         super().__init__()
         self._dim = torch.Size([dim])
         if not latent_name:
-            latent_name = 'Z^{%d}' % self._dim[0]
+            latent_name = '$Z^{%d}$' % self._dim[0]
         self._latent_name = latent_name
         self.parameterization = nn.Linear(self._dim[0], self._dim[0] * 2)
 
@@ -52,7 +53,7 @@ class StandardNormal(TypedModel):
     def __init__(self, dim, latent_name=None):
         super().__init__()
         if not latent_name:
-            latent_name = 'Z^{%d}' % dim
+            latent_name = '$Z^{%d}$' % dim
         self._latent_name = latent_name
         self._dim = dim
 
@@ -128,15 +129,19 @@ class DensityNet(TypedModel):
     def type(self):
         return closed.CartesianClosed.ARROW(self._in_space, self._out_space)
 
-    @property
+    @abstractproperty
     def density_name(self):
-        sample_name = self.distribution.random_var_name
-        condition_name = 'Z^{%d}' % self._in_dim
-        return 'p(%s | %s)' % (sample_name, condition_name)
+        raise NotImplementedError()
 
 class DensityDecoder(DensityNet):
     def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel):
         super().__init__(in_dim, out_dim, dist_layer)
+
+    @property
+    def density_name(self):
+        sample_name = self.distribution.random_var_name
+        condition_name = 'Z^{%d}' % self._in_dim
+        return '$p(%s | %s)$' % (sample_name, condition_name)
 
     def forward(self, inputs):
         hidden = self.neural_layers(inputs)
@@ -150,7 +155,7 @@ class DensityEncoder(DensityNet):
     def density_name(self):
         sample_name = self.distribution.random_var_name
         condition_name = 'Z^{%d}' % self._in_dim
-        return 'q(%s | %s)' % (sample_name, condition_name)
+        return '$q(%s | %s)$' % (sample_name, condition_name)
 
     def forward(self, inputs):
         out_hidden = self.neural_layers(inputs)
