@@ -28,7 +28,7 @@ class DiagonalGaussian(TypedModel):
         super().__init__()
         self._dim = torch.Size([dim])
         if not latent_name:
-            latent_name = 'Z^{%d}' % self._dim[0]
+            latent_name = '$Z^{%d}$' % self._dim[0]
         self._latent_name = latent_name
         self.parameterization = nn.Linear(self._dim[0], self._dim[0] * 2)
 
