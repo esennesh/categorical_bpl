@@ -53,7 +53,7 @@ class StandardNormal(TypedModel):
     def __init__(self, dim, latent_name=None):
         super().__init__()
         if not latent_name:
-            latent_name = '$Z^{%d}$' % dim
+            latent_name = 'Z^{%d}' % dim
         self._latent_name = latent_name
         self._dim = dim
 
@@ -74,7 +74,7 @@ class StandardNormal(TypedModel):
         z_scale = self._batch.new_ones(torch.Size((self._batch.shape[0],
                                                    self._dim)))
         normal = dist.Normal(z_loc, z_scale).to_event(1)
-        return pyro.sample(self._latent_name, normal)
+        return pyro.sample('$%s$' % self._latent_name, normal)
 
 class ContinuousBernoulliModel(TypedModel):
     def __init__(self, obs_dim, observable_name=None):
