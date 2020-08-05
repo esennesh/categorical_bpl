@@ -238,6 +238,44 @@ class LadderDecoder(TypedModel):
 
         return self.distribution(hiddens)
 
+class LadderPrior(TypedModel):
+    def __init__(self, noise_dim, out_dim, out_dist=DiagonalGaussian,
+                 channels=1):
+        super().__init__()
+        self._in_dim = noise_dim
+        self._out_dim = out_dim
+        self._num_channels = channels
+
+        final_features = out_dim
+        if out_dist == DiagonalGaussian:
+            final_features *= 2
+        self.noise_dense = nn.Sequential(
+            nn.Linear(self._in_dim, self._out_dim),
+            nn.LayerNorm(self._out_dim), nn.PReLU(),
+            nn.Linear(self._out_dim, self._out_dim),
+            nn.LayerNorm(self._out_dim), nn.PReLU(),
+            nn.Linear(self._out_dim, self._out_dim),
+            nn.LayerNorm(self._out_dim), nn.PReLU(),
+            nn.Linear(self._out_dim, final_features)
+        )
+        self.distribution = out_dist(out_dim)
+
+    @property
+    def type(self):
+        return closed.CartesianClosed.ARROW(
+            types.tensor_type(torch.float, self._in_dim),
+            types.tensor_type(torch.float, self._out_dim)
+        )
+
+    @property
+    def name(self):
+        name = 'p(%s \\mid \\mathbb{R}^{%d})'
+        name = name % (self.distribution.random_var_name, self._in_dim)
+        return '$%s$' % name
+
+    def forward(self, noise):
+        return self.distribution(self.noise_dense(noise))
+
 class LadderEncoder(TypedModel):
     def __init__(self, in_dim, out_dim, out_dist, noise_dist, noise_dim=2,
                  channels=1, conv=False):
