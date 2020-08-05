@@ -30,7 +30,6 @@ class DiagonalGaussian(TypedModel):
         if not latent_name:
             latent_name = 'Z^{%d}' % self._dim[0]
         self._latent_name = latent_name
-        self.parameterization = nn.Linear(self._dim[0], self._dim[0] * 2)
 
     @property
     def random_var_name(self):
@@ -39,12 +38,12 @@ class DiagonalGaussian(TypedModel):
     @property
     def type(self):
         return closed.CartesianClosed.ARROW(
-            types.tensor_type(torch.float, self._dim),
+            types.tensor_type(torch.float, self._dim * 2),
             types.tensor_type(torch.float, self._dim),
         )
 
     def forward(self, inputs):
-        zs = self.parameterization(inputs).view(-1, 2, self._dim[0])
+        zs = inputs.view(-1, 2, self._dim[0])
         mean, std_dev = zs[:, 0], F.softplus(zs[:, 1])
         normal = dist.Normal(mean, std_dev).to_event(1)
         return pyro.sample('$%s$' % self._latent_name, normal)
@@ -112,12 +111,15 @@ class DensityNet(TypedModel):
         self._out_space = types.tensor_type(torch.float, torch.Size([out_dim]))
 
         hidden_dim = (in_dim + out_dim) // 2
+        final_features = out_dim
+        if dist_layer == DiagonalGaussian:
+            final_features *= 2
         self.add_module('neural_layers', nn.Sequential(
             nn.Linear(in_dim, hidden_dim), normalizer_layer(hidden_dim),
             nn.PReLU(),
             nn.Linear(hidden_dim, hidden_dim), normalizer_layer(hidden_dim),
             nn.PReLU(),
-            nn.Linear(hidden_dim, out_dim), normalizer_layer(out_dim),
+            nn.Linear(hidden_dim, final_features),
         ))
         self.add_module('distribution', dist_layer(out_dim))
 
