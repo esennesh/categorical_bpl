@@ -424,8 +424,40 @@ class VAECategoryModel(BaseModel):
                                               encoder.density_name)
             generators.append(generator)
 
-        global_elements = []
+            # Construct the VLAE decoder and encoder
+            if higher == self._data_dim:
+                decoder = LadderDecoder(lower, higher, noise_dim=2, conv=True,
+                                        out_dist=ContinuousBernoulliModel)
+                encoder = LadderEncoder(higher, lower, DiagonalGaussian,
+                                        DiagonalGaussian, noise_dim=2,
+                                        conv=True)
+            else:
+                decoder = LadderDecoder(lower, higher, noise_dim=2, conv=False,
+                                        out_dist=DiagonalGaussian)
+                encoder = LadderEncoder(higher, lower, DiagonalGaussian,
+                                        DiagonalGaussian, noise_dim=2,
+                                        conv=False)
+            in_space, out_space = decoder.type.arrow()
+            generator = closed.TypedDaggerBox(decoder.name, in_space, out_space,
+                                              decoder, encoder, encoder.name)
+            generators.append(generator)
+
+        # For each dimensionality, construct a prior/posterior ladder pair
         for dim in dims:
+            noise_space = types.tensor_type(torch.float, torch.Size([2]))
+            space = types.tensor_type(torch.float, torch.Size([dim]))
+            if dim == self._data_dim:
+                out_dist = ContinuousBernoulliModel
+            else:
+                out_dist = DiagonalGaussian
+            prior = LadderPrior(2, dim, out_dist)
+            posterior = LadderPosterior(dim, 2, DiagonalGaussian)
+            generator = closed.TypedDaggerBox(prior.name, noise_space, space,
+                                              prior, posterior, posterior.name)
+            generators.append(generator)
+
+        global_elements = []
+        for dim in [2] + dims:
             space = types.tensor_type(torch.float, torch.Size([dim]))
             prior = StandardNormal(dim)
             name = '$p(%s)$' % prior.random_var_name
