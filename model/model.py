@@ -362,6 +362,40 @@ class LadderEncoder(TypedModel):
 
         return hiddens, noise
 
+class LadderPosterior(TypedModel):
+    def __init__(self, in_dim, noise_dim, noise_dist):
+        super().__init__()
+        self._in_dim = in_dim
+        self._out_dim = noise_dim
+
+        self.distribution = noise_dist(noise_dim)
+        noise_features = noise_dim
+        if noise_dist == DiagonalGaussian:
+            noise_features *= 2
+
+        self.noise_dense = nn.Sequential(
+            nn.Linear(in_dim, in_dim), nn.LayerNorm(in_dim), nn.PReLU(),
+            nn.Linear(in_dim, in_dim), nn.LayerNorm(in_dim), nn.PReLU(),
+            nn.Linear(in_dim, in_dim), nn.LayerNorm(in_dim), nn.PReLU(),
+            nn.Linear(in_dim, noise_features),
+        )
+
+    @property
+    def type(self):
+        return closed.CartesianClosed.ARROW(
+            types.tensor_type(torch.float, self._in_dim),
+            types.tensor_type(torch.float, self._out_dim)
+        )
+
+    @property
+    def name(self):
+        name = 'q(%s \\mid %s)' % (self.distribution.random_var_name,
+                                   '\\mathbb{R}^{%d}' % self._in_dim)
+        return '$%s$' % name
+
+    def forward(self, ladder_input):
+        return self.distribution(self.noise_dense(ladder_input))
+
 VAE_MIN_DEPTH = 2
 
 class VAECategoryModel(BaseModel):
