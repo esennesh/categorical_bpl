@@ -111,12 +111,15 @@ class DensityNet(TypedModel):
         self._out_space = types.tensor_type(torch.float, torch.Size([out_dim]))
 
         hidden_dim = (in_dim + out_dim) // 2
+        final_features = out_dim
+        if dist_layer == DiagonalGaussian:
+            final_features *= 2
         self.add_module('neural_layers', nn.Sequential(
             nn.Linear(in_dim, hidden_dim), normalizer_layer(hidden_dim),
             nn.PReLU(),
             nn.Linear(hidden_dim, hidden_dim), normalizer_layer(hidden_dim),
             nn.PReLU(),
-            nn.Linear(hidden_dim, out_dim), normalizer_layer(out_dim),
+            nn.Linear(hidden_dim, final_features),
         ))
         self.add_module('distribution', dist_layer(out_dim))
 
