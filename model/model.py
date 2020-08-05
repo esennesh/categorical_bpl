@@ -5,6 +5,7 @@ from indexed import IndexedOrderedDict
 import itertools
 import matplotlib.pyplot as plt
 import networkx as nx
+import numpy as np
 import pyro
 from pyro.contrib.autoname import name_count
 import pyro.distributions as dist
