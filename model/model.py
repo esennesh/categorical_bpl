@@ -193,7 +193,7 @@ class VAECategoryModel(BaseModel):
         for dim in dims:
             space = types.tensor_type(torch.float, torch.Size([dim]))
             prior = StandardNormal(dim)
-            name = 'p(%s)' % prior.random_var_name
+            name = '$p(%s)$' % prior.random_var_name
             global_element = closed.TypedBox(name, closed.TOP, space, prior)
             global_elements.append(global_element)
 
