@@ -30,7 +30,6 @@ class DiagonalGaussian(TypedModel):
         if not latent_name:
             latent_name = 'Z^{%d}' % self._dim[0]
         self._latent_name = latent_name
-        self.parameterization = nn.Linear(self._dim[0], self._dim[0] * 2)
 
     @property
     def random_var_name(self):
@@ -39,12 +38,12 @@ class DiagonalGaussian(TypedModel):
     @property
     def type(self):
         return closed.CartesianClosed.ARROW(
-            types.tensor_type(torch.float, self._dim),
+            types.tensor_type(torch.float, self._dim * 2),
             types.tensor_type(torch.float, self._dim),
         )
 
     def forward(self, inputs):
-        zs = self.parameterization(inputs).view(-1, 2, self._dim[0])
+        zs = inputs.view(-1, 2, self._dim[0])
         mean, std_dev = zs[:, 0], F.softplus(zs[:, 1])
         normal = dist.Normal(mean, std_dev).to_event(1)
         return pyro.sample('$%s$' % self._latent_name, normal)
