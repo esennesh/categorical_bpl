@@ -23,10 +23,9 @@ class MnistTargetBatchDataLoader(BaseTargetBatchDataLoader):
         self.dataset = datasets.MNIST(self.data_dir, train=training, download=True, transform=trsfm)
         super().__init__(self.dataset, batch_size, shuffle, validation_split, num_workers, self.dataset.targets)
 
-rescaling = lambda x : (x - .5) * 2.
-flip = lambda x : - x
+flip = lambda x : 1 - x
 resizing = lambda x: x.resize((28,28))
-omni_transforms = transforms.Compose([resizing, transforms.ToTensor(), rescaling, flip])
+omni_transforms = transforms.Compose([resizing, transforms.ToTensor(), flip])
 
 class OmniglotTargetTransform:
     def __init__(self, data_dir, background=True):
