@@ -444,8 +444,8 @@ class VAECategoryModel(BaseModel):
 
         # For each dimensionality, construct a prior/posterior ladder pair
         for dim in dims:
-            noise_space = types.tensor_type(torch.float, torch.Size([2]))
-            space = types.tensor_type(torch.float, torch.Size([dim]))
+            noise_space = types.tensor_type(torch.float, 2)
+            space = types.tensor_type(torch.float, dim)
             if dim == self._data_dim:
                 out_dist = ContinuousBernoulliModel
             else:
@@ -458,7 +458,7 @@ class VAECategoryModel(BaseModel):
 
         global_elements = []
         for dim in [2] + dims:
-            space = types.tensor_type(torch.float, torch.Size([dim]))
+            space = types.tensor_type(torch.float, dim)
             prior = StandardNormal(dim)
             name = '$p(%s)$' % prior.random_var_name
             global_element = closed.TypedBox(name, closed.TOP, space, prior)
@@ -484,7 +484,7 @@ class VAECategoryModel(BaseModel):
 
     @property
     def data_space(self):
-        return types.tensor_type(torch.float, torch.Size([self._data_dim]))
+        return types.tensor_type(torch.float, self._data_dim)
 
     @pnn.pyro_method
     def model(self, observations=None):
