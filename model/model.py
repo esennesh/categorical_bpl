@@ -108,8 +108,8 @@ class DensityNet(TypedModel):
         super().__init__()
         self._in_dim = in_dim
         self._out_dim = out_dim
-        self._in_space = types.tensor_type(torch.float, torch.Size([in_dim]))
-        self._out_space = types.tensor_type(torch.float, torch.Size([out_dim]))
+        self._in_space = types.tensor_type(torch.float, in_dim)
+        self._out_space = types.tensor_type(torch.float, out_dim)
 
         hidden_dim = (in_dim + out_dim) // 2
         final_features = out_dim
