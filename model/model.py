@@ -65,7 +65,7 @@ class StandardNormal(TypedModel):
     def type(self):
         return closed.CartesianClosed.ARROW(
             closed.CartesianClosed.BASE(Ty()),
-            types.tensor_type(torch.float, torch.Size([self._dim])),
+            types.tensor_type(torch.float, self._dim),
         )
 
     def forward(self):
