@@ -472,7 +472,7 @@ class VAECategoryModel(BaseModel):
             nn.Linear(data_dim, guide_hidden_dim),
             nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
         )
-        self.guide_confidences = nn.Sequential(
+        self.guide_temperatures = nn.Sequential(
             nn.Linear(guide_hidden_dim, 1 * 2), nn.Softplus(),
         )
         self.guide_arrow_distances = nn.Sequential(
@@ -524,15 +524,15 @@ class VAECategoryModel(BaseModel):
 
         embedding = self.guide_embedding(data).mean(dim=0)
 
-        confidences = self.guide_confidences(embedding).view(1, 2)
-        confidence_gamma = dist.Gamma(confidences[0, 0],
-                                      confidences[0, 1]).to_event(0)
-        confidence = pyro.sample('distances_confidence', confidence_gamma)
+        temperatures = self.guide_temperatures(embedding).view(1, 2)
+        temperature_gamma = dist.Gamma(temperatures[0, 0],
+                                       temperatures[0, 1]).to_event(0)
+        temperature = pyro.sample('distances_temperature', temperature_gamma)
 
         data_arrow_distances = self.guide_arrow_distances(embedding)
 
         morphism = self._category(self.data_space, min_depth=VAE_MIN_DEPTH,
-                                  confidence=confidence,
+                                  temperature=temperature,
                                   arrow_distances=data_arrow_distances)
         with pyro.plate('data', len(data)):
             with name_count():
