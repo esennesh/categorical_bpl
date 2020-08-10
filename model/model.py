@@ -291,7 +291,7 @@ class LadderEncoder(TypedModel):
         if out_dist == DiagonalGaussian:
             out_features *= 2
         self.noise_distribution = noise_dist(noise_dim)
-        noise_features = out_dim
+        noise_features = noise_dim
         if out_dist == DiagonalGaussian:
             noise_features *= 2
 
@@ -304,7 +304,7 @@ class LadderEncoder(TypedModel):
                 nn.Conv2d(in_side, in_side * 2, 4, 2, 1),
                 nn.InstanceNorm2d(in_side * 2), nn.PReLU(),
             )
-            self.noise_linear = nn.Linear(in_side * 2 * (2 * 4) ** 2,
+            self.noise_linear = nn.Linear(in_side * 2 * (2 * 4 - 1) ** 2,
                                           noise_features)
 
             self.ladder_convs = nn.Sequential(
@@ -313,7 +313,7 @@ class LadderEncoder(TypedModel):
                 nn.Conv2d(in_side, in_side * 2, 4, 2, 1),
                 nn.InstanceNorm2d(in_side * 2), nn.PReLU(),
             )
-            self.ladder_linear = nn.Linear(in_side * 2 * (2 * 4) ** 2,
+            self.ladder_linear = nn.Linear(in_side * 2 * (2 * 4 - 1) ** 2,
                                            out_features)
         else:
             self.noise_dense = nn.Sequential(
@@ -346,14 +346,15 @@ class LadderEncoder(TypedModel):
     def forward(self, ladder_input):
         if self._convolve:
             in_side = int(np.sqrt(self._in_dim))
+            ladder_input = ladder_input.reshape(-1, 1, in_side, in_side)
 
             noise = self.noise_convs(ladder_input).reshape(
-                -1, in_side * 2 * (2 * 4) ** 2
+                -1, in_side * 2 * (2 * 4 - 1) ** 2
             )
             noise = self.noise_distribution(self.noise_linear(noise))
 
             hiddens = self.ladder_convs(ladder_input).reshape(
-                -1, in_side * 2 * (2 * 4) ** 2
+                -1, in_side * 2 * (2 * 4 - 1) ** 2
             )
             hiddens = self.ladder_distribution(self.ladder_linear(hiddens))
         else:
