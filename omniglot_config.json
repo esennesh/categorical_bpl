@@ -23,7 +23,7 @@
         "type": "Adam",
         "args":{
             "optim_args": {
-              "lr": 1e-3,
+              "lr": 1e-4,
               "weight_decay": 0,
               "amsgrad": true
             }
@@ -44,7 +44,7 @@
         "verbosity": 2,
 
         "monitor": "min val_loss",
-        "early_stop": 20,
+        "early_stop": 50,
 
         "tensorboard": true
     }
