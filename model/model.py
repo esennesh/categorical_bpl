@@ -398,6 +398,58 @@ class LadderPosterior(TypedModel):
     def forward(self, ladder_input):
         return self.distribution(self.noise_dense(ladder_input))
 
+def glimpse_transform(glimpse_code):
+    scalings = torch.eye(2).expand(glimpse_code.shape[0], 2, 2).to(glimpse_code)
+    scalings = scalings * glimpse_code[:, 0].view(-1, 1, 1)
+    return torch.cat((scalings, glimpse_code[:, 1:].unsqueeze(-1)), dim=-1)
+
+class SpatialTransformerWriter(TypedModel):
+    def __init__(self, out_dist, canvas_side=28, glimpse_side=7):
+        super().__init__()
+        self._canvas_side = canvas_side
+        self._glimpse_side = glimpse_side
+        canvas_name = 'Z^{%d}' % canvas_side ** 2
+        self.distribution = out_dist(self._canvas_side ** 2,
+                                     observable_name=canvas_name)
+
+    @property
+    def type(self):
+        canvas_type = types.tensor_type(torch.float, self._canvas_side ** 2)
+        glimpse_type = types.tensor_type(torch.float, self._glimpse_side ** 2)
+        triple = types.tensor_type(torch.float, 3)
+
+        return closed.CartesianClosed.ARROW(
+            closed.CartesianClosed.BASE(Ty(canvas_type, glimpse_type, triple)),
+            canvas_type
+        )
+
+    @property
+    def name(self):
+        canvas_name = 'Z^{%d}' % self._canvas_side ** 2
+        glimpse_name = 'Z^{%d}' % self._glimpse_side ** 2
+        inputs_tuple = ' \\times '.join([canvas_name, glimpse_name,
+                                         '\\mathbb{R}^{3}'])
+        name = 'p(%s \\mid %s)' % (self.distribution.random_var_name,
+                                   inputs_tuple)
+        return '$%s$' % name
+
+    def canvas_shape(self, imgs):
+        return torch.Size([imgs.shape[0], 1, self._canvas_side,
+                           self._canvas_side])
+
+    def glimpse_shape(self, imgs):
+        return torch.Size([imgs.shape[0], 1, self._glimpse_side,
+                           self._glimpse_side])
+
+    def forward(self, canvas, glimpse_contents, glimpse_params):
+        glimpse_transforms = glimpse_transform(glimpse_params)
+        grids = F.affine_grid(glimpse_transforms, self.canvas_shape(canvas),
+                              align_corners=True)
+        glimpse_contents = glimpse_contents.view(*self.glimpse_shape(canvas))
+        glimpse = F.grid_sample(glimpse_contents, grids, align_corners=True)
+        return self.distribution(canvas + glimpse.view(-1,
+                                                       self._canvas_side ** 2))
+
 VAE_MIN_DEPTH = 2
 
 class VAECategoryModel(BaseModel):
