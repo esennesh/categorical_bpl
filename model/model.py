@@ -403,6 +403,12 @@ def glimpse_transform(glimpse_code):
     scalings = scalings * glimpse_code[:, 0].view(-1, 1, 1)
     return torch.cat((scalings, glimpse_code[:, 1:].unsqueeze(-1)), dim=-1)
 
+def inverse_glimpse(glimpse_code):
+    coords = glimpse_code[:, 1:]
+    scalars = glimpse_code[:, 0]
+    return torch.cat((torch.ones(glimpse_code.shape[0], 1).to(coords), -coords),
+                     dim=-1) / scalars.unsqueeze(-1)
+
 class SpatialTransformerWriter(TypedModel):
     def __init__(self, out_dist, canvas_side=28, glimpse_side=7):
         super().__init__()
@@ -449,6 +455,74 @@ class SpatialTransformerWriter(TypedModel):
         glimpse = F.grid_sample(glimpse_contents, grids, align_corners=True)
         return self.distribution(canvas + glimpse.view(-1,
                                                        self._canvas_side ** 2))
+
+class SpatialTransformerReader(TypedModel):
+    def __init__(self, out_dist, canvas_dist, canvas_side=28, glimpse_side=7):
+        super().__init__()
+        self._canvas_side = canvas_side
+        self._glimpse_side = glimpse_side
+        self.glimpse_attention = nn.Sequential(
+            nn.Linear(self._canvas_side ** 2, self._canvas_side ** 2),
+            nn.LayerNorm(self._canvas_side ** 2), nn.PReLU(),
+            nn.Linear(self._canvas_side ** 2, 3 * 2),
+        )
+        self.coordinates_dist = out_dist(3)
+        canvas_name = 'Z^{%d}' % canvas_side ** 2
+        self.canvas_dist = canvas_dist(self._canvas_side ** 2,
+                                       observable_name=canvas_name)
+        glimpse_name = 'Z^{%d}' % glimpse_side ** 2
+        self.glimpse_dist = canvas_dist(self._glimpse_side ** 2,
+                                        observable_name=glimpse_name)
+
+    @property
+    def type(self):
+        canvas_type = types.tensor_type(torch.float, self._canvas_side ** 2)
+        glimpse_type = types.tensor_type(torch.float, self._glimpse_side ** 2)
+        triple = types.tensor_type(torch.float, 3)
+
+        return closed.CartesianClosed.ARROW(
+            canvas_type,
+            closed.CartesianClosed.BASE(Ty(canvas_type, glimpse_type, triple)),
+        )
+
+    @property
+    def name(self):
+        canvas_name = 'Z^{%d}' % self._canvas_side ** 2
+        glimpse_name = 'Z^{%d}' % self._glimpse_side ** 2
+        outputs_tuple = ' \\times '.join([canvas_name, glimpse_name,
+                                          '\\mathbb{R}^{3}'])
+        name = 'q(%s \\mid %s)' % (outputs_tuple, canvas_name)
+        return '$%s$' % name
+
+    def canvas_shape(self, imgs):
+        return torch.Size([imgs.shape[0], 1, self._canvas_side,
+                           self._canvas_side])
+
+    def glimpse_shape(self, imgs):
+        return torch.Size([imgs.shape[0], 1, self._glimpse_side,
+                           self._glimpse_side])
+
+    def forward(self, images):
+        flat_images = images.view(-1, self._canvas_side ** 2)
+        coords = self.glimpse_attention(flat_images)
+        coords = self.coordinates_dist(coords)
+        transforms = glimpse_transform(inverse_glimpse(coords))
+
+        grid = F.affine_grid(transforms, self.glimpse_shape(images),
+                             align_corners=True)
+        glimpse = F.grid_sample(images.view(*self.canvas_shape(images)), grid,
+                                align_corners=True)
+        glimpse = self.glimpse_dist(glimpse)
+
+        recon_transforms = glimpse_transform(coords)
+        recon_grid = F.affine_grid(recon_transforms, self.canvas_shape(images),
+                                   align_corners=True)
+        glimpse_recon = F.grid_sample(glimpse.view(*self.glimpse_shape(images)),
+                                      recon_grid, align_corners=True)
+        glimpse_recon = glimpse_recon.view(-1, self._canvas_side ** 2)
+        residual = self.canvas_dist(images - glimpse_recon)
+
+        return residual, glimpse, coords
 
 VAE_MIN_DEPTH = 2
 
