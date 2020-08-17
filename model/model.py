@@ -533,7 +533,8 @@ class VAECategoryModel(BaseModel):
 
         # Build up a bunch of torch.Sizes for the powers of two between
         # hidden_dim and data_dim.
-        dims = list(util.powers_of(2, hidden_dim, data_dim))
+        dims = list(util.powers_of(2, hidden_dim, data_dim)) + [49]
+        dims.sort()
 
         generators = []
         for dim_a, dim_b in itertools.combinations(dims, 2):
@@ -584,8 +585,17 @@ class VAECategoryModel(BaseModel):
                                               prior, posterior, posterior.name)
             generators.append(generator)
 
+        # Construct writer/reader pair for spatial attention
+        writer = SpatialTransformerWriter(ContinuousBernoulliModel)
+        writer_l, writer_r = writer.type.arrow()
+        reader = SpatialTransformerReader(DiagonalGaussian,
+                                          ContinuousBernoulliModel)
+        generator = closed.TypedDaggerBox(writer.name, writer_l, writer_r,
+                                          writer, reader, reader.name)
+        generators.append(generator)
+
         global_elements = []
-        for dim in [2] + dims:
+        for dim in {2, 3} | set(dims) - {784}:
             space = types.tensor_type(torch.float, dim)
             prior = StandardNormal(dim)
             name = '$p(%s)$' % prior.random_var_name
