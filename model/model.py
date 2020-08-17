@@ -99,7 +99,7 @@ class ContinuousBernoulliModel(TypedModel):
         with name_count():
             xs = torch.sigmoid(inputs.view(-1, self._obs_dim[0]))
             bernoulli = ContinuousBernoulli(probs=xs).to_event(1)
-            pyro.sample(self._observable_name, bernoulli)
+            pyro.sample('$%s$' % self._observable_name, bernoulli)
             return xs
 
 class DensityNet(TypedModel):
@@ -502,7 +502,7 @@ class VAECategoryModel(BaseModel):
 
         morphism = self._category(self.data_space, min_depth=VAE_MIN_DEPTH)
         if observations is not None:
-            conditions = {'X^{%d}' % self._data_dim: data}
+            conditions = {'$X^{%d}$' % self._data_dim: data}
             score_morphism = pyro.condition(morphism, data=conditions)
         else:
             score_morphism = morphism
