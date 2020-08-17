@@ -502,7 +502,7 @@ class VAECategoryModel(BaseModel):
 
         morphism = self._category(self.data_space, min_depth=VAE_MIN_DEPTH)
         if observations is not None:
-            conditions = {'X^{%d}' % self._data_dim: data}
+            conditions = {'$X^{%d}$' % self._data_dim: data}
             score_morphism = pyro.condition(morphism, data=conditions)
         else:
             score_morphism = morphism
