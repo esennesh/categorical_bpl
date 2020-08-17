@@ -96,11 +96,10 @@ class ContinuousBernoulliModel(TypedModel):
         )
 
     def forward(self, inputs):
-        with name_count():
-            xs = torch.sigmoid(inputs.view(-1, self._obs_dim[0]))
-            bernoulli = ContinuousBernoulli(probs=xs).to_event(1)
-            pyro.sample('$%s$' % self._observable_name, bernoulli)
-            return xs
+        xs = torch.sigmoid(inputs.view(-1, self._obs_dim[0]))
+        bernoulli = ContinuousBernoulli(probs=xs).to_event(1)
+        pyro.sample('$%s$' % self._observable_name, bernoulli)
+        return xs
 
 class DensityNet(TypedModel):
     def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel,
