@@ -99,7 +99,7 @@ class ContinuousBernoulliModel(TypedModel):
         with name_count():
             xs = torch.sigmoid(inputs.view(-1, self._obs_dim[0]))
             bernoulli = ContinuousBernoulli(probs=xs).to_event(1)
-            pyro.sample(self._observable_name, bernoulli)
+            pyro.sample('$%s$' % self._observable_name, bernoulli)
             return xs
 
 class DensityNet(TypedModel):
