@@ -1,4 +1,5 @@
 from abc import abstractproperty
+import collections
 from discopy import Ty
 from discopyro import cartesian_cat, closed
 from indexed import IndexedOrderedDict
@@ -19,6 +20,7 @@ import torch.nn.functional as F
 from base import BaseModel, TypedModel
 import base.base_type as types
 import utils.util as util
+from utils.name_stack import name_push, name_pop
 
 class ContinuousBernoulli(torch.distributions.ContinuousBernoulli,
                           dist.torch_distribution.TorchDistributionMixin):
@@ -482,6 +484,8 @@ class VAECategoryModel(BaseModel):
             nn.Softplus()
         )
 
+        self._random_variable_names = collections.defaultdict(int)
+
     @property
     def data_space(self):
         return types.tensor_type(torch.float, self._data_dim)
@@ -506,7 +510,7 @@ class VAECategoryModel(BaseModel):
         else:
             score_morphism = morphism
         with pyro.plate('data', len(data)):
-            with name_count():
+            with name_pop(name_stack=self._random_variable_names):
                 output = score_morphism()
         return morphism, output
 
@@ -534,7 +538,7 @@ class VAECategoryModel(BaseModel):
                                   temperature=temperature,
                                   arrow_distances=data_arrow_distances)
         with pyro.plate('data', len(data)):
-            with name_count():
+            with name_push(name_stack=self._random_variable_names):
                 morphism[::-1](data)
 
         return morphism
