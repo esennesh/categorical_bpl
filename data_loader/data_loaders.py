@@ -55,6 +55,7 @@ class OmniglotTargetBatchDataLoader(BaseTargetBatchDataLoader):
     """
     def __init__(self, data_dir, batch_size, shuffle=True, validation_split=0.0, num_workers=1, background=True):
         self.data_dir = data_dir
+        dataset = datasets.Omniglot(self.data_dir, download=True)
         target_transform = OmniglotTargetTransform(self.data_dir, background=background)
         self.dataset = datasets.Omniglot(self.data_dir, background=background, download=True, transform=omni_transforms, target_transform=target_transform)
         self.targets = np.array([self.dataset[i][1] for i in range(len(self.dataset))])
