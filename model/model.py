@@ -11,7 +11,6 @@ import pyro
 from pyro.contrib.autoname import name_count
 import pyro.distributions as dist
 import pyro.nn as pnn
-import pytorch_expm.expm_taylor as expm
 import torch
 import torch.distributions
 import torch.distributions.constraints as constraints
@@ -605,19 +604,10 @@ class VAECategoryModel(BaseModel):
         self._category = cartesian_cat.CartesianCategory(generators,
                                                          global_elements)
 
-        self.guide_embedding = nn.Sequential(
+        self.guide_temperatures = nn.Sequential(
             nn.Linear(data_dim, guide_hidden_dim),
             nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
-        )
-        self.guide_temperatures = nn.Sequential(
             nn.Linear(guide_hidden_dim, 1 * 2), nn.Softplus(),
-        )
-        self.guide_arrow_distances = nn.Sequential(
-            nn.Linear(guide_hidden_dim, guide_hidden_dim),
-            nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
-            nn.Linear(guide_hidden_dim,
-                      self._category.arrow_distances.shape[0]),
-            nn.Softplus()
         )
 
         self._random_variable_names = collections.defaultdict(int)
@@ -661,18 +651,13 @@ class VAECategoryModel(BaseModel):
             if isinstance(module, BaseModel):
                 module.set_batching(data)
 
-        embedding = self.guide_embedding(data).mean(dim=0)
-
-        temperatures = self.guide_temperatures(embedding).view(1, 2)
+        temperatures = self.guide_temperatures(data).mean(dim=0).view(1, 2)
         temperature_gamma = dist.Gamma(temperatures[0, 0],
                                        temperatures[0, 1]).to_event(0)
         temperature = pyro.sample('distances_temperature', temperature_gamma)
 
-        data_arrow_distances = self.guide_arrow_distances(embedding)
-
         morphism = self._category(self.data_space, min_depth=VAE_MIN_DEPTH,
-                                  temperature=temperature,
-                                  arrow_distances=data_arrow_distances)
+                                  temperature=temperature)
         with pyro.plate('data', len(data)):
             with name_push(name_stack=self._random_variable_names):
                 morphism[::-1](data)
