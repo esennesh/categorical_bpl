@@ -609,6 +609,13 @@ class VAECategoryModel(BaseModel):
             nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
             nn.Linear(guide_hidden_dim, 1 * 2), nn.Softplus(),
         )
+        self.guide_arrow_distances = nn.Sequential(
+            nn.Linear(data_dim, guide_hidden_dim),
+            nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
+            nn.Linear(guide_hidden_dim,
+                      self._category.arrow_distance_alphas.shape[0] * 2),
+            nn.Softplus()
+        )
 
         self._random_variable_names = collections.defaultdict(int)
 
@@ -656,8 +663,17 @@ class VAECategoryModel(BaseModel):
                                        temperatures[0, 1]).to_event(0)
         temperature = pyro.sample('distances_temperature', temperature_gamma)
 
+        data_arrow_distances = self.guide_arrow_distances(data)
+        data_arrow_distances = data_arrow_distances.mean(dim=0).view(-1, 2)
+        arrow_distances = pyro.sample(
+            'arrow_distances',
+            dist.Gamma(data_arrow_distances[:, 0],
+                       data_arrow_distances[:, 1]).to_event(0)
+        )
+
         morphism = self._category(self.data_space, min_depth=VAE_MIN_DEPTH,
-                                  temperature=temperature)
+                                  temperature=temperature,
+                                  arrow_distances=arrow_distances)
         with pyro.plate('data', len(data)):
             with name_push(name_stack=self._random_variable_names):
                 morphism[::-1](data)
