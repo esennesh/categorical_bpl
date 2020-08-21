@@ -11,7 +11,6 @@ import pyro
 from pyro.contrib.autoname import name_count
 import pyro.distributions as dist
 import pyro.nn as pnn
-import pytorch_expm.expm_taylor as expm
 import torch
 import torch.distributions
 import torch.distributions.constraints as constraints
