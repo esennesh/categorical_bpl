@@ -668,7 +668,7 @@ class VAECategoryModel(BaseModel):
         arrow_distances = pyro.sample(
             'arrow_distances',
             dist.Gamma(data_arrow_distances[:, 0],
-                       data_arrow_distances[:, 1]).to_event(0)
+                       data_arrow_distances[:, 1]).to_event(1)
         )
 
         morphism = self._category(self.data_space, min_depth=VAE_MIN_DEPTH,
