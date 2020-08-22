@@ -626,7 +626,7 @@ class VAECategoryModel(BaseModel):
     @pnn.pyro_method
     def model(self, observations=None):
         if isinstance(observations, dict):
-            data = observations['X^{%d}' % self._data_dim]
+            data = observations['$X^{%d}$' % self._data_dim]
         else:
             data = observations
         if data is None:
@@ -650,7 +650,7 @@ class VAECategoryModel(BaseModel):
     @pnn.pyro_method
     def guide(self, observations=None):
         if isinstance(observations, dict):
-            data = observations['X^{%d}' % self._data_dim]
+            data = observations['$X^{%d}$' % self._data_dim]
         else:
             data = observations
         data = data.view(data.shape[0], self._data_dim)
