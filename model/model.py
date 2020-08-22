@@ -98,7 +98,7 @@ class ContinuousBernoulliModel(TypedModel):
 
     def forward(self, inputs):
         xs = torch.sigmoid(inputs.view(-1, self._obs_dim[0]))
-        bernoulli = ContinuousBernoulli(probs=xs).to_event(1)
+        bernoulli = ContinuousBernoulli(probs=xs).to_event(2)
         pyro.sample('$%s$' % self._observable_name, bernoulli)
         return xs
 
