@@ -1,6 +1,7 @@
 import collections
 from discopyro import cartesian_cat, closed
 import itertools
+import math
 import matplotlib.pyplot as plt
 import pyro
 from pyro.contrib.autoname import name_count
@@ -211,3 +212,45 @@ class VlaeCategoryModel(CategoryModel):
             generators.append(generator)
 
         super().__init__(generators, [], data_dim, guide_hidden_dim)
+
+class GlimpseCategoryModel(CategoryModel):
+    def __init__(self, data_dim=28*28, hidden_dim=4, guide_hidden_dim=256):
+        self._data_dim = data_dim
+        data_side = int(math.sqrt(self._data_dim))
+        glimpse_side = data_side // 4
+        glimpse_dim = glimpse_side ** 2
+        glimpse_space = types.tensor_type(torch.float, glimpse_dim)
+
+        # Build up a bunch of torch.Sizes for the powers of two between
+        # hidden_dim and data_dim.
+        dims = list(util.powers_of(2, hidden_dim, glimpse_dim))
+        dims.sort()
+
+        generators = []
+        for dim in dims:
+            in_space = types.tensor_type(torch.float, dim)
+            prior = LadderPrior(dim, glimpse_dim, ContinuousBernoulliModel)
+            posterior = LadderPosterior(glimpse_dim, dim, DiagonalGaussian)
+            generator = closed.TypedDaggerBox(prior.name, in_space,
+                                              glimpse_space, prior, posterior,
+                                              posterior.name)
+            generators.append(generator)
+
+        background = NullPrior(self._data_dim)
+        top, space = background.type.arrow()
+        name = '$Null(%d)$' % self._data_dim
+        global_element = closed.TypedBox(name, top, space, background)
+
+        # Construct writer/reader pair for spatial attention
+        writer = SpatialTransformerWriter(ContinuousBernoulliModel, data_side,
+                                          glimpse_side)
+        writer_l, writer_r = writer.type.arrow()
+        reader = SpatialTransformerReader(DiagonalGaussian,
+                                          ContinuousBernoulliModel, data_side,
+                                          glimpse_side)
+        generator = closed.TypedDaggerBox(writer.name, writer_l, writer_r,
+                                          writer, reader, reader.name)
+        generators.append(generator)
+
+        super().__init__(generators, [global_element], data_dim,
+                         guide_hidden_dim)
