@@ -473,18 +473,24 @@ class SpatialTransformerReader(TypedModel):
         super().__init__()
         self._canvas_side = canvas_side
         self._glimpse_side = glimpse_side
-        self.glimpse_attention = nn.Sequential(
-            nn.Linear(self._canvas_side ** 2, self._canvas_side ** 2),
-            nn.LayerNorm(self._canvas_side ** 2), nn.PReLU(),
-            nn.Linear(self._canvas_side ** 2, 3 * 2),
+        self.glimpse_conv = nn.Sequential(
+            nn.Conv2d(1, canvas_side, 4, 2, 1),
+            nn.InstanceNorm2d(canvas_side), nn.PReLU(),
+            nn.Conv2d(canvas_side, canvas_side * 2, 4, 2, 1),
+            nn.InstanceNorm2d(canvas_side * 2), nn.PReLU(),
+            nn.Conv2d(canvas_side * 2, canvas_side * 4, 4, 2, 1),
+            nn.InstanceNorm2d(canvas_side * 4), nn.PReLU(),
+            nn.Conv2d(canvas_side * 4, canvas_side * 8, 4, 2, 1),
+            nn.InstanceNorm2d(canvas_side * 8), nn.PReLU(),
         )
+        self.glimpse_dense = nn.Linear(canvas_side * 8, 3 * 2)
         self.coordinates_dist = out_dist(3)
-        canvas_name = 'Z^{%d}' % canvas_side ** 2
+        canvas_name = 'X^{%d}' % canvas_side ** 2
         self.canvas_dist = canvas_dist(self._canvas_side ** 2,
-                                       observable_name=canvas_name)
+                                       random_var_name=canvas_name)
         glimpse_name = 'Z^{%d}' % glimpse_side ** 2
         self.glimpse_dist = canvas_dist(self._glimpse_side ** 2,
-                                        observable_name=glimpse_name)
+                                        random_var_name=glimpse_name)
 
     @property
     def type(self):
@@ -515,8 +521,10 @@ class SpatialTransformerReader(TypedModel):
                            self._glimpse_side])
 
     def forward(self, images):
+        images = images.view(-1, 1, self._canvas_side, self._canvas_side)
         flat_images = images.view(-1, self._canvas_side ** 2)
-        coords = self.glimpse_attention(flat_images)
+        coords = self.glimpse_conv(images).view(-1, self._canvas_side * 8)
+        coords = self.glimpse_dense(coords)
         coords = self.coordinates_dist(coords)
         transforms = glimpse_transform(inverse_glimpse(coords))
 
@@ -532,6 +540,6 @@ class SpatialTransformerReader(TypedModel):
         glimpse_recon = F.grid_sample(glimpse.view(*self.glimpse_shape(images)),
                                       recon_grid, align_corners=True)
         glimpse_recon = glimpse_recon.view(-1, self._canvas_side ** 2)
-        residual = self.canvas_dist(images - glimpse_recon)
+        residual = self.canvas_dist(flat_images - glimpse_recon)
 
         return residual, glimpse, coords
