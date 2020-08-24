@@ -18,7 +18,8 @@ from utils.name_stack import name_push, name_pop
 VAE_MIN_DEPTH = 2
 
 class CategoryModel(BaseModel):
-    def __init__(self, generators, data_dim=28*28, guide_hidden_dim=256):
+    def __init__(self, generators, global_elements=[], data_dim=28*28,
+                 guide_hidden_dim=256):
         super().__init__()
         self._data_dim = data_dim
         self._observation_name = '$X^{%d}$' % self._data_dim
@@ -27,7 +28,6 @@ class CategoryModel(BaseModel):
         for generator in generators:
             obs = obs | generator.type.base_elements()
 
-        global_elements = []
         for ob in obs:
             dim = types.type_size(ob.name)
             if dim == self._data_dim:
