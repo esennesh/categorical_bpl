@@ -91,28 +91,28 @@ class NullPrior(TypedModel):
         return pyro.sample('$%s$' % self._random_var_name, bernoulli)
 
 class ContinuousBernoulliModel(TypedModel):
-    def __init__(self, obs_dim, observable_name=None):
+    def __init__(self, dim, random_var_name=None):
         super().__init__()
-        self._obs_dim = torch.Size([obs_dim])
-        if not observable_name:
-            observable_name = 'X^{%d}' % self._obs_dim[0]
-        self._observable_name = observable_name
+        self._dim = torch.Size([dim])
+        if not random_var_name:
+            random_var_name = 'Z^{%d}' % self._dim[0]
+        self._random_var_name = random_var_name
 
     @property
     def random_var_name(self):
-        return self._observable_name
+        return self._random_var_name
 
     @property
     def type(self):
         return closed.CartesianClosed.ARROW(
-            types.tensor_type(torch.float, self._obs_dim),
-            types.tensor_type(torch.float, self._obs_dim),
+            types.tensor_type(torch.float, self._dim),
+            types.tensor_type(torch.float, self._dim),
         )
 
     def forward(self, inputs):
-        xs = torch.sigmoid(inputs.view(-1, self._obs_dim[0]))
+        xs = torch.sigmoid(inputs.view(-1, self._dim[0]))
         bernoulli = ContinuousBernoulli(probs=xs).to_event(1)
-        pyro.sample('$%s$' % self._observable_name, bernoulli)
+        pyro.sample('$%s$' % self._random_var_name, bernoulli)
         return xs
 
 class DensityNet(TypedModel):
