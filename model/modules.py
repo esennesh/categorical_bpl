@@ -67,6 +67,29 @@ class StandardNormal(TypedModel):
         normal = dist.Normal(z_loc, z_scale).to_event(1)
         return pyro.sample('$%s$' % self._latent_name, normal)
 
+class NullPrior(TypedModel):
+    def __init__(self, dim, random_var_name=None):
+        super().__init__()
+        self._dim = dim
+        if not random_var_name:
+            random_var_name = 'X^{%d}' % self._dim[0]
+        self._random_var_name = random_var_name
+
+    @property
+    def random_var_name(self):
+        return self._random_var_name
+
+    @property
+    def type(self):
+        return closed.CartesianClosed.ARROW(
+            closed.TOP, types.tensor_type(torch.float, self._dim),
+        )
+
+    def forward(self):
+        size = torch.Size((self._batch.shape[0], self._dim))
+        bernoulli = ContinuousBernoulli(self._batch.new_zeros(size)).to_event(1)
+        return pyro.sample('$%s$' % self._random_var_name, bernoulli)
+
 class ContinuousBernoulliModel(TypedModel):
     def __init__(self, obs_dim, observable_name=None):
         super().__init__()
