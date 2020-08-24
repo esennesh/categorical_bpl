@@ -426,9 +426,9 @@ class SpatialTransformerWriter(TypedModel):
         super().__init__()
         self._canvas_side = canvas_side
         self._glimpse_side = glimpse_side
-        canvas_name = 'Z^{%d}' % canvas_side ** 2
+        canvas_name = 'X^{%d}' % canvas_side ** 2
         self.distribution = out_dist(self._canvas_side ** 2,
-                                     observable_name=canvas_name)
+                                     random_var_name=canvas_name)
 
     @property
     def type(self):
