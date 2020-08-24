@@ -141,13 +141,13 @@ class CategoryModel(BaseModel):
             )
         return self.model(observations=None)
 
-class VAECategoryModel(CategoryModel):
-    def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=256):
+class VaeCategoryModel(CategoryModel):
+    def __init__(self, data_dim=28*28, hidden_dim=8, guide_hidden_dim=256):
         self._data_dim = data_dim
 
         # Build up a bunch of torch.Sizes for the powers of two between
         # hidden_dim and data_dim.
-        dims = list(util.powers_of(2, hidden_dim, data_dim)) + [49]
+        dims = list(util.powers_of(2, hidden_dim, data_dim))
         dims.sort()
 
         generators = []
@@ -167,45 +167,4 @@ class VAECategoryModel(CategoryModel):
                                               encoder.density_name)
             generators.append(generator)
 
-            # Construct the VLAE decoder and encoder
-            if higher == self._data_dim:
-                decoder = LadderDecoder(lower, higher, noise_dim=2, conv=True,
-                                        out_dist=ContinuousBernoulliModel)
-                encoder = LadderEncoder(higher, lower, DiagonalGaussian,
-                                        DiagonalGaussian, noise_dim=2,
-                                        conv=True)
-            else:
-                decoder = LadderDecoder(lower, higher, noise_dim=2, conv=False,
-                                        out_dist=DiagonalGaussian)
-                encoder = LadderEncoder(higher, lower, DiagonalGaussian,
-                                        DiagonalGaussian, noise_dim=2,
-                                        conv=False)
-            in_space, out_space = decoder.type.arrow()
-            generator = closed.TypedDaggerBox(decoder.name, in_space, out_space,
-                                              decoder, encoder, encoder.name)
-            generators.append(generator)
-
-        # For each dimensionality, construct a prior/posterior ladder pair
-        for dim in dims:
-            noise_space = types.tensor_type(torch.float, 2)
-            space = types.tensor_type(torch.float, dim)
-            if dim == self._data_dim:
-                out_dist = ContinuousBernoulliModel
-            else:
-                out_dist = DiagonalGaussian
-            prior = LadderPrior(2, dim, out_dist)
-            posterior = LadderPosterior(dim, 2, DiagonalGaussian)
-            generator = closed.TypedDaggerBox(prior.name, noise_space, space,
-                                              prior, posterior, posterior.name)
-            generators.append(generator)
-
-        # Construct writer/reader pair for spatial attention
-        writer = SpatialTransformerWriter(ContinuousBernoulliModel)
-        writer_l, writer_r = writer.type.arrow()
-        reader = SpatialTransformerReader(DiagonalGaussian,
-                                          ContinuousBernoulliModel)
-        generator = closed.TypedDaggerBox(writer.name, writer_l, writer_r,
-                                          writer, reader, reader.name)
-        generators.append(generator)
-
-        super().__init__(generators, data_dim, guide_hidden_dim)
+        super().__init__(generators, [], data_dim, guide_hidden_dim)
