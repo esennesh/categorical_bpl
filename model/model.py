@@ -181,9 +181,7 @@ class VlaeCategoryModel(CategoryModel):
         dims.sort()
 
         generators = []
-        for dim_a, dim_b in itertools.combinations(dims, 2):
-            lower, higher = sorted([dim_a, dim_b])
-
+        for lower, higher in zip(dims, dims[1:]):
             # Construct the VLAE decoder and encoder
             if higher == self._data_dim:
                 decoder = LadderDecoder(lower, higher, noise_dim=2, conv=True,
@@ -203,14 +201,10 @@ class VlaeCategoryModel(CategoryModel):
             generators.append(generator)
 
         # For each dimensionality, construct a prior/posterior ladder pair
-        for dim in dims:
+        for dim in set(dims) - {data_dim}:
             noise_space = types.tensor_type(torch.float, 2)
             space = types.tensor_type(torch.float, dim)
-            if dim == self._data_dim:
-                out_dist = ContinuousBernoulliModel
-            else:
-                out_dist = DiagonalGaussian
-            prior = LadderPrior(2, dim, out_dist)
+            prior = LadderPrior(2, dim, DiagonalGaussian)
             posterior = LadderPosterior(dim, 2, DiagonalGaussian)
             generator = closed.TypedDaggerBox(prior.name, noise_space, space,
                                               prior, posterior, posterior.name)
