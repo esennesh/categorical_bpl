@@ -637,11 +637,10 @@ class VAECategoryModel(BaseModel):
                 module.set_batching(data)
 
         morphism = self._category(self.data_space, min_depth=VAE_MIN_DEPTH)
+        score_morphism = morphism >> self.likelihood
         if observations is not None:
             conditions = {'$X^{%d}$' % self._data_dim: data}
-            score_morphism = pyro.condition(morphism, data=conditions)
-        else:
-            score_morphism = morphism
+            score_morphism = pyro.condition(score_morphism, data=conditions)
         with pyro.plate('data', len(data)):
             with name_pop(name_stack=self._random_variable_names):
                 output = score_morphism()
