@@ -217,7 +217,7 @@ class GlimpseCategoryModel(CategoryModel):
     def __init__(self, data_dim=28*28, hidden_dim=4, guide_hidden_dim=256):
         self._data_dim = data_dim
         data_side = int(math.sqrt(self._data_dim))
-        glimpse_side = data_side // 4
+        glimpse_side = data_side // 2
         glimpse_dim = glimpse_side ** 2
         glimpse_space = types.tensor_type(torch.float, glimpse_dim)
 
