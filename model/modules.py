@@ -95,7 +95,7 @@ class ContinuousBernoulliModel(TypedModel):
         super().__init__()
         self._dim = torch.Size([dim])
         if not random_var_name:
-            random_var_name = 'Z^{%d}' % self._dim[0]
+            random_var_name = 'X^{%d}' % self._dim[0]
         self._random_var_name = random_var_name
 
     @property
