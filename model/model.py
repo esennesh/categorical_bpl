@@ -239,7 +239,12 @@ class GlimpseCategoryModel(CategoryModel):
         background = NullPrior(self._data_dim)
         top, space = background.type.arrow()
         name = '$Null(%d)$' % self._data_dim
-        global_element = closed.TypedBox(name, top, space, background)
+        global_elements = [closed.TypedBox(name, top, space, background)]
+
+        gaze = GlimpsePrior()
+        top, space = gaze.type.arrow()
+        name = '$p(%s)$' % gaze.random_var_name
+        global_elements.append(closed.TypedBox(name, top, space, gaze))
 
         # Construct writer/reader pair for spatial attention
         writer = SpatialTransformerWriter(ContinuousBernoulliModel, data_side,
@@ -252,5 +257,5 @@ class GlimpseCategoryModel(CategoryModel):
                                           writer, reader, reader.name)
         generators.append(generator)
 
-        super().__init__(generators, [global_element], data_dim,
+        super().__init__(generators, global_elements, data_dim,
                          guide_hidden_dim)
