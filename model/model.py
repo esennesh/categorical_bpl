@@ -609,11 +609,11 @@ class VAECategoryModel(BaseModel):
             nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
             nn.Linear(guide_hidden_dim, 1 * 2), nn.Softplus(),
         )
-        self.guide_arrow_distances = nn.Sequential(
+        self.guide_arrow_weights = nn.Sequential(
             nn.Linear(data_dim, guide_hidden_dim),
             nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
             nn.Linear(guide_hidden_dim,
-                      self._category.arrow_distance_alphas.shape[0] * 2),
+                      self._category.arrow_weight_alphas.shape[0] * 2),
             nn.Softplus()
         )
 
@@ -661,19 +661,19 @@ class VAECategoryModel(BaseModel):
         temperatures = self.guide_temperatures(data).mean(dim=0).view(1, 2)
         temperature_gamma = dist.Gamma(temperatures[0, 0],
                                        temperatures[0, 1]).to_event(0)
-        temperature = pyro.sample('distances_temperature', temperature_gamma)
+        temperature = pyro.sample('weights_temperature', temperature_gamma)
 
-        data_arrow_distances = self.guide_arrow_distances(data)
-        data_arrow_distances = data_arrow_distances.mean(dim=0).view(-1, 2)
-        arrow_distances = pyro.sample(
-            'arrow_distances',
-            dist.Gamma(data_arrow_distances[:, 0],
-                       data_arrow_distances[:, 1]).to_event(1)
+        data_arrow_weights = self.guide_arrow_weights(data)
+        data_arrow_weights = data_arrow_weights.mean(dim=0).view(-1, 2)
+        arrow_weights = pyro.sample(
+            'arrow_weights',
+            dist.Beta(data_arrow_weights[:, 0],
+                      data_arrow_weights[:, 1]).to_event(1)
         )
 
         morphism = self._category(self.data_space, min_depth=VAE_MIN_DEPTH,
                                   temperature=temperature,
-                                  arrow_distances=arrow_distances)
+                                  arrow_weights=arrow_weights)
         with pyro.plate('data', len(data)):
             with name_push(name_stack=self._random_variable_names):
                 morphism[::-1](data)
