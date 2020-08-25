@@ -4,6 +4,7 @@ from discopyro import cartesian_cat, closed
 import numpy as np
 import pyro
 import pyro.distributions as dist
+import pyro.nn as pnn
 import torch.distributions
 import torch.distributions.constraints as constraints
 import torch.nn as nn
@@ -543,3 +544,27 @@ class SpatialTransformerReader(TypedModel):
         residual = self.canvas_dist(flat_images - glimpse_recon)
 
         return residual, glimpse, coords
+
+class GlimpsePrior(TypedModel):
+    def __init__(self, latent_name=None):
+        super().__init__()
+        if not latent_name:
+            latent_name = 'Z^{%d}' % 3
+        self._latent_name = latent_name
+        self.loc = pnn.PyroParam(torch.tensor([3., 0., 0.]))
+        self.scale = pnn.PyroParam(torch.tensor([0.1, 1., 1.]),
+                                   constraint=constraints.positive)
+
+    @property
+    def random_var_name(self):
+        return self._latent_name
+
+    @property
+    def type(self):
+        return closed.CartesianClosed.ARROW(
+            closed.TOP, types.tensor_type(torch.float, 3),
+        )
+
+    def forward(self):
+        normal = dist.Normal(self.loc, self.scale).to_event(1)
+        return pyro.sample('$%s$' % self._latent_name, normal)
