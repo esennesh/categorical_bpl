@@ -221,6 +221,9 @@ class GlimpseCategoryModel(CategoryModel):
         glimpse_dim = glimpse_side ** 2
         glimpse_space = types.tensor_type(torch.float, glimpse_dim)
 
+        latent_bernoulli = lambda dim: ContinuousBernoulliModel(dim,
+                                                                'Z^{%d}' % dim)
+
         # Build up a bunch of torch.Sizes for the powers of two between
         # hidden_dim and data_dim.
         dims = list(util.powers_of(2, hidden_dim, glimpse_dim))
@@ -229,16 +232,17 @@ class GlimpseCategoryModel(CategoryModel):
         generators = []
         for dim in dims:
             in_space = types.tensor_type(torch.float, dim)
-            prior = LadderPrior(dim, glimpse_dim, ContinuousBernoulliModel)
+            prior = LadderPrior(dim, glimpse_dim, latent_bernoulli)
             posterior = LadderPosterior(glimpse_dim, dim, DiagonalGaussian)
             generator = closed.TypedDaggerBox(prior.name, in_space,
                                               glimpse_space, prior, posterior,
                                               posterior.name)
             generators.append(generator)
 
-        background = NullPrior(self._data_dim)
+        background = StandardContinuousBernoulli(self._data_dim,
+                                                 'X^{%d}' % self._data_dim)
         top, space = background.type.arrow()
-        name = '$Null(%d)$' % self._data_dim
+        name = '$p(%s)$' % background.random_var_name
         global_elements = [closed.TypedBox(name, top, space, background)]
 
         gaze = GlimpsePrior()
