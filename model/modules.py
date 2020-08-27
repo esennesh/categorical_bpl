@@ -116,6 +116,29 @@ class ContinuousBernoulliModel(TypedModel):
         pyro.sample('$%s$' % self._random_var_name, bernoulli)
         return xs
 
+class StandardContinuousBernoulli(TypedModel):
+    def __init__(self, dim, random_var_name=None):
+        super().__init__()
+        self._dim = dim
+        if not random_var_name:
+            random_var_name = 'X^{%d}' % self._dim
+        self._random_var_name = random_var_name
+
+    @property
+    def random_var_name(self):
+        return self._random_var_name
+
+    @property
+    def type(self):
+        return closed.CartesianClosed.ARROW(
+            closed.TOP, types.tensor_type(torch.float, self._dim),
+        )
+
+    def forward(self):
+        xs = self._batch.new_ones(torch.Size((self._batch.shape[0], self._dim)))
+        bernoulli = ContinuousBernoulli(probs=xs * 0.5).to_event(1)
+        return pyro.sample('$%s$' % self._random_var_name, bernoulli)
+
 class DensityNet(TypedModel):
     def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel,
                  normalizer_layer=nn.LayerNorm):
