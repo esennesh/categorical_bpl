@@ -52,7 +52,11 @@ class NamePopMessenger(Messenger):
             name_stack = collections.defaultdict(int)
 
     def _pyro_sample(self, msg):
-        msg["name"] = _count_stacked(self._names, msg["name"])
+        name = msg["name"]
+        msg["name"] = _count_stacked(self._names, name)
+        if self._names[name]:
+            msg["value"] = None
+            msg["is_observed"] = False
 
     def _pyro_post_sample(self, msg):
         base_name = _stacked_name_base(msg["name"])
