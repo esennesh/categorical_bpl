@@ -465,8 +465,8 @@ class SpatialTransformerWriter(TypedModel):
                               align_corners=True)
         glimpse_contents = glimpse_contents.view(*self.glimpse_shape(canvas))
         glimpse = F.grid_sample(glimpse_contents, grids, align_corners=True)
-        return self.distribution(canvas + glimpse.view(-1,
-                                                       self._canvas_side ** 2))
+        canvas = canvas.view(*glimpse.shape) + glimpse
+        return self.distribution(canvas.view(-1, self._canvas_side ** 2))
 
 class SpatialTransformerReader(TypedModel):
     def __init__(self, out_dist, canvas_dist, canvas_side=28, glimpse_side=7):
