@@ -1,11 +1,61 @@
 import numpy as np
 from pyro.infer import SVI, TraceGraph_ELBO
-from pyro.optim import Adam
+from pyro.optim import Adam, PyroOptim
 import torch
 from torchvision.utils import make_grid
 from base import BaseTrainer
 from utils import inf_loop, MetricTracker
 
+class EmCounter:
+    def __init__(self, estep_params, mstep_params, epochs=10, even_estep=True):
+        self._params = {
+            'expectation': set(estep_params),
+            'maximization': set(mstep_params),
+        }
+        self._epochs = epochs
+        self._even_estep = even_estep
+        self._counter = 0
+
+    def get_state(self):
+        return {
+            'params': self._params,
+            'epochs': self._epochs,
+            'even_estep': self._even_estep,
+            'counter': self._counter
+        }
+
+    def set_state(self, state_dict):
+        self._params = state_dict['params']
+        self._epochs = state_dict['epochs']
+        self._even_estep = state_dict['even_estep']
+        self._counter = state_dict['counter']
+
+    def step_params(self, params):
+        self._counter += 1
+        if self._counter % self._epochs == 0:
+            step = 'expectation' if self._even_estep else 'maximization'
+        else:
+            step = 'maximization' if self._even_estep else 'expectation'
+        return self._params[step] & set(params)
+
+class ExpectationMaximizationOptim(PyroOptim):
+    def __init__(self, counter, optim_constructor, optim_args, clip_args=None):
+        assert isinstance(counter, EmCounter)
+        self._counter = counter
+        super().__init__(optim_constructor, optim_args, clip_args)
+
+    def __call__(self, params, *args, **kwargs):
+        params = self._counter.step_params(params)
+        super().__call__(params, *args, **kwargs)
+
+    def get_state(self):
+        state_dict = super().get_state()
+        state_dict['_counter'] = self._counter.get_state()
+        return state_dict
+
+    def set_state(self, state_dict):
+        self._counter.set_state(state_dict['_counter'])
+        super().set_state(state_dict)
 
 class Trainer(BaseTrainer):
     """
