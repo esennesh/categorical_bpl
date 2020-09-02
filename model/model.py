@@ -532,7 +532,7 @@ class VAECategoryModel(BaseModel):
 
         # Build up a bunch of torch.Sizes for the powers of two between
         # hidden_dim and data_dim.
-        dims = list(util.powers_of(2, hidden_dim, data_dim)) + [49]
+        dims = list(util.powers_of(2, hidden_dim, data_dim//4)) + [49, data_dim]
         dims.sort()
 
         generators = []
