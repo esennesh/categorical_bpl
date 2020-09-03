@@ -177,7 +177,7 @@ class VlaeCategoryModel(CategoryModel):
 
         # Build up a bunch of torch.Sizes for the powers of two between
         # hidden_dim and data_dim.
-        dims = list(util.powers_of(2, hidden_dim, data_dim))
+        dims = list(util.powers_of(2, hidden_dim, data_dim // 4)) + [data_dim]
         dims.sort()
 
         generators = []
