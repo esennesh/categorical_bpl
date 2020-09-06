@@ -667,8 +667,8 @@ class VAECategoryModel(BaseModel):
         data_arrow_weights = data_arrow_weights.mean(dim=0).view(-1, 2)
         arrow_weights = pyro.sample(
             'arrow_weights',
-            dist.Beta(data_arrow_weights[:, 0],
-                      data_arrow_weights[:, 1]).to_event(1)
+            dist.Gamma(data_arrow_weights[:, 0],
+                       data_arrow_weights[:, 1]).to_event(1)
         )
 
         morphism = self._category(self.data_space, min_depth=VAE_MIN_DEPTH,
