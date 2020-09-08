@@ -239,8 +239,7 @@ class GlimpseCategoryModel(CategoryModel):
                                               posterior.name)
             generators.append(generator)
 
-        background = StandardContinuousBernoulli(self._data_dim,
-                                                 'X^{%d}' % self._data_dim)
+        background = NullPrior(self._data_dim, 'X^{%d}' % self._data_dim)
         top, space = background.type.arrow()
         name = '$p(%s)$' % background.random_var_name
         global_elements = [closed.TypedBox(name, top, space, background)]
