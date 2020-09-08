@@ -591,3 +591,98 @@ class GlimpsePrior(TypedModel):
     def forward(self):
         normal = dist.Normal(self.loc, self.scale).to_event(1)
         return pyro.sample('$%s$' % self._latent_name, normal)
+
+class LinearCombination(TypedModel):
+    def __init__(self, dim, out_dist):
+        super().__init__()
+        self._dim = dim
+        self.distribution = out_dist(self._dim)
+        in_side = int(np.sqrt(dim))
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(1, in_side, 4, 2, 1), nn.InstanceNorm2d(in_side),
+            nn.PReLU(),
+            nn.Conv2d(in_side, in_side * 2, 4, 2, 1),
+            nn.InstanceNorm2d(in_side * 2), nn.PReLU(),
+        )
+        self.dense_layer = nn.Sequential(
+            nn.Linear(in_side * 2 * (in_side // 4) ** 2,
+                      in_side * 2 * (in_side // 4) ** 2),
+            nn.LayerNorm(in_side * 2 * (in_side // 4) ** 2),
+            nn.PReLU()
+        )
+        self.deconv_layers = nn.Sequential(
+            nn.ConvTranspose2d(in_side * 2, in_side, 4, 2, 1),
+            nn.InstanceNorm2d(in_side), nn.PReLU(),
+            nn.ConvTranspose2d(in_side, 1, 4, 2, 1),
+        )
+
+    @property
+    def type(self):
+        ty = types.tensor_type(torch.float, self._dim)
+        return closed.CartesianClosed.ARROW(
+            closed.CartesianClosed.BASE(Ty(ty, ty)), ty
+        )
+
+    @property
+    def name(self):
+        rv_name = self.distribution.random_var_name
+        inputs_tuple = ' \\times '.join([rv_name, rv_name])
+        name = 'p(%s \\mid %s)' % (self.distribution.random_var_name,
+                                   inputs_tuple)
+        return '$%s$' % name
+
+    def forward(self, x, y):
+        in_side = int(np.sqrt(self._dim))
+        hidden = self.conv_layers((x + y).view(-1, 1, in_side, in_side))
+        hidden = self.dense_layer(hidden.view(x.shape[0], -1)).view(
+            *hidden.shape
+        )
+        hidden = self.deconv_layers(hidden).view(x.shape[0], -1)
+        return self.distribution(hidden)
+
+class LinearDecombination(TypedModel):
+    def __init__(self, dim, out_dist):
+        super().__init__()
+        self._dim = dim
+        self.distribution = out_dist(self._dim)
+        in_side = int(np.sqrt(dim))
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(1, in_side, 4, 2, 1), nn.InstanceNorm2d(in_side),
+            nn.PReLU(),
+            nn.Conv2d(in_side, in_side * 2, 4, 2, 1),
+            nn.InstanceNorm2d(in_side * 2), nn.PReLU(),
+        )
+        self.dense_layer = nn.Sequential(
+            nn.Linear(in_side * 2 * (in_side // 4) ** 2,
+                      in_side * 2 * (in_side // 4) ** 2),
+            nn.LayerNorm(in_side * 2 * (in_side // 4) ** 2),
+            nn.PReLU()
+        )
+        self.deconv_layers = nn.Sequential(
+            nn.ConvTranspose2d(in_side * 2, in_side, 4, 2, 1),
+            nn.InstanceNorm2d(in_side), nn.PReLU(),
+            nn.ConvTranspose2d(in_side, 1, 4, 2, 1),
+        )
+
+    @property
+    def type(self):
+        ty = types.tensor_type(torch.float, self._dim)
+        return closed.CartesianClosed.ARROW(
+            ty, closed.CartesianClosed.BASE(Ty(ty, ty))
+        )
+
+    @property
+    def name(self):
+        rv_name = self.distribution.random_var_name
+        outputs_tuple = ' \\times '.join([rv_name, rv_name])
+        name = 'p(%s \\mid %s)' % (outputs_tuple,
+                                   self.distribution.random_var_name)
+        return '$%s$' % name
+
+    def forward(self, z):
+        in_side = int(np.sqrt(self._dim))
+        x = self.conv_layers(z.view(-1, 1, in_side, in_side))
+        x = self.dense_layer(x.view(z.shape[0], -1)).view(*x.shape)
+        x = self.deconv_layers(x).view(z.shape[0], -1)
+        y = z - x
+        return self.distribution(x), self.distribution(y)
