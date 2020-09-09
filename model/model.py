@@ -232,11 +232,13 @@ class GlimpseCategoryModel(CategoryModel):
         generators = []
         for dim in dims:
             in_space = types.tensor_type(torch.float, dim)
-            prior = LadderPrior(dim, glimpse_dim, latent_bernoulli)
-            posterior = LadderPosterior(glimpse_dim, dim, DiagonalGaussian)
-            generator = closed.TypedDaggerBox(prior.name, in_space,
+            prior = DensityDecoder(dim, glimpse_dim, latent_bernoulli,
+                                   convolve=True)
+            posterior = DensityEncoder(glimpse_dim, dim, DiagonalGaussian,
+                                       convolve=True)
+            generator = closed.TypedDaggerBox(prior.density_name, in_space,
                                               glimpse_space, prior, posterior,
-                                              posterior.name)
+                                              posterior.density_name)
             generators.append(generator)
 
         background = NullPrior(self._data_dim, 'X^{%d}' % self._data_dim)
