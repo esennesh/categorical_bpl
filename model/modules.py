@@ -141,12 +141,13 @@ class StandardContinuousBernoulli(TypedModel):
 
 class DensityNet(TypedModel):
     def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel,
-                 normalizer_layer=nn.LayerNorm):
+                 normalizer_layer=nn.LayerNorm, convolve=False):
         super().__init__()
         self._in_dim = in_dim
         self._out_dim = out_dim
         self._in_space = types.tensor_type(torch.float, in_dim)
         self._out_space = types.tensor_type(torch.float, out_dim)
+        self._convolve = convolve
 
         hidden_dim = (in_dim + out_dim) // 2
         final_features = out_dim
