@@ -153,14 +153,16 @@ class VaeCategoryModel(CategoryModel):
         generators = []
         for dim_a, dim_b in itertools.combinations(dims, 2):
             lower, higher = sorted([dim_a, dim_b])
-            # Construct the decoder
+            # Construct the decoder and encoder
             if higher == self._data_dim:
                 decoder = DensityDecoder(lower, higher,
-                                         ContinuousBernoulliModel)
+                                         ContinuousBernoulliModel,
+                                         convolve=True)
+                encoder = DensityEncoder(higher, lower, DiagonalGaussian,
+                                         convolve=True)
             else:
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
-            # Construct the encoder
-            encoder = DensityEncoder(higher, lower, DiagonalGaussian)
+                encoder = DensityEncoder(higher, lower, DiagonalGaussian)
             in_space, out_space = decoder.type.arrow()
             generator = closed.TypedDaggerBox(decoder.density_name, in_space,
                                               out_space, decoder, encoder,
