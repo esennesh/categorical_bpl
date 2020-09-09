@@ -230,8 +230,9 @@ class DensityDecoder(DensityNet):
         return self.distribution(hidden)
 
 class DensityEncoder(DensityNet):
-    def __init__(self, in_dim, out_dim, dist_layer=DiagonalGaussian):
-        super().__init__(in_dim, out_dim, dist_layer)
+    def __init__(self, in_dim, out_dim, dist_layer=DiagonalGaussian,
+                 convolve=False):
+        super().__init__(in_dim, out_dim, dist_layer, convolve=convolve)
 
     @property
     def density_name(self):
@@ -240,7 +241,14 @@ class DensityEncoder(DensityNet):
         return '$q(%s | %s)$' % (sample_name, condition_name)
 
     def forward(self, inputs):
-        out_hidden = self.neural_layers(inputs)
+        if self._convolve:
+            in_side = int(np.sqrt(self._in_dim))
+            inputs = inputs.view(-1, 1, in_side, in_side)
+            out_hidden = self.conv_layers(inputs)
+            out_hidden = out_hidden.view(inputs.shape[0], -1)
+            out_hidden = self.dense_layers(out_hidden)
+        else:
+            out_hidden = self.neural_layers(inputs)
         return self.distribution(out_hidden)
 
 class LadderDecoder(TypedModel):
