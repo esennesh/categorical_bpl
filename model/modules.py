@@ -207,8 +207,9 @@ class DensityNet(TypedModel):
         raise NotImplementedError()
 
 class DensityDecoder(DensityNet):
-    def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel):
-        super().__init__(in_dim, out_dim, dist_layer)
+    def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel,
+                 convolve=False):
+        super().__init__(in_dim, out_dim, dist_layer, convolve=convolve)
 
     @property
     def density_name(self):
@@ -217,7 +218,15 @@ class DensityDecoder(DensityNet):
         return '$p(%s | %s)$' % (sample_name, condition_name)
 
     def forward(self, inputs):
-        hidden = self.neural_layers(inputs)
+        if self._convolve:
+            hidden = self.dense_layers(inputs)
+            out_side = int(np.sqrt(self._out_dim))
+            conv_side = max(out_side // 4, 1)
+            hidden = hidden.view(hidden.shape[0], 2 * out_side, conv_side,
+                                 conv_side)
+            hidden = self.conv_layers(hidden)
+        else:
+            hidden = self.neural_layers(inputs)
         return self.distribution(hidden)
 
 class DensityEncoder(DensityNet):
