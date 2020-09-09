@@ -153,13 +153,45 @@ class DensityNet(TypedModel):
         final_features = out_dim
         if dist_layer == DiagonalGaussian:
             final_features *= 2
-        self.add_module('neural_layers', nn.Sequential(
-            nn.Linear(in_dim, hidden_dim), normalizer_layer(hidden_dim),
-            nn.PReLU(),
-            nn.Linear(hidden_dim, hidden_dim), normalizer_layer(hidden_dim),
-            nn.PReLU(),
-            nn.Linear(hidden_dim, final_features),
-        ))
+        if not self._convolve:
+            self.add_module('neural_layers', nn.Sequential(
+                nn.Linear(in_dim, hidden_dim), normalizer_layer(hidden_dim),
+                nn.PReLU(),
+                nn.Linear(hidden_dim, hidden_dim), normalizer_layer(hidden_dim),
+                nn.PReLU(),
+                nn.Linear(hidden_dim, final_features),
+            ))
+        else:
+            if out_dim > in_dim:
+                out_side = int(np.sqrt(self._out_dim))
+                conv_side = max(out_side // 4, 1)
+                multiplier = conv_side ** 2
+                self.dense_layers = nn.Sequential(
+                    nn.Linear(self._in_dim, multiplier * 2 * out_side),
+                    normalizer_layer(multiplier * 2 * out_side), nn.PReLU(),
+                    nn.Linear(multiplier * 2 * out_side,
+                              multiplier * 2 * out_side),
+                )
+                self.conv_layers = nn.Sequential(
+                    nn.ConvTranspose2d(2 * out_side, out_side, 4, 2, 1),
+                    nn.InstanceNorm2d(out_side), nn.PReLU(),
+                    nn.ConvTranspose2d(out_side, 1, 4, 2, 1),
+                    nn.ReflectionPad2d((out_side - conv_side * 4) // 2)
+                )
+            else:
+                in_side = int(np.sqrt(self._in_dim))
+                multiplier = max(in_side // 4, 1) ** 2
+                self.conv_layers = nn.Sequential(
+                    nn.Conv2d(1, in_side, 4, 2, 1),
+                    nn.InstanceNorm2d(in_side), nn.PReLU(),
+                    nn.Conv2d(in_side, in_side * 2, 4, 2, 1),
+                    nn.InstanceNorm2d(in_side * 2), nn.PReLU(),
+                )
+                self.dense_layers = nn.Sequential(
+                    nn.Linear(in_side * 2 * multiplier, final_features),
+                    normalizer_layer(final_features), nn.PReLU(),
+                    nn.Linear(final_features, final_features)
+                )
         self.add_module('distribution', dist_layer(out_dim))
 
     def set_batching(self, batch):
