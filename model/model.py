@@ -217,6 +217,7 @@ class GlimpseCategoryModel(CategoryModel):
     def __init__(self, data_dim=28*28, hidden_dim=4, guide_hidden_dim=256):
         self._data_dim = data_dim
         data_side = int(math.sqrt(self._data_dim))
+        data_space = types.tensor_type(torch.float, data_dim)
         glimpse_side = data_side // 2
         glimpse_dim = glimpse_side ** 2
         glimpse_space = types.tensor_type(torch.float, glimpse_dim)
@@ -238,6 +239,15 @@ class GlimpseCategoryModel(CategoryModel):
                                        convolve=True)
             generator = closed.TypedDaggerBox(prior.density_name, in_space,
                                               glimpse_space, prior, posterior,
+                                              posterior.density_name)
+            generators.append(generator)
+
+            prior = DensityDecoder(dim, data_dim, ContinuousBernoulliModel,
+                                   convolve=True)
+            posterior = DensityEncoder(data_dim, dim, DiagonalGaussian,
+                                       convolve=True)
+            generator = closed.TypedDaggerBox(prior.density_name, in_space,
+                                              data_space, prior, posterior,
                                               posterior.density_name)
             generators.append(generator)
 
