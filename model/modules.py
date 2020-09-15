@@ -603,19 +603,17 @@ class SpatialTransformerReader(TypedModel):
                            self._glimpse_side])
 
     def forward(self, images):
-        images = images.view(-1, 1, self._canvas_side, self._canvas_side)
+        images = images.view(*self.canvas_shape(images))
         flat_images = images.view(-1, self._canvas_side ** 2)
         coords = self.glimpse_conv(images)
         coords = self.glimpse_selector(coords).sum(dim=1)
         coords = coords.view(-1, (self._canvas_side // (2 ** 3)) ** 2)
-        coords = self.glimpse_dense(coords)
-        coords = self.coordinates_dist(coords)
+        coords = self.coordinates_dist(self.glimpse_dense(coords))
         transforms = glimpse_transform(inverse_glimpse(coords))
 
         grid = F.affine_grid(transforms, self.glimpse_shape(images),
                              align_corners=True)
-        glimpse = F.grid_sample(images.view(*self.canvas_shape(images)), grid,
-                                align_corners=True)
+        glimpse = F.grid_sample(images, grid, align_corners=True)
         glimpse = self.glimpse_dist(glimpse)
 
         recon_transforms = glimpse_transform(coords)
