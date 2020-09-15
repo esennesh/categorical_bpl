@@ -235,15 +235,6 @@ class GlimpseCategoryModel(CategoryModel):
                                               posterior.density_name)
             generators.append(generator)
 
-            prior = DensityDecoder(dim, data_dim, ContinuousBernoulliModel,
-                                   convolve=True)
-            posterior = DensityEncoder(data_dim, dim, DiagonalGaussian,
-                                       convolve=True)
-            generator = closed.TypedDaggerBox(prior.density_name, in_space,
-                                              data_space, prior, posterior,
-                                              posterior.density_name)
-            generators.append(generator)
-
         background = NullPrior(self._data_dim, 'X^{%d}' % self._data_dim)
         top, space = background.type.arrow()
         name = '$p(%s)$' % background.random_var_name
