@@ -25,16 +25,6 @@ class CategoryModel(BaseModel):
         self._data_dim = data_dim
         self._observation_name = '$X^{%d}$' % self._data_dim
 
-        combination = LinearCombination(self._data_dim,
-                                        ContinuousBernoulliModel)
-        decombination = LinearDecombination(self._data_dim,
-                                            ContinuousBernoulliModel)
-        combination_l, combination_r = combination.type.arrow()
-        generator = closed.TypedDaggerBox(combination.name, combination_l,
-                                          combination_r, combination,
-                                          decombination, decombination.name)
-        generators.append(generator)
-
         obs = set()
         for generator in generators:
             obs = obs | generator.type.base_elements()
