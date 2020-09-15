@@ -257,4 +257,4 @@ class GlimpseCategoryModel(CategoryModel):
         generators.append(generator)
 
         super().__init__(generators, global_elements, data_dim,
-                         guide_hidden_dim)
+                         guide_hidden_dim, [glimpse_dim])
