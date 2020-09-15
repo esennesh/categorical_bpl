@@ -562,11 +562,10 @@ class SpatialTransformerReader(TypedModel):
             nn.Conv2d(canvas_side, canvas_side * 2, 4, 2, 1),
             nn.InstanceNorm2d(canvas_side * 2), nn.PReLU(),
             nn.Conv2d(canvas_side * 2, canvas_side * 4, 4, 2, 1),
-            nn.InstanceNorm2d(canvas_side * 4), nn.PReLU(),
-            nn.Conv2d(canvas_side * 4, canvas_side * 8, 4, 2, 1),
-            nn.InstanceNorm2d(canvas_side * 8), nn.PReLU(),
         )
-        self.glimpse_dense = nn.Linear(canvas_side * 8, 3 * 2)
+        self.glimpse_selector = nn.Softmax2d()
+        self.glimpse_dense = nn.Linear((self._canvas_side // (2 ** 3)) ** 2,
+                                       3 * 2)
         self.coordinates_dist = out_dist(3)
         canvas_name = 'X^{%d}' % canvas_side ** 2
         self.canvas_dist = canvas_dist(self._canvas_side ** 2,
@@ -606,7 +605,9 @@ class SpatialTransformerReader(TypedModel):
     def forward(self, images):
         images = images.view(-1, 1, self._canvas_side, self._canvas_side)
         flat_images = images.view(-1, self._canvas_side ** 2)
-        coords = self.glimpse_conv(images).view(-1, self._canvas_side * 8)
+        coords = self.glimpse_conv(images)
+        coords = self.glimpse_selector(coords).sum(dim=1)
+        coords = coords.view(-1, (self._canvas_side // (2 ** 3)) ** 2)
         coords = self.glimpse_dense(coords)
         coords = self.coordinates_dist(coords)
         transforms = glimpse_transform(inverse_glimpse(coords))
