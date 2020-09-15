@@ -249,8 +249,7 @@ class GlimpseCategoryModel(CategoryModel):
         writer = SpatialTransformerWriter(ContinuousBernoulliModel, data_side,
                                           glimpse_side)
         writer_l, writer_r = writer.type.arrow()
-        reader = SpatialTransformerReader(DiagonalGaussian,
-                                          ContinuousBernoulliModel, data_side,
+        reader = SpatialTransformerReader(ContinuousBernoulliModel, data_side,
                                           glimpse_side)
         generator = closed.TypedDaggerBox(writer.name, writer_l, writer_r,
                                           writer, reader, reader.name)
