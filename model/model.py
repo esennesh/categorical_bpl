@@ -28,6 +28,8 @@ class CategoryModel(BaseModel):
         obs = set()
         for generator in generators:
             obs = obs | generator.type.base_elements()
+        for element in global_elements:
+            obs = obs - element.type.base_elements()
 
         for ob in obs:
             dim = types.type_size(ob.name)
