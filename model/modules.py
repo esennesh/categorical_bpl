@@ -552,7 +552,7 @@ class SpatialTransformerWriter(TypedModel):
         return self.distribution(canvas)
 
 class SpatialTransformerReader(TypedModel):
-    def __init__(self, out_dist, canvas_dist, canvas_side=28, glimpse_side=7):
+    def __init__(self, canvas_dist, canvas_side=28, glimpse_side=7):
         super().__init__()
         self._canvas_side = canvas_side
         self._glimpse_side = glimpse_side
@@ -566,7 +566,7 @@ class SpatialTransformerReader(TypedModel):
         self.glimpse_selector = nn.Softmax2d()
         self.glimpse_dense = nn.Linear((self._canvas_side // (2 ** 3)) ** 2,
                                        3 * 2)
-        self.coordinates_dist = out_dist(3)
+        self.coordinates_dist = DiagonalGaussian(3)
         canvas_name = 'X^{%d}' % canvas_side ** 2
         self.canvas_dist = canvas_dist(self._canvas_side ** 2,
                                        random_var_name=canvas_name)
