@@ -20,7 +20,7 @@ VAE_MIN_DEPTH = 2
 
 class CategoryModel(BaseModel):
     def __init__(self, generators, global_elements=[], data_dim=28*28,
-                 guide_hidden_dim=256):
+                 guide_hidden_dim=256, no_prior_dims=[]):
         super().__init__()
         self._data_dim = data_dim
         self._observation_name = '$X^{%d}$' % self._data_dim
@@ -31,9 +31,10 @@ class CategoryModel(BaseModel):
         for element in global_elements:
             obs = obs - element.type.base_elements()
 
+        no_prior_dims = no_prior_dims + [self._data_dim]
         for ob in obs:
             dim = types.type_size(ob.name)
-            if dim == self._data_dim:
+            if dim in no_prior_dims:
                 continue
 
             space = types.tensor_type(torch.float, dim)
