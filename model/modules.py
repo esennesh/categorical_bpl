@@ -138,7 +138,7 @@ class StandardContinuousBernoulli(TypedModel):
 
     def forward(self):
         xs = self._batch.new_ones(torch.Size((self._batch.shape[0], self._dim)))
-        bernoulli = ContinuousBernoulli(probs=xs * 0.5).to_event(1)
+        bernoulli = dist.ContinuousBernoulli(probs=xs * 0.5).to_event(1)
         return pyro.sample('$%s$' % self._random_var_name, bernoulli)
 
 class DensityNet(TypedModel):
