@@ -88,7 +88,9 @@ class NullPrior(TypedModel):
 
     def forward(self):
         size = torch.Size((self._batch.shape[0], self._dim))
-        bernoulli = ContinuousBernoulli(self._batch.new_zeros(size)).to_event(1)
+        probs = self._batch.new_zeros(size)
+        temps = self._batch.new_ones(size)
+        bernoulli = dist.RelaxedBernoulli(temps, probs=probs).to_event(1)
         return pyro.sample('$%s$' % self._random_var_name, bernoulli)
 
 class ContinuousBernoulliModel(TypedModel):
