@@ -114,6 +114,33 @@ class ContinuousBernoulliModel(TypedModel):
         pyro.sample('$%s$' % self._random_var_name, bernoulli)
         return xs
 
+class RelaxedBernoulliModel(TypedModel):
+    def __init__(self, dim, random_var_name=None):
+        super().__init__()
+        self._dim = torch.Size([dim])
+        if not random_var_name:
+            random_var_name = 'X^{%d}' % self._dim[0]
+        self._random_var_name = random_var_name
+
+    @property
+    def random_var_name(self):
+        return self._random_var_name
+
+    @property
+    def type(self):
+        return closed.CartesianClosed.ARROW(
+            types.tensor_type(torch.float, self._dim * 2),
+            types.tensor_type(torch.float, self._dim),
+        )
+
+    def forward(self, inputs):
+        inputs = inputs.view(-1, 2, self._dim[0])
+        xs = torch.sigmoid(inputs[:, 0])
+        temps = F.softplus(inputs[:, 1])
+        bernoulli = dist.RelaxedBernoulli(temps, probs=xs).to_event(1)
+        pyro.sample('$%s$' % self._random_var_name, bernoulli)
+        return xs
+
 class StandardContinuousBernoulli(TypedModel):
     def __init__(self, dim, random_var_name=None):
         super().__init__()
