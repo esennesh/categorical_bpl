@@ -109,10 +109,9 @@ class ContinuousBernoulliModel(TypedModel):
         )
 
     def forward(self, inputs):
-        xs = torch.sigmoid(inputs.view(-1, self._dim[0]))
+        xs = inputs.view(-1, self._dim[0])
         bernoulli = dist.ContinuousBernoulli(probs=xs).to_event(1)
-        pyro.sample('$%s$' % self._random_var_name, bernoulli)
-        return xs
+        return pyro.sample('$%s$' % self._random_var_name, bernoulli)
 
 class RelaxedBernoulliModel(TypedModel):
     def __init__(self, dim, random_var_name=None):
