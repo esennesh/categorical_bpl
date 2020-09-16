@@ -66,7 +66,7 @@ class CategoryModel(BaseModel):
         return types.tensor_type(torch.float, self._data_dim)
 
     @pnn.pyro_method
-    def model(self, observations=None):
+    def model(self, observations=None, train=True):
         if isinstance(observations, dict):
             data = observations[self._observation_name]
         elif observations is not None:
@@ -83,7 +83,7 @@ class CategoryModel(BaseModel):
                 module.set_batching(data)
 
         morphism = self._category(self.data_space, min_depth=VAE_MIN_DEPTH)
-        if observations is not None:
+        if observations is not None and train:
             score_morphism = pyro.condition(morphism, data=observations)
         else:
             score_morphism = morphism
@@ -125,13 +125,13 @@ class CategoryModel(BaseModel):
 
         return morphism
 
-    def forward(self, observations=None):
+    def forward(self, observations=None, train=True):
         if observations is not None:
             trace = pyro.poutine.trace(self.guide).get_trace(
                 observations=observations
             )
             return pyro.poutine.replay(self.model, trace=trace)(
-                observations=observations
+                observations=observations, train=train
             )
         return self.model(observations=None)
 
