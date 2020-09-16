@@ -1,10 +1,24 @@
 import json
 import math
+import matplotlib.pyplot as plt
 import pandas as pd
 from pathlib import Path
 from itertools import repeat
 from collections import OrderedDict
 import torch
+
+def show_tensor(imgs, i=0, channels=1, shape=None):
+    if shape is not None:
+        imgs = imgs.view(shape)
+        side = shape[-1]
+    else:
+        side = int(math.sqrt(imgs.shape[-1]))
+    if channels in [3, 4]:
+        imgs = imgs[0].view(side, side, channels)
+    else:
+        img = imgs[0].view(side, side)
+    plt.imshow(img.cpu().detach().numpy())
+    plt.show()
 
 def powers_of(base, lower, upper):
     lower_bound = math.ceil(math.log(lower) / math.log(base))
