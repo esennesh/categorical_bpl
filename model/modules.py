@@ -567,14 +567,21 @@ class SpatialTransformerReader(TypedModel):
         self.glimpse_dense = nn.Linear((self._canvas_side // (2 ** 3)) ** 2,
                                        3 * 2)
         self.coordinates_dist = DiagonalGaussian(3)
+
         canvas_name = 'X^{%d}' % canvas_side ** 2
-        self.canvas_dist = ContinuousBernoulliModel(
-            self._canvas_side ** 2, random_var_name=canvas_name
+        self.canvas_dist = DiagonalGaussian(
+            self._canvas_side ** 2, latent_name=canvas_name
         )
+        self.canvas_scale = pnn.PyroParam(torch.ones(1),
+                                          constraint=constraints.positive)
+
         glimpse_name = 'Z^{%d}' % glimpse_side ** 2
-        self.glimpse_dist = ContinuousBernoulliModel(
-            self._glimpse_side ** 2, random_var_name=glimpse_name
+        self.glimpse_dist = DiagonalGaussian(
+            self._glimpse_side ** 2, latent_name=glimpse_name
         )
+        self.glimpse_scale = pnn.PyroParam(torch.ones(1),
+                                           constraint=constraints.positive)
+
 
     @property
     def type(self):
@@ -616,7 +623,12 @@ class SpatialTransformerReader(TypedModel):
         grid = F.affine_grid(transforms, self.glimpse_shape(images),
                              align_corners=True)
         glimpse = F.grid_sample(images, grid, align_corners=True)
-        glimpse = self.glimpse_dist(glimpse.view(-1, self._glimpse_side ** 2))
+        flat_glimpse = glimpse.view(-1, self._glimpse_side ** 2)
+        flat_glimpse = torch.cat(
+            (flat_glimpse, torch.ones_like(flat_glimpse) * self.glimpse_scale),
+            dim=-1
+        )
+        glimpse = self.glimpse_dist(flat_glimpse)
 
         recon_transforms = glimpse_transform(coords)
         recon_grid = F.affine_grid(recon_transforms, self.canvas_shape(images),
@@ -624,7 +636,12 @@ class SpatialTransformerReader(TypedModel):
         glimpse_recon = F.grid_sample(glimpse.view(*self.glimpse_shape(images)),
                                       recon_grid, align_corners=True)
         glimpse_recon = glimpse_recon.view(-1, self._canvas_side ** 2)
-        residual = self.canvas_dist(flat_images - glimpse_recon)
+        residual = flat_images - glimpse_recon
+        residual = torch.cat(
+            (residual, torch.ones_like(residual) * self.canvas_scale),
+            dim=-1
+        )
+        residual = self.canvas_dist(residual)
 
         return residual, glimpse, coords
 
