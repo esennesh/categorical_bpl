@@ -149,7 +149,7 @@ class DensityNet(TypedModel):
 
         hidden_dim = (in_dim + out_dim) // 2
         final_features = out_dim
-        if dist_layer in [DiagonalGaussian, RelaxedBernoulliModel]:
+        if dist_layer == DiagonalGaussian:
             final_features *= 2
         if not self._convolve:
             self.add_module('neural_layers', nn.Sequential(
