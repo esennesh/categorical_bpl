@@ -227,6 +227,7 @@ class DensityDecoder(DensityNet):
             hidden = self.conv_layers(hidden)
         else:
             hidden = self.neural_layers(inputs)
+        hidden = hidden.view(-1, self._out_dim, self._channels).squeeze()
         return self.distribution(hidden)
 
 class DensityEncoder(DensityNet):
