@@ -225,7 +225,7 @@ class GlimpseCategoryModel(CategoryModel):
         generators = []
         for dim in dims:
             in_space = types.tensor_type(torch.float, dim)
-            prior = DensityDecoder(dim, glimpse_dim, latent_bernoulli,
+            prior = DensityDecoder(dim, glimpse_dim, DiagonalGaussian,
                                    convolve=True)
             posterior = DensityEncoder(glimpse_dim, dim, DiagonalGaussian,
                                        convolve=True)
