@@ -250,7 +250,7 @@ class DensityEncoder(DensityNet):
             out_hidden = self.dense_layers(out_hidden)
         else:
             out_hidden = self.neural_layers(inputs)
-        return self.distribution(out_hidden)
+        return self.distribution(out_hidden.view(-1, self._out_dim))
 
 class LadderDecoder(TypedModel):
     def __init__(self, in_dim, out_dim, out_dist, noise_dim=2, channels=1,
