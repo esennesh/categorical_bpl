@@ -614,7 +614,7 @@ class SpatialTransformerReader(TypedModel):
         grid = F.affine_grid(transforms, self.glimpse_shape(images),
                              align_corners=True)
         glimpse = F.grid_sample(images, grid, align_corners=True)
-        glimpse = self.glimpse_dist(glimpse)
+        glimpse = self.glimpse_dist(glimpse.view(-1, self._glimpse_side ** 2))
 
         recon_transforms = glimpse_transform(coords)
         recon_grid = F.affine_grid(recon_transforms, self.canvas_shape(images),
