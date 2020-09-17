@@ -245,11 +245,9 @@ class GlimpseCategoryModel(CategoryModel):
         global_elements.append(closed.TypedBox(name, top, space, gaze))
 
         # Construct writer/reader pair for spatial attention
-        writer = SpatialTransformerWriter(ContinuousBernoulliModel, data_side,
-                                          glimpse_side)
+        writer = SpatialTransformerWriter(data_side, glimpse_side)
         writer_l, writer_r = writer.type.arrow()
-        reader = SpatialTransformerReader(ContinuousBernoulliModel, data_side,
-                                          glimpse_side)
+        reader = SpatialTransformerReader(data_side, glimpse_side)
         generator = closed.TypedDaggerBox(writer.name, writer_l, writer_r,
                                           writer, reader, reader.name)
         generators.append(generator)
