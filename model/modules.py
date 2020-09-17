@@ -149,8 +149,10 @@ class DensityNet(TypedModel):
 
         hidden_dim = (in_dim + out_dim) // 2
         final_features = out_dim
+        final_channels = 1
         if dist_layer == DiagonalGaussian:
             final_features *= 2
+            final_channels *= 2
         if not self._convolve:
             self.add_module('neural_layers', nn.Sequential(
                 nn.Linear(in_dim, hidden_dim), normalizer_layer(hidden_dim),
@@ -173,7 +175,7 @@ class DensityNet(TypedModel):
                 self.conv_layers = nn.Sequential(
                     nn.ConvTranspose2d(2 * out_side, out_side, 4, 2, 1),
                     nn.InstanceNorm2d(out_side), nn.PReLU(),
-                    nn.ConvTranspose2d(out_side, 1, 4, 2, 1),
+                    nn.ConvTranspose2d(out_side, final_channels, 4, 2, 1),
                     nn.ReflectionPad2d((out_side - conv_side * 4) // 2)
                 )
             else:
