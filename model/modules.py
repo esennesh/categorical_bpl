@@ -129,17 +129,14 @@ class RelaxedBernoulliModel(TypedModel):
     @property
     def type(self):
         return closed.CartesianClosed.ARROW(
-            types.tensor_type(torch.float, self._dim * 2),
+            types.tensor_type(torch.float, self._dim),
             types.tensor_type(torch.float, self._dim),
         )
 
     def forward(self, inputs):
-        inputs = inputs.view(-1, 2, self._dim[0])
-        xs = torch.sigmoid(inputs[:, 0])
-        temps = F.softplus(inputs[:, 1])
-        bernoulli = dist.RelaxedBernoulli(temps, probs=xs).to_event(1)
-        pyro.sample('$%s$' % self._random_var_name, bernoulli)
-        return xs
+        bernoulli = dist.RelaxedBernoulli(torch.ones_like(inputs),
+                                          probs=inputs).to_event(1)
+        return pyro.sample('$%s$' % self._random_var_name, bernoulli)
 
 class StandardContinuousBernoulli(TypedModel):
     def __init__(self, dim, random_var_name=None):
