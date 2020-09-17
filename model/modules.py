@@ -552,7 +552,7 @@ class SpatialTransformerWriter(TypedModel):
         return self.distribution(canvas)
 
 class SpatialTransformerReader(TypedModel):
-    def __init__(self, canvas_dist, canvas_side=28, glimpse_side=7):
+    def __init__(self, canvas_side=28, glimpse_side=7):
         super().__init__()
         self._canvas_side = canvas_side
         self._glimpse_side = glimpse_side
@@ -568,11 +568,13 @@ class SpatialTransformerReader(TypedModel):
                                        3 * 2)
         self.coordinates_dist = DiagonalGaussian(3)
         canvas_name = 'X^{%d}' % canvas_side ** 2
-        self.canvas_dist = canvas_dist(self._canvas_side ** 2,
-                                       random_var_name=canvas_name)
+        self.canvas_dist = ContinuousBernoulliModel(
+            self._canvas_side ** 2, random_var_name=canvas_name
+        )
         glimpse_name = 'Z^{%d}' % glimpse_side ** 2
-        self.glimpse_dist = canvas_dist(self._glimpse_side ** 2,
-                                        random_var_name=glimpse_name)
+        self.glimpse_dist = ContinuousBernoulliModel(
+            self._glimpse_side ** 2, random_var_name=glimpse_name
+        )
 
     @property
     def type(self):
