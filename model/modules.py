@@ -496,13 +496,14 @@ def inverse_glimpse(glimpse_code):
                      dim=-1) / scalars.unsqueeze(-1)
 
 class SpatialTransformerWriter(TypedModel):
-    def __init__(self, out_dist, canvas_side=28, glimpse_side=7):
+    def __init__(self, canvas_side=28, glimpse_side=7):
         super().__init__()
         self._canvas_side = canvas_side
         self._glimpse_side = glimpse_side
         canvas_name = 'X^{%d}' % canvas_side ** 2
-        self.distribution = out_dist(self._canvas_side ** 2,
-                                     random_var_name=canvas_name)
+        self.distribution = ContinuousBernoulliModel(
+            self._canvas_side ** 2, random_var_name=canvas_name
+        )
 
     @property
     def type(self):
