@@ -13,10 +13,6 @@ import torch.nn.functional as F
 from base import TypedModel
 import base.base_type as types
 
-class ContinuousBernoulli(torch.distributions.ContinuousBernoulli,
-                          dist.torch_distribution.TorchDistributionMixin):
-    pass
-
 class DiagonalGaussian(TypedModel):
     def __init__(self, dim, latent_name=None):
         super().__init__()
@@ -88,7 +84,9 @@ class NullPrior(TypedModel):
 
     def forward(self):
         size = torch.Size((self._batch.shape[0], self._dim))
-        bernoulli = ContinuousBernoulli(self._batch.new_zeros(size)).to_event(1)
+        probs = self._batch.new_zeros(size)
+        temps = self._batch.new_ones(size)
+        bernoulli = dist.RelaxedBernoulli(temps, probs=probs).to_event(1)
         return pyro.sample('$%s$' % self._random_var_name, bernoulli)
 
 class ContinuousBernoulliModel(TypedModel):
@@ -111,17 +109,16 @@ class ContinuousBernoulliModel(TypedModel):
         )
 
     def forward(self, inputs):
-        xs = torch.sigmoid(inputs.view(-1, self._dim[0]))
-        bernoulli = ContinuousBernoulli(probs=xs).to_event(1)
-        pyro.sample('$%s$' % self._random_var_name, bernoulli)
-        return xs
+        xs = inputs.view(-1, self._dim[0])
+        bernoulli = dist.ContinuousBernoulli(probs=xs).to_event(1)
+        return pyro.sample('$%s$' % self._random_var_name, bernoulli)
 
-class StandardContinuousBernoulli(TypedModel):
+class RelaxedBernoulliModel(TypedModel):
     def __init__(self, dim, random_var_name=None):
         super().__init__()
-        self._dim = dim
+        self._dim = torch.Size([dim])
         if not random_var_name:
-            random_var_name = 'X^{%d}' % self._dim
+            random_var_name = 'X^{%d}' % self._dim[0]
         self._random_var_name = random_var_name
 
     @property
@@ -131,12 +128,13 @@ class StandardContinuousBernoulli(TypedModel):
     @property
     def type(self):
         return closed.CartesianClosed.ARROW(
-            closed.TOP, types.tensor_type(torch.float, self._dim),
+            types.tensor_type(torch.float, self._dim),
+            types.tensor_type(torch.float, self._dim),
         )
 
-    def forward(self):
-        xs = self._batch.new_ones(torch.Size((self._batch.shape[0], self._dim)))
-        bernoulli = ContinuousBernoulli(probs=xs * 0.5).to_event(1)
+    def forward(self, inputs):
+        bernoulli = dist.RelaxedBernoulli(torch.ones_like(inputs),
+                                          probs=inputs).to_event(1)
         return pyro.sample('$%s$' % self._random_var_name, bernoulli)
 
 class DensityNet(TypedModel):
@@ -151,8 +149,10 @@ class DensityNet(TypedModel):
 
         hidden_dim = (in_dim + out_dim) // 2
         final_features = out_dim
+        self._channels = 1
         if dist_layer == DiagonalGaussian:
             final_features *= 2
+            self._channels *= 2
         if not self._convolve:
             self.add_module('neural_layers', nn.Sequential(
                 nn.Linear(in_dim, hidden_dim), normalizer_layer(hidden_dim),
@@ -175,7 +175,7 @@ class DensityNet(TypedModel):
                 self.conv_layers = nn.Sequential(
                     nn.ConvTranspose2d(2 * out_side, out_side, 4, 2, 1),
                     nn.InstanceNorm2d(out_side), nn.PReLU(),
-                    nn.ConvTranspose2d(out_side, 1, 4, 2, 1),
+                    nn.ConvTranspose2d(out_side, self._channels, 4, 2, 1),
                     nn.ReflectionPad2d((out_side - conv_side * 4) // 2)
                 )
             else:
@@ -227,6 +227,7 @@ class DensityDecoder(DensityNet):
             hidden = self.conv_layers(hidden)
         else:
             hidden = self.neural_layers(inputs)
+        hidden = hidden.view(-1, self._out_dim, self._channels).squeeze()
         return self.distribution(hidden)
 
 class DensityEncoder(DensityNet):
@@ -249,7 +250,7 @@ class DensityEncoder(DensityNet):
             out_hidden = self.dense_layers(out_hidden)
         else:
             out_hidden = self.neural_layers(inputs)
-        return self.distribution(out_hidden)
+        return self.distribution(out_hidden.view(-1, self._out_dim))
 
 class LadderDecoder(TypedModel):
     def __init__(self, in_dim, out_dim, out_dist, noise_dim=2, channels=1,
@@ -496,13 +497,16 @@ def inverse_glimpse(glimpse_code):
                      dim=-1) / scalars.unsqueeze(-1)
 
 class SpatialTransformerWriter(TypedModel):
-    def __init__(self, out_dist, canvas_side=28, glimpse_side=7):
+    def __init__(self, canvas_side=28, glimpse_side=7):
         super().__init__()
         self._canvas_side = canvas_side
         self._glimpse_side = glimpse_side
         canvas_name = 'X^{%d}' % canvas_side ** 2
-        self.distribution = out_dist(self._canvas_side ** 2,
-                                     random_var_name=canvas_name)
+        self.distribution = DiagonalGaussian(
+            self._canvas_side ** 2, latent_name=canvas_name
+        )
+        self.canvas_scale = pnn.PyroParam(torch.ones(1),
+                                          constraint=constraints.positive)
 
     @property
     def type(self):
@@ -534,16 +538,22 @@ class SpatialTransformerWriter(TypedModel):
                            self._glimpse_side])
 
     def forward(self, canvas, glimpse_contents, glimpse_params):
+        canvas = canvas.view(*self.canvas_shape(canvas))
         glimpse_transforms = glimpse_transform(glimpse_params)
         grids = F.affine_grid(glimpse_transforms, self.canvas_shape(canvas),
                               align_corners=True)
         glimpse_contents = glimpse_contents.view(*self.glimpse_shape(canvas))
         glimpse = F.grid_sample(glimpse_contents, grids, align_corners=True)
-        canvas = canvas.view(*glimpse.shape) + glimpse
-        return self.distribution(canvas.view(-1, self._canvas_side ** 2))
+
+        canvas = (canvas + glimpse).view(-1, self._canvas_side ** 2)
+        canvas = torch.cat(
+            (canvas, torch.ones_like(canvas) * self.canvas_scale),
+            dim=-1
+        )
+        return self.distribution(canvas)
 
 class SpatialTransformerReader(TypedModel):
-    def __init__(self, out_dist, canvas_dist, canvas_side=28, glimpse_side=7):
+    def __init__(self, canvas_side=28, glimpse_side=7):
         super().__init__()
         self._canvas_side = canvas_side
         self._glimpse_side = glimpse_side
@@ -553,18 +563,26 @@ class SpatialTransformerReader(TypedModel):
             nn.Conv2d(canvas_side, canvas_side * 2, 4, 2, 1),
             nn.InstanceNorm2d(canvas_side * 2), nn.PReLU(),
             nn.Conv2d(canvas_side * 2, canvas_side * 4, 4, 2, 1),
-            nn.InstanceNorm2d(canvas_side * 4), nn.PReLU(),
-            nn.Conv2d(canvas_side * 4, canvas_side * 8, 4, 2, 1),
-            nn.InstanceNorm2d(canvas_side * 8), nn.PReLU(),
         )
-        self.glimpse_dense = nn.Linear(canvas_side * 8, 3 * 2)
-        self.coordinates_dist = out_dist(3)
+        self.glimpse_selector = nn.Softmax2d()
+        self.glimpse_dense = nn.Linear((self._canvas_side // (2 ** 3)) ** 2,
+                                       3 * 2)
+        self.coordinates_dist = DiagonalGaussian(3)
+
         canvas_name = 'X^{%d}' % canvas_side ** 2
-        self.canvas_dist = canvas_dist(self._canvas_side ** 2,
-                                       random_var_name=canvas_name)
+        self.canvas_dist = DiagonalGaussian(
+            self._canvas_side ** 2, latent_name=canvas_name
+        )
+        self.canvas_scale = pnn.PyroParam(torch.ones(1),
+                                          constraint=constraints.positive)
+
         glimpse_name = 'Z^{%d}' % glimpse_side ** 2
-        self.glimpse_dist = canvas_dist(self._glimpse_side ** 2,
-                                        random_var_name=glimpse_name)
+        self.glimpse_dist = DiagonalGaussian(
+            self._glimpse_side ** 2, latent_name=glimpse_name
+        )
+        self.glimpse_scale = pnn.PyroParam(torch.ones(1),
+                                           constraint=constraints.positive)
+
 
     @property
     def type(self):
@@ -595,18 +613,23 @@ class SpatialTransformerReader(TypedModel):
                            self._glimpse_side])
 
     def forward(self, images):
-        images = images.view(-1, 1, self._canvas_side, self._canvas_side)
+        images = images.view(*self.canvas_shape(images))
         flat_images = images.view(-1, self._canvas_side ** 2)
-        coords = self.glimpse_conv(images).view(-1, self._canvas_side * 8)
-        coords = self.glimpse_dense(coords)
-        coords = self.coordinates_dist(coords)
+        coords = self.glimpse_conv(images)
+        coords = self.glimpse_selector(coords).sum(dim=1)
+        coords = coords.view(-1, (self._canvas_side // (2 ** 3)) ** 2)
+        coords = self.coordinates_dist(self.glimpse_dense(coords))
         transforms = glimpse_transform(inverse_glimpse(coords))
 
         grid = F.affine_grid(transforms, self.glimpse_shape(images),
                              align_corners=True)
-        glimpse = F.grid_sample(images.view(*self.canvas_shape(images)), grid,
-                                align_corners=True)
-        glimpse = self.glimpse_dist(glimpse)
+        glimpse = F.grid_sample(images, grid, align_corners=True)
+        flat_glimpse = glimpse.view(-1, self._glimpse_side ** 2)
+        flat_glimpse = torch.cat(
+            (flat_glimpse, torch.ones_like(flat_glimpse) * self.glimpse_scale),
+            dim=-1
+        )
+        glimpse = self.glimpse_dist(flat_glimpse)
 
         recon_transforms = glimpse_transform(coords)
         recon_grid = F.affine_grid(recon_transforms, self.canvas_shape(images),
@@ -614,7 +637,12 @@ class SpatialTransformerReader(TypedModel):
         glimpse_recon = F.grid_sample(glimpse.view(*self.glimpse_shape(images)),
                                       recon_grid, align_corners=True)
         glimpse_recon = glimpse_recon.view(-1, self._canvas_side ** 2)
-        residual = self.canvas_dist(flat_images - glimpse_recon)
+        residual = flat_images - glimpse_recon
+        residual = torch.cat(
+            (residual, torch.ones_like(residual) * self.canvas_scale),
+            dim=-1
+        )
+        residual = self.canvas_dist(residual)
 
         return residual, glimpse, coords
 
@@ -641,98 +669,3 @@ class GlimpsePrior(TypedModel):
     def forward(self):
         normal = dist.Normal(self.loc, self.scale).to_event(1)
         return pyro.sample('$%s$' % self._latent_name, normal)
-
-class LinearCombination(TypedModel):
-    def __init__(self, dim, out_dist):
-        super().__init__()
-        self._dim = dim
-        self.distribution = out_dist(self._dim)
-        in_side = int(np.sqrt(dim))
-        self.conv_layers = nn.Sequential(
-            nn.Conv2d(1, in_side, 4, 2, 1), nn.InstanceNorm2d(in_side),
-            nn.PReLU(),
-            nn.Conv2d(in_side, in_side * 2, 4, 2, 1),
-            nn.InstanceNorm2d(in_side * 2), nn.PReLU(),
-        )
-        self.dense_layer = nn.Sequential(
-            nn.Linear(in_side * 2 * (in_side // 4) ** 2,
-                      in_side * 2 * (in_side // 4) ** 2),
-            nn.LayerNorm(in_side * 2 * (in_side // 4) ** 2),
-            nn.PReLU()
-        )
-        self.deconv_layers = nn.Sequential(
-            nn.ConvTranspose2d(in_side * 2, in_side, 4, 2, 1),
-            nn.InstanceNorm2d(in_side), nn.PReLU(),
-            nn.ConvTranspose2d(in_side, 1, 4, 2, 1),
-        )
-
-    @property
-    def type(self):
-        ty = types.tensor_type(torch.float, self._dim)
-        return closed.CartesianClosed.ARROW(
-            closed.CartesianClosed.BASE(Ty(ty, ty)), ty
-        )
-
-    @property
-    def name(self):
-        rv_name = self.distribution.random_var_name
-        inputs_tuple = ' \\times '.join([rv_name, rv_name])
-        name = 'p(%s \\mid %s)' % (self.distribution.random_var_name,
-                                   inputs_tuple)
-        return '$%s$' % name
-
-    def forward(self, x, y):
-        in_side = int(np.sqrt(self._dim))
-        hidden = self.conv_layers((x + y).view(-1, 1, in_side, in_side))
-        hidden = self.dense_layer(hidden.view(x.shape[0], -1)).view(
-            *hidden.shape
-        )
-        hidden = self.deconv_layers(hidden).view(x.shape[0], -1)
-        return self.distribution(hidden)
-
-class LinearDecombination(TypedModel):
-    def __init__(self, dim, out_dist):
-        super().__init__()
-        self._dim = dim
-        self.distribution = out_dist(self._dim)
-        in_side = int(np.sqrt(dim))
-        self.conv_layers = nn.Sequential(
-            nn.Conv2d(1, in_side, 4, 2, 1), nn.InstanceNorm2d(in_side),
-            nn.PReLU(),
-            nn.Conv2d(in_side, in_side * 2, 4, 2, 1),
-            nn.InstanceNorm2d(in_side * 2), nn.PReLU(),
-        )
-        self.dense_layer = nn.Sequential(
-            nn.Linear(in_side * 2 * (in_side // 4) ** 2,
-                      in_side * 2 * (in_side // 4) ** 2),
-            nn.LayerNorm(in_side * 2 * (in_side // 4) ** 2),
-            nn.PReLU()
-        )
-        self.deconv_layers = nn.Sequential(
-            nn.ConvTranspose2d(in_side * 2, in_side, 4, 2, 1),
-            nn.InstanceNorm2d(in_side), nn.PReLU(),
-            nn.ConvTranspose2d(in_side, 1, 4, 2, 1),
-        )
-
-    @property
-    def type(self):
-        ty = types.tensor_type(torch.float, self._dim)
-        return closed.CartesianClosed.ARROW(
-            ty, closed.CartesianClosed.BASE(Ty(ty, ty))
-        )
-
-    @property
-    def name(self):
-        rv_name = self.distribution.random_var_name
-        outputs_tuple = ' \\times '.join([rv_name, rv_name])
-        name = 'p(%s \\mid %s)' % (outputs_tuple,
-                                   self.distribution.random_var_name)
-        return '$%s$' % name
-
-    def forward(self, z):
-        in_side = int(np.sqrt(self._dim))
-        x = self.conv_layers(z.view(-1, 1, in_side, in_side))
-        x = self.dense_layer(x.view(z.shape[0], -1)).view(*x.shape)
-        x = self.deconv_layers(x).view(z.shape[0], -1)
-        y = z - x
-        return self.distribution(x), self.distribution(y)

@@ -20,28 +20,21 @@ VAE_MIN_DEPTH = 2
 
 class CategoryModel(BaseModel):
     def __init__(self, generators, global_elements=[], data_dim=28*28,
-                 guide_hidden_dim=256):
+                 guide_hidden_dim=256, no_prior_dims=[]):
         super().__init__()
         self._data_dim = data_dim
         self._observation_name = '$X^{%d}$' % self._data_dim
 
-        combination = LinearCombination(self._data_dim,
-                                        ContinuousBernoulliModel)
-        decombination = LinearDecombination(self._data_dim,
-                                            ContinuousBernoulliModel)
-        combination_l, combination_r = combination.type.arrow()
-        generator = closed.TypedDaggerBox(combination.name, combination_l,
-                                          combination_r, combination,
-                                          decombination, decombination.name)
-        generators.append(generator)
-
         obs = set()
         for generator in generators:
             obs = obs | generator.type.base_elements()
+        for element in global_elements:
+            obs = obs - element.type.base_elements()
 
+        no_prior_dims = no_prior_dims + [self._data_dim]
         for ob in obs:
             dim = types.type_size(ob.name)
-            if dim == self._data_dim:
+            if dim in no_prior_dims:
                 continue
 
             space = types.tensor_type(torch.float, dim)
@@ -73,7 +66,7 @@ class CategoryModel(BaseModel):
         return types.tensor_type(torch.float, self._data_dim)
 
     @pnn.pyro_method
-    def model(self, observations=None):
+    def model(self, observations=None, train=True):
         if isinstance(observations, dict):
             data = observations[self._observation_name]
         elif observations is not None:
@@ -90,7 +83,7 @@ class CategoryModel(BaseModel):
                 module.set_batching(data)
 
         morphism = self._category(self.data_space, min_depth=VAE_MIN_DEPTH)
-        if observations is not None:
+        if observations is not None and train:
             score_morphism = pyro.condition(morphism, data=observations)
         else:
             score_morphism = morphism
@@ -132,13 +125,13 @@ class CategoryModel(BaseModel):
 
         return morphism
 
-    def forward(self, observations=None):
+    def forward(self, observations=None, train=True):
         if observations is not None:
             trace = pyro.poutine.trace(self.guide).get_trace(
                 observations=observations
             )
             return pyro.poutine.replay(self.model, trace=trace)(
-                observations=observations
+                observations=observations, train=train
             )
         return self.model(observations=None)
 
@@ -217,7 +210,6 @@ class GlimpseCategoryModel(CategoryModel):
     def __init__(self, data_dim=28*28, hidden_dim=4, guide_hidden_dim=256):
         self._data_dim = data_dim
         data_side = int(math.sqrt(self._data_dim))
-        data_space = types.tensor_type(torch.float, data_dim)
         glimpse_side = data_side // 2
         glimpse_dim = glimpse_side ** 2
         glimpse_space = types.tensor_type(torch.float, glimpse_dim)
@@ -233,21 +225,12 @@ class GlimpseCategoryModel(CategoryModel):
         generators = []
         for dim in dims:
             in_space = types.tensor_type(torch.float, dim)
-            prior = DensityDecoder(dim, glimpse_dim, latent_bernoulli,
+            prior = DensityDecoder(dim, glimpse_dim, DiagonalGaussian,
                                    convolve=True)
             posterior = DensityEncoder(glimpse_dim, dim, DiagonalGaussian,
                                        convolve=True)
             generator = closed.TypedDaggerBox(prior.density_name, in_space,
                                               glimpse_space, prior, posterior,
-                                              posterior.density_name)
-            generators.append(generator)
-
-            prior = DensityDecoder(dim, data_dim, ContinuousBernoulliModel,
-                                   convolve=True)
-            posterior = DensityEncoder(data_dim, dim, DiagonalGaussian,
-                                       convolve=True)
-            generator = closed.TypedDaggerBox(prior.density_name, in_space,
-                                              data_space, prior, posterior,
                                               posterior.density_name)
             generators.append(generator)
 
@@ -262,15 +245,12 @@ class GlimpseCategoryModel(CategoryModel):
         global_elements.append(closed.TypedBox(name, top, space, gaze))
 
         # Construct writer/reader pair for spatial attention
-        writer = SpatialTransformerWriter(ContinuousBernoulliModel, data_side,
-                                          glimpse_side)
+        writer = SpatialTransformerWriter(data_side, glimpse_side)
         writer_l, writer_r = writer.type.arrow()
-        reader = SpatialTransformerReader(DiagonalGaussian,
-                                          ContinuousBernoulliModel, data_side,
-                                          glimpse_side)
+        reader = SpatialTransformerReader(data_side, glimpse_side)
         generator = closed.TypedDaggerBox(writer.name, writer_l, writer_r,
                                           writer, reader, reader.name)
         generators.append(generator)
 
         super().__init__(generators, global_elements, data_dim,
-                         guide_hidden_dim)
+                         guide_hidden_dim, [glimpse_dim])
