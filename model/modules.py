@@ -27,15 +27,13 @@ class DiagonalGaussian(TypedModel):
 
     @property
     def type(self):
+        dim_space = types.tensor_type(torch.float, self._dim)
         return closed.CartesianClosed.ARROW(
-            types.tensor_type(torch.float, self._dim * 2),
-            types.tensor_type(torch.float, self._dim),
+            closed.CartesianClosed.BASE(Ty(dim_space, dim_space)), dim_space,
         )
 
-    def forward(self, inputs):
-        zs = inputs.view(-1, 2, self._dim[0])
-        mean, std_dev = zs[:, 0], F.softplus(zs[:, 1])
-        normal = dist.Normal(mean, std_dev).to_event(1)
+    def forward(self, loc, precision):
+        normal = dist.Normal(loc, F.softplus(precision) ** (-1/2)).to_event(1)
         return pyro.sample('$%s$' % self._latent_name, normal)
 
 class StandardNormal(TypedModel):
