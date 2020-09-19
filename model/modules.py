@@ -252,6 +252,9 @@ class DensityEncoder(DensityNet):
             out_hidden = self.dense_layers(out_hidden)
         else:
             out_hidden = self.neural_layers(inputs)
+        if self._channels == 2:
+            out_hidden = out_hidden.view(-1, 2, self._out_dim)
+            return self.distribution(out_hidden[:, 0], out_hidden[:, 1])
         return self.distribution(out_hidden.view(-1, self._out_dim))
 
 class LadderDecoder(TypedModel):
