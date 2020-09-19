@@ -619,19 +619,16 @@ class SpatialTransformerReader(TypedModel):
         flat_images = images.view(-1, self._canvas_side ** 2)
         coords = self.glimpse_conv(images)
         coords = self.glimpse_selector(coords).sum(dim=1)
-        coords = coords.view(-1, (self._canvas_side // (2 ** 3)) ** 2)
-        coords = self.coordinates_dist(self.glimpse_dense(coords))
+        coords = self.glimpse_dense(
+            coords.view(-1, (self._canvas_side // (2 ** 3)) ** 2)
+        ).view(-1, 2, 3)
+        coords = self.coordinates_dist(coords[:, 0], coords[:, 1])
         transforms = glimpse_transform(inverse_glimpse(coords))
 
         grid = F.affine_grid(transforms, self.glimpse_shape(images),
                              align_corners=True)
         glimpse = F.grid_sample(images, grid, align_corners=True)
         flat_glimpse = glimpse.view(-1, self._glimpse_side ** 2)
-        flat_glimpse = torch.cat(
-            (flat_glimpse, torch.ones_like(flat_glimpse) * self.glimpse_scale),
-            dim=-1
-        )
-        glimpse = self.glimpse_dist(flat_glimpse)
 
         recon_transforms = glimpse_transform(coords)
         recon_grid = F.affine_grid(recon_transforms, self.canvas_shape(images),
@@ -640,12 +637,10 @@ class SpatialTransformerReader(TypedModel):
                                       recon_grid, align_corners=True)
         glimpse_recon = glimpse_recon.view(-1, self._canvas_side ** 2)
         residual = flat_images - glimpse_recon
-        residual = torch.cat(
-            (residual, torch.ones_like(residual) * self.canvas_scale),
-            dim=-1
-        )
-        residual = self.canvas_dist(residual)
 
+        glimpse = self.glimpse_dist(flat_glimpse,
+                                    torch.ones_like(flat_glimpse) * self.glimpse_scale)
+        residual = self.canvas_dist(residual, torch.ones_like(residual) * self.canvas_scale)
         return residual, glimpse, coords
 
 class GlimpsePrior(TypedModel):
