@@ -551,11 +551,8 @@ class SpatialTransformerWriter(TypedModel):
         glimpse = F.grid_sample(glimpse_contents, grids, align_corners=True)
 
         canvas = (canvas + glimpse).view(-1, self._canvas_side ** 2)
-        canvas = torch.cat(
-            (canvas, torch.ones_like(canvas) * self.canvas_scale),
-            dim=-1
-        )
-        return self.distribution(canvas)
+        return self.distribution(canvas,
+                                 torch.ones_like(canvas) * self.canvas_scale)
 
 class SpatialTransformerReader(TypedModel):
     def __init__(self, canvas_side=28, glimpse_side=7):
