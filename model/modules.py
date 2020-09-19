@@ -224,8 +224,13 @@ class DensityDecoder(DensityNet):
             hidden = self.conv_layers(hidden)
         else:
             hidden = self.neural_layers(inputs)
-        hidden = hidden.view(-1, self._out_dim, self._channels).squeeze()
-        return self.distribution(hidden)
+        if self._channels == 1:
+            hidden = hidden.squeeze(dim=1).view(hidden.shape[0], self._out_dim)
+            result = self.distribution(hidden)
+        elif self._channels == 2:
+            hidden = hidden.view(hidden.shape[0], 2, self._out_dim)
+            result = self.distribution(hidden[:, 0], hidden[:, 1])
+        return result
 
 class DensityEncoder(DensityNet):
     def __init__(self, in_dim, out_dim, dist_layer=DiagonalGaussian,
