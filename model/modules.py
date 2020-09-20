@@ -582,15 +582,21 @@ class SpatialTransformerReader(TypedModel):
         self.canvas_dist = DiagonalGaussian(
             self._canvas_side ** 2, latent_name=canvas_name
         )
-        self.canvas_scale = pnn.PyroParam(torch.ones(1),
-                                          constraint=constraints.positive)
+        self.canvas_precision = nn.Sequential(
+            nn.Conv2d(1, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
+            nn.Conv2d(3, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
+            nn.ConvTranspose2d(3, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
+            nn.ConvTranspose2d(3, 1, 4, 2, 1), nn.Softplus(),
+        )
 
         glimpse_name = 'Z^{%d}' % glimpse_side ** 2
         self.glimpse_dist = DiagonalGaussian(
             self._glimpse_side ** 2, latent_name=glimpse_name
         )
-        self.glimpse_scale = pnn.PyroParam(torch.ones(1),
-                                           constraint=constraints.positive)
+        self.glimpse_precision = nn.Sequential(
+            nn.Conv2d(1, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
+            nn.ConvTranspose2d(3, 1, 4, 2, 1), nn.Softplus(),
+        )
 
 
     @property
@@ -623,7 +629,8 @@ class SpatialTransformerReader(TypedModel):
 
     def forward(self, images):
         images = images.view(*self.canvas_shape(images))
-        flat_images = images.view(-1, self._canvas_side ** 2)
+        images_precision = self.canvas_precision(images)
+
         coords = self.glimpse_conv(images)
         coords = self.glimpse_selector(coords).sum(dim=1)
         coords = self.glimpse_dense(
@@ -636,18 +643,27 @@ class SpatialTransformerReader(TypedModel):
                              align_corners=True)
         glimpse = F.grid_sample(images, grid, align_corners=True)
         flat_glimpse = glimpse.view(-1, self._glimpse_side ** 2)
+        glimpse_precision = self.glimpse_precision(glimpse)
 
         recon_transforms = glimpse_transform(coords)
         recon_grid = F.affine_grid(recon_transforms, self.canvas_shape(images),
                                    align_corners=True)
-        glimpse_recon = F.grid_sample(glimpse.view(*self.glimpse_shape(images)),
-                                      recon_grid, align_corners=True)
-        glimpse_recon = glimpse_recon.view(-1, self._canvas_side ** 2)
-        residual = flat_images - glimpse_recon
+        glimpse_recon = F.grid_sample(glimpse, recon_grid, align_corners=True)
+        recon_precision = F.grid_sample(glimpse_precision, recon_grid,
+                                        align_corners=True)
 
-        glimpse = self.glimpse_dist(flat_glimpse,
-                                    torch.ones_like(flat_glimpse) * self.glimpse_scale)
-        residual = self.canvas_dist(residual, torch.ones_like(residual) * self.canvas_scale)
+        residual = images - glimpse_recon
+        flat_residual = residual.view(-1, self._canvas_side ** 2)
+
+        glimpse_precision = glimpse_precision.view(
+            -1, self._glimpse_side ** 2
+        )
+        residual_precision = (images_precision + recon_precision).view(
+            -1, self._canvas_side ** 2
+        )
+
+        glimpse = self.glimpse_dist(flat_glimpse, glimpse_precision)
+        residual = self.canvas_dist(flat_residual, residual_precision)
         return residual, glimpse, coords
 
 class GlimpsePrior(TypedModel):
