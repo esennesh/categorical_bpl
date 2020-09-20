@@ -510,8 +510,12 @@ class SpatialTransformerWriter(TypedModel):
         self.distribution = DiagonalGaussian(
             self._canvas_side ** 2, latent_name=canvas_name
         )
-        self.canvas_scale = pnn.PyroParam(torch.ones(1),
-                                          constraint=constraints.positive)
+        self.image_precision = nn.Sequential(
+            nn.Conv2d(1, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
+            nn.Conv2d(3, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
+            nn.ConvTranspose2d(3, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
+            nn.ConvTranspose2d(3, 1, 4, 2, 1), nn.Softplus(),
+        )
 
     @property
     def type(self):
@@ -550,9 +554,12 @@ class SpatialTransformerWriter(TypedModel):
         glimpse_contents = glimpse_contents.view(*self.glimpse_shape(canvas))
         glimpse = F.grid_sample(glimpse_contents, grids, align_corners=True)
 
-        canvas = (canvas + glimpse).view(-1, self._canvas_side ** 2)
-        return self.distribution(canvas,
-                                 torch.ones_like(canvas) * self.canvas_scale)
+        canvas = canvas + glimpse
+        flat_canvas = canvas.view(-1, self._canvas_side ** 2)
+        canvas_precision = self.image_precision(canvas).view(
+            -1, self._canvas_side ** 2
+        )
+        return self.distribution(flat_canvas, canvas_precision)
 
 class SpatialTransformerReader(TypedModel):
     def __init__(self, canvas_side=28, glimpse_side=7):
