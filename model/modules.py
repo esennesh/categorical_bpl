@@ -672,8 +672,8 @@ class GlimpsePrior(TypedModel):
         if not latent_name:
             latent_name = 'Z^{%d}' % 3
         self._latent_name = latent_name
-        self.loc = pnn.PyroParam(torch.tensor([3., 0., 0.]))
-        self.scale = pnn.PyroParam(torch.tensor([0.1, 1., 1.]),
+        self.loc = pnn.PyroParam(torch.tensor([0., 0., 0.]))
+        self.scale = pnn.PyroParam(torch.tensor([1., 1., 1.]),
                                    constraint=constraints.positive)
 
     @property
@@ -688,4 +688,5 @@ class GlimpsePrior(TypedModel):
 
     def forward(self):
         normal = dist.Normal(self.loc, self.scale).to_event(1)
-        return pyro.sample('$%s$' % self._latent_name, normal)
+        xs = pyro.sample('$%s$' % self._latent_name, normal)
+        return torch.cat((xs[:, :1].exp(), xs[:, 1:]), dim=-1)
