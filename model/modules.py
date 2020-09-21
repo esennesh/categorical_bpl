@@ -637,6 +637,7 @@ class SpatialTransformerReader(TypedModel):
             coords.view(-1, (self._canvas_side // (2 ** 3)) ** 2)
         ).view(-1, 2, 3)
         coords = self.coordinates_dist(coords[:, 0], coords[:, 1])
+        coords = torch.cat((coords[:, :1].exp(), coords[:, 1:]), dim=-1)
         transforms = glimpse_transform(inverse_glimpse(coords))
 
         grid = F.affine_grid(transforms, self.glimpse_shape(images),
