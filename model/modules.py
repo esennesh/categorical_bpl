@@ -14,12 +14,13 @@ from base import TypedModel
 import base.base_type as types
 
 class DiagonalGaussian(TypedModel):
-    def __init__(self, dim, latent_name=None):
+    def __init__(self, dim, latent_name=None, likelihood=False):
         super().__init__()
         self._dim = torch.Size([dim])
         if not latent_name:
             latent_name = 'Z^{%d}' % self._dim[0]
         self._latent_name = latent_name
+        self._likelihood = likelihood
 
     @property
     def random_var_name(self):
@@ -34,7 +35,10 @@ class DiagonalGaussian(TypedModel):
 
     def forward(self, loc, precision):
         normal = dist.Normal(loc, F.softplus(precision) ** (-1/2)).to_event(1)
-        return pyro.sample('$%s$' % self._latent_name, normal)
+        zs = pyro.sample('$%s$' % self._latent_name, normal)
+        if self._likelihood:
+            return loc
+        return zs
 
 class StandardNormal(TypedModel):
     def __init__(self, dim, latent_name=None):
