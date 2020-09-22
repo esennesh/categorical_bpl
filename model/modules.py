@@ -584,7 +584,7 @@ class SpatialTransformerReader(TypedModel):
 
         canvas_name = 'X^{%d}' % canvas_side ** 2
         self.canvas_dist = DiagonalGaussian(
-            self._canvas_side ** 2, latent_name=canvas_name
+            self._canvas_side ** 2, latent_name=canvas_name, likelihood=True,
         )
         self.canvas_precision = nn.Sequential(
             nn.Conv2d(1, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
@@ -595,7 +595,7 @@ class SpatialTransformerReader(TypedModel):
 
         glimpse_name = 'Z^{%d}' % glimpse_side ** 2
         self.glimpse_dist = DiagonalGaussian(
-            self._glimpse_side ** 2, latent_name=glimpse_name
+            self._glimpse_side ** 2, latent_name=glimpse_name, likelihood=True,
         )
         self.glimpse_precision = nn.Sequential(
             nn.Conv2d(1, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
