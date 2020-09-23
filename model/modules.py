@@ -92,12 +92,13 @@ class NullPrior(TypedModel):
         return pyro.sample('$%s$' % self._random_var_name, bernoulli)
 
 class ContinuousBernoulliModel(TypedModel):
-    def __init__(self, dim, random_var_name=None):
+    def __init__(self, dim, random_var_name=None, likelihood=True):
         super().__init__()
         self._dim = torch.Size([dim])
         if not random_var_name:
             random_var_name = 'X^{%d}' % self._dim[0]
         self._random_var_name = random_var_name
+        self._likelihood = likelihood
 
     @property
     def random_var_name(self):
@@ -111,9 +112,12 @@ class ContinuousBernoulliModel(TypedModel):
         )
 
     def forward(self, inputs):
-        xs = inputs.view(-1, self._dim[0])
+        xs = torch.clamp(inputs.view(-1, self._dim[0]), 0., 1.)
         bernoulli = dist.ContinuousBernoulli(probs=xs).to_event(1)
-        return pyro.sample('$%s$' % self._random_var_name, bernoulli)
+        sample = pyro.sample('$%s$' % self._random_var_name, bernoulli)
+        if self._likelihood:
+            return xs
+        return sample
 
 class RelaxedBernoulliModel(TypedModel):
     def __init__(self, dim, random_var_name=None):
