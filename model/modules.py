@@ -453,18 +453,23 @@ class LadderEncoder(TypedModel):
             in_side = int(np.sqrt(self._in_dim))
             ladder_input = ladder_input.reshape(-1, 1, in_side, in_side)
 
-            noise = self.noise_convs(ladder_input).reshape(
+            noise = self.noise_linear(self.noise_convs(ladder_input).reshape(
                 -1, in_side * 2 * (2 * 4 - 1) ** 2
-            )
-            noise = self.noise_distribution(self.noise_linear(noise))
+            ))
 
             hiddens = self.ladder_convs(ladder_input).reshape(
                 -1, in_side * 2 * (2 * 4 - 1) ** 2
             )
-            hiddens = self.ladder_distribution(self.ladder_linear(hiddens))
+            hiddens = self.ladder_linear(hiddens)
         else:
-            noise = self.noise_distribution(self.noise_dense(ladder_input))
-            hiddens = self.ladder_distribution(self.ladder_dense(ladder_input))
+            noise = self.noise_dense(ladder_input)
+            hiddens = self.ladder_dense(ladder_input)
+
+        noise = noise.view(-1, 2, self._noise_dim)
+        noise = self.noise_distribution(noise[:, 0], noise[:, 1])
+
+        hiddens = hiddens.view(-1, 2, self._out_dim)
+        hiddens = self.ladder_distribution(hiddens[:, 0], hiddens[:, 1])
 
         return hiddens, noise
 
