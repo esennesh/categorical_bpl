@@ -505,7 +505,8 @@ class LadderPosterior(TypedModel):
         return '$%s$' % name
 
     def forward(self, ladder_input):
-        return self.distribution(self.noise_dense(ladder_input))
+        noise = self.noise_dense(ladder_input).view(-1, 2, self._out_dim)
+        return self.distribution(noise[:, 0], noise[:, 1])
 
 def glimpse_transform(glimpse_code):
     scalings = torch.eye(2).expand(glimpse_code.shape[0], 2, 2).to(glimpse_code)
