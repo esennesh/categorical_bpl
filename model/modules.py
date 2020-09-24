@@ -378,7 +378,8 @@ class LadderPrior(TypedModel):
         return '$%s$' % name
 
     def forward(self, noise):
-        return self.distribution(self.noise_dense(noise))
+        noise = self.noise_dense(noise).view(-1, 2, self._out_dim)
+        return self.distribution(noise[:, 0], noise[:, 1])
 
 class LadderEncoder(TypedModel):
     def __init__(self, in_dim, out_dim, out_dist, noise_dist, noise_dim=2,
