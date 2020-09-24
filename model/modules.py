@@ -337,7 +337,10 @@ class LadderDecoder(TypedModel):
         else:
             hiddens = self.neural_layers(hiddens)
 
-        return self.distribution(hiddens)
+        if isinstance(self.distribution, ContinuousBernoulliModel):
+            return self.distribution(hiddens)
+        hiddens = hiddens.view(-1, 2, self._out_dim)
+        return self.distribution(hiddens[:, 0], hiddens[:, 1])
 
 class LadderPrior(TypedModel):
     def __init__(self, noise_dim, out_dim, out_dist=DiagonalGaussian,
