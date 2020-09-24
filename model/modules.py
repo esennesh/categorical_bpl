@@ -116,7 +116,7 @@ class ContinuousBernoulliModel(TypedModel):
         bernoulli = dist.ContinuousBernoulli(probs=xs).to_event(1)
         sample = pyro.sample('$%s$' % self._random_var_name, bernoulli)
         if self._likelihood:
-            return xs
+            return bernoulli.mean
         return sample
 
 class RelaxedBernoulliModel(TypedModel):
@@ -525,14 +525,9 @@ class SpatialTransformerWriter(TypedModel):
         self._canvas_side = canvas_side
         self._glimpse_side = glimpse_side
         canvas_name = 'X^{%d}' % canvas_side ** 2
-        self.distribution = DiagonalGaussian(
-            self._canvas_side ** 2, latent_name=canvas_name, likelihood=True,
-        )
-        self.image_precision = nn.Sequential(
-            nn.Conv2d(1, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
-            nn.Conv2d(3, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
-            nn.ConvTranspose2d(3, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
-            nn.ConvTranspose2d(3, 1, 4, 2, 1), nn.Softplus(),
+        self.distribution = ContinuousBernoulliModel(
+            self._canvas_side ** 2, random_var_name=canvas_name,
+            likelihood=True,
         )
 
     @property
@@ -574,10 +569,7 @@ class SpatialTransformerWriter(TypedModel):
 
         canvas = canvas + glimpse
         flat_canvas = canvas.view(-1, self._canvas_side ** 2)
-        canvas_precision = self.image_precision(canvas).view(
-            -1, self._canvas_side ** 2
-        )
-        return self.distribution(flat_canvas, canvas_precision)
+        return self.distribution(flat_canvas)
 
 class SpatialTransformerReader(TypedModel):
     def __init__(self, canvas_side=28, glimpse_side=7):
