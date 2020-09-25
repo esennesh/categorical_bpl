@@ -116,7 +116,7 @@ class ContinuousBernoulliModel(TypedModel):
         bernoulli = dist.ContinuousBernoulli(probs=xs).to_event(1)
         sample = pyro.sample('$%s$' % self._random_var_name, bernoulli)
         if self._likelihood:
-            return bernoulli.mean
+            return xs
         return sample
 
 class RelaxedBernoulliModel(TypedModel):
