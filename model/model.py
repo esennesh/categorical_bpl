@@ -214,9 +214,6 @@ class GlimpseCategoryModel(CategoryModel):
         glimpse_dim = glimpse_side ** 2
         glimpse_space = types.tensor_type(torch.float, glimpse_dim)
 
-        latent_bernoulli = lambda dim: ContinuousBernoulliModel(dim,
-                                                                'Z^{%d}' % dim)
-
         # Build up a bunch of torch.Sizes for the powers of two between
         # hidden_dim and data_dim.
         dims = list(util.powers_of(2, hidden_dim, glimpse_dim))[:-1]
@@ -238,11 +235,6 @@ class GlimpseCategoryModel(CategoryModel):
         top, space = background.type.arrow()
         name = '$p(%s)$' % background.random_var_name
         global_elements = [closed.TypedBox(name, top, space, background)]
-
-        gaze = GlimpsePrior()
-        top, space = gaze.type.arrow()
-        name = '$p(%s)$' % gaze.random_var_name
-        global_elements.append(closed.TypedBox(name, top, space, gaze))
 
         # Construct writer/reader pair for spatial attention
         writer = SpatialTransformerWriter(data_side, glimpse_side)
