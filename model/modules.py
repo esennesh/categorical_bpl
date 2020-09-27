@@ -632,19 +632,17 @@ class SpatialTransformerReader(TypedModel):
     def type(self):
         canvas_type = types.tensor_type(torch.float, self._canvas_side ** 2)
         glimpse_type = types.tensor_type(torch.float, self._glimpse_side ** 2)
-        triple = types.tensor_type(torch.float, 3)
 
         return closed.CartesianClosed.ARROW(
             canvas_type,
-            closed.CartesianClosed.BASE(Ty(canvas_type, glimpse_type, triple)),
+            closed.CartesianClosed.BASE(Ty(canvas_type, glimpse_type)),
         )
 
     @property
     def name(self):
         canvas_name = 'Z^{%d}' % self._canvas_side ** 2
         glimpse_name = 'Z^{%d}' % self._glimpse_side ** 2
-        outputs_tuple = ' \\times '.join([canvas_name, glimpse_name,
-                                          '\\mathbb{R}^{3}'])
+        outputs_tuple = ' \\times '.join([canvas_name, glimpse_name])
         name = 'q(%s \\mid %s)' % (outputs_tuple, canvas_name)
         return '$%s$' % name
 
@@ -694,7 +692,7 @@ class SpatialTransformerReader(TypedModel):
 
         glimpse = self.glimpse_dist(flat_glimpse, glimpse_precision)
         residual = self.canvas_dist(flat_residual, residual_precision)
-        return residual, glimpse, coords
+        return residual, glimpse
 
 class GlimpsePrior(TypedModel):
     def __init__(self, latent_name=None):
