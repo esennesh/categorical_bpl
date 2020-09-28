@@ -525,8 +525,8 @@ class SpatialTransformerWriter(TypedModel):
         self._canvas_side = canvas_side
         self._glimpse_side = glimpse_side
         canvas_name = 'X^{%d}' % canvas_side ** 2
-        self.distribution = ContinuousBernoulliModel(
-            self._canvas_side ** 2, random_var_name=canvas_name,
+        self.distribution = DiagonalGaussian(
+            self._canvas_side ** 2, latent_name=canvas_name,
             likelihood=True,
         )
 
@@ -541,6 +541,13 @@ class SpatialTransformerWriter(TypedModel):
         self.glimpse_dense = nn.Linear((self._canvas_side // (2 ** 3)) ** 2,
                                        3 * 2)
         self.coordinates_dist = DiagonalGaussian(3)
+
+        self.canvas_precision = nn.Sequential(
+            nn.Conv2d(1, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
+            nn.Conv2d(3, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
+            nn.ConvTranspose2d(3, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
+            nn.ConvTranspose2d(3, 1, 4, 2, 1), nn.Softplus(),
+        )
 
     @property
     def type(self):
@@ -587,8 +594,12 @@ class SpatialTransformerWriter(TypedModel):
         glimpse = F.grid_sample(glimpse_contents, grids, align_corners=True)
 
         canvas = canvas + glimpse
+        canvas_precision = self.canvas_precision(canvas)
+
         flat_canvas = canvas.view(-1, self._canvas_side ** 2)
-        return self.distribution(flat_canvas)
+        flat_canvas_precision = canvas_precision.view(-1,
+                                                      self._canvas_side ** 2)
+        return self.distribution(flat_canvas, flat_canvas_precision)
 
 class SpatialTransformerReader(TypedModel):
     def __init__(self, canvas_side=28, glimpse_side=7):
