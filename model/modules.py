@@ -34,7 +34,8 @@ class DiagonalGaussian(TypedModel):
         )
 
     def forward(self, loc, precision):
-        normal = dist.Normal(loc, F.softplus(precision) ** (-1/2)).to_event(1)
+        scale = torch.sqrt(F.softplus(precision)) ** (-1.)
+        normal = dist.Normal(loc, scale).to_event(1)
         zs = pyro.sample('$%s$' % self._latent_name, normal)
         if self._likelihood:
             return loc
