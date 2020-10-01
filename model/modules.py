@@ -34,7 +34,8 @@ class DiagonalGaussian(TypedModel):
         )
 
     def forward(self, loc, precision):
-        normal = dist.Normal(loc, F.softplus(precision) ** (-1/2)).to_event(1)
+        scale = torch.sqrt(F.softplus(precision)) ** (-1.)
+        normal = dist.Normal(loc, scale).to_event(1)
         zs = pyro.sample('$%s$' % self._latent_name, normal)
         if self._likelihood:
             return loc
@@ -525,19 +526,37 @@ class SpatialTransformerWriter(TypedModel):
         self._canvas_side = canvas_side
         self._glimpse_side = glimpse_side
         canvas_name = 'X^{%d}' % canvas_side ** 2
-        self.distribution = ContinuousBernoulliModel(
-            self._canvas_side ** 2, random_var_name=canvas_name,
+        self.distribution = DiagonalGaussian(
+            self._canvas_side ** 2, latent_name=canvas_name,
             likelihood=True,
+        )
+
+        self.glimpse_conv = nn.Sequential(
+            nn.Conv2d(1, canvas_side, 4, 2, 1),
+            nn.InstanceNorm2d(canvas_side), nn.PReLU(),
+            nn.Conv2d(canvas_side, canvas_side * 2, 4, 2, 1),
+            nn.InstanceNorm2d(canvas_side * 2), nn.PReLU(),
+            nn.Conv2d(canvas_side * 2, canvas_side * 4, 4, 2, 1),
+        )
+        self.glimpse_selector = nn.Softmax2d()
+        self.glimpse_dense = nn.Linear((self._canvas_side // (2 ** 3)) ** 2,
+                                       3 * 2)
+        self.coordinates_dist = DiagonalGaussian(3)
+
+        self.canvas_precision = nn.Sequential(
+            nn.Conv2d(1, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
+            nn.Conv2d(3, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
+            nn.ConvTranspose2d(3, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
+            nn.ConvTranspose2d(3, 1, 4, 2, 1), nn.Softplus(),
         )
 
     @property
     def type(self):
         canvas_type = types.tensor_type(torch.float, self._canvas_side ** 2)
         glimpse_type = types.tensor_type(torch.float, self._glimpse_side ** 2)
-        triple = types.tensor_type(torch.float, 3)
 
         return closed.CartesianClosed.ARROW(
-            closed.CartesianClosed.BASE(Ty(canvas_type, glimpse_type, triple)),
+            closed.CartesianClosed.BASE(Ty(canvas_type, glimpse_type)),
             canvas_type
         )
 
@@ -545,8 +564,7 @@ class SpatialTransformerWriter(TypedModel):
     def name(self):
         canvas_name = 'Z^{%d}' % self._canvas_side ** 2
         glimpse_name = 'Z^{%d}' % self._glimpse_side ** 2
-        inputs_tuple = ' \\times '.join([canvas_name, glimpse_name,
-                                         '\\mathbb{R}^{3}'])
+        inputs_tuple = ' \\times '.join([canvas_name, glimpse_name])
         name = 'p(%s \\mid %s)' % (self.distribution.random_var_name,
                                    inputs_tuple)
         return '$%s$' % name
@@ -559,17 +577,30 @@ class SpatialTransformerWriter(TypedModel):
         return torch.Size([imgs.shape[0], 1, self._glimpse_side,
                            self._glimpse_side])
 
-    def forward(self, canvas, glimpse_contents, glimpse_params):
+    def forward(self, canvas, glimpse_contents):
         canvas = canvas.view(*self.canvas_shape(canvas))
-        glimpse_transforms = glimpse_transform(glimpse_params)
+
+        coords = self.glimpse_conv(canvas)
+        coords = self.glimpse_selector(coords).sum(dim=1)
+        coords = self.glimpse_dense(
+            coords.view(-1, (self._canvas_side // (2 ** 3)) ** 2)
+        ).view(-1, 2, 3)
+        coords = self.coordinates_dist(coords[:, 0], coords[:, 1])
+        coords = torch.cat((coords[:, :1].exp(), coords[:, 1:]), dim=-1)
+
+        glimpse_transforms = glimpse_transform(coords)
         grids = F.affine_grid(glimpse_transforms, self.canvas_shape(canvas),
                               align_corners=True)
         glimpse_contents = glimpse_contents.view(*self.glimpse_shape(canvas))
         glimpse = F.grid_sample(glimpse_contents, grids, align_corners=True)
 
         canvas = canvas + glimpse
+        canvas_precision = self.canvas_precision(canvas)
+
         flat_canvas = canvas.view(-1, self._canvas_side ** 2)
-        return self.distribution(flat_canvas)
+        flat_canvas_precision = canvas_precision.view(-1,
+                                                      self._canvas_side ** 2)
+        return self.distribution(flat_canvas, flat_canvas_precision)
 
 class SpatialTransformerReader(TypedModel):
     def __init__(self, canvas_side=28, glimpse_side=7):
@@ -613,19 +644,17 @@ class SpatialTransformerReader(TypedModel):
     def type(self):
         canvas_type = types.tensor_type(torch.float, self._canvas_side ** 2)
         glimpse_type = types.tensor_type(torch.float, self._glimpse_side ** 2)
-        triple = types.tensor_type(torch.float, 3)
 
         return closed.CartesianClosed.ARROW(
             canvas_type,
-            closed.CartesianClosed.BASE(Ty(canvas_type, glimpse_type, triple)),
+            closed.CartesianClosed.BASE(Ty(canvas_type, glimpse_type)),
         )
 
     @property
     def name(self):
         canvas_name = 'Z^{%d}' % self._canvas_side ** 2
         glimpse_name = 'Z^{%d}' % self._glimpse_side ** 2
-        outputs_tuple = ' \\times '.join([canvas_name, glimpse_name,
-                                          '\\mathbb{R}^{3}'])
+        outputs_tuple = ' \\times '.join([canvas_name, glimpse_name])
         name = 'q(%s \\mid %s)' % (outputs_tuple, canvas_name)
         return '$%s$' % name
 
@@ -675,7 +704,7 @@ class SpatialTransformerReader(TypedModel):
 
         glimpse = self.glimpse_dist(flat_glimpse, glimpse_precision)
         residual = self.canvas_dist(flat_residual, residual_precision)
-        return residual, glimpse, coords
+        return residual, glimpse
 
 class GlimpsePrior(TypedModel):
     def __init__(self, latent_name=None):
