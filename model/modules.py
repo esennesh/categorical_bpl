@@ -681,28 +681,3 @@ class SpatialTransformerReader(TypedModel):
         glimpse = self.glimpse_dist(flat_glimpse, glimpse_precision)
         residual = self.canvas_dist(flat_residual, residual_precision)
         return residual, glimpse
-
-class GlimpsePrior(TypedModel):
-    def __init__(self, latent_name=None):
-        super().__init__()
-        if not latent_name:
-            latent_name = 'Z^{%d}' % 3
-        self._latent_name = latent_name
-        self.loc = pnn.PyroParam(torch.tensor([0., 0., 0.]))
-        self.scale = pnn.PyroParam(torch.tensor([1., 1., 1.]),
-                                   constraint=constraints.positive)
-
-    @property
-    def random_var_name(self):
-        return self._latent_name
-
-    @property
-    def type(self):
-        return closed.CartesianClosed.ARROW(
-            closed.TOP, types.tensor_type(torch.float, 3),
-        )
-
-    def forward(self):
-        normal = dist.Normal(self.loc, self.scale).to_event(1)
-        xs = pyro.sample('$%s$' % self._latent_name, normal)
-        return torch.cat((xs[:, :1].exp(), xs[:, 1:]), dim=-1)
