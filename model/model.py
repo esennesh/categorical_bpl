@@ -214,6 +214,10 @@ class GlimpseCategoryModel(CategoryModel):
         glimpse_dim = glimpse_side ** 2
         glimpse_space = types.tensor_type(torch.float, glimpse_dim)
 
+        gaussian_likelihood = lambda dim, name=None: DiagonalGaussian(
+            dim, name, likelihood=True
+        )
+
         # Build up a bunch of torch.Sizes for the powers of two between
         # hidden_dim and data_dim.
         dims = list(util.powers_of(2, hidden_dim, glimpse_dim))[:-1]
@@ -222,7 +226,7 @@ class GlimpseCategoryModel(CategoryModel):
         generators = []
         for dim in dims:
             in_space = types.tensor_type(torch.float, dim)
-            prior = DensityDecoder(dim, glimpse_dim, DiagonalGaussian,
+            prior = DensityDecoder(dim, glimpse_dim, gaussian_likelihood,
                                    convolve=True)
             posterior = DensityEncoder(glimpse_dim, dim, DiagonalGaussian,
                                        convolve=True)
