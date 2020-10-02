@@ -130,9 +130,11 @@ class DensityNet(TypedModel):
         self._out_space = types.tensor_type(torch.float, out_dim)
         self._convolve = convolve
 
+        self.add_module('distribution', dist_layer(out_dim))
+
         hidden_dim = (in_dim + out_dim) // 2
         self._channels = 1
-        if dist_layer == DiagonalGaussian:
+        if isinstance(self.distribution, DiagonalGaussian):
             self._channels *= 2
         final_features = out_dim * self._channels
         if not self._convolve:
@@ -174,7 +176,6 @@ class DensityNet(TypedModel):
                     normalizer_layer(final_features), nn.PReLU(),
                     nn.Linear(final_features, final_features)
                 )
-        self.add_module('distribution', dist_layer(out_dim))
 
     def set_batching(self, batch):
         super().set_batching(batch)
