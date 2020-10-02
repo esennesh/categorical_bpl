@@ -120,30 +120,6 @@ class ContinuousBernoulliModel(TypedModel):
             return xs
         return sample
 
-class RelaxedBernoulliModel(TypedModel):
-    def __init__(self, dim, random_var_name=None):
-        super().__init__()
-        self._dim = torch.Size([dim])
-        if not random_var_name:
-            random_var_name = 'X^{%d}' % self._dim[0]
-        self._random_var_name = random_var_name
-
-    @property
-    def random_var_name(self):
-        return self._random_var_name
-
-    @property
-    def type(self):
-        return closed.CartesianClosed.ARROW(
-            types.tensor_type(torch.float, self._dim),
-            types.tensor_type(torch.float, self._dim),
-        )
-
-    def forward(self, inputs):
-        bernoulli = dist.RelaxedBernoulli(torch.ones_like(inputs),
-                                          probs=inputs).to_event(1)
-        return pyro.sample('$%s$' % self._random_var_name, bernoulli)
-
 class DensityNet(TypedModel):
     def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel,
                  normalizer_layer=nn.LayerNorm, convolve=False):
