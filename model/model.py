@@ -241,11 +241,6 @@ class GlimpseCategoryModel(CategoryModel):
                                               encoder.density_name)
             generators.append(generator)
 
-        background = NullPrior(self._data_dim, 'X^{%d}' % self._data_dim)
-        top, space = background.type.arrow()
-        name = '$p(%s)$' % background.random_var_name
-        global_elements = [closed.TypedBox(name, top, space, background)]
-
         # Construct monoidal unit for spatial attention
         prior = CanvasPrior(data_side, glimpse_side)
         posterior = CanvasEncoder(data_side, glimpse_side)
@@ -262,5 +257,5 @@ class GlimpseCategoryModel(CategoryModel):
                                           writer, reader, reader.name)
         generators.append(generator)
 
-        super().__init__(generators, global_elements, data_dim,
-                         guide_hidden_dim, [glimpse_dim])
+        super().__init__(generators, [], data_dim, guide_hidden_dim,
+                         [glimpse_dim])
