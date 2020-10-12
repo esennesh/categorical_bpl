@@ -219,20 +219,26 @@ class GlimpseCategoryModel(CategoryModel):
         )
 
         # Build up a bunch of torch.Sizes for the powers of two between
-        # hidden_dim and data_dim.
-        dims = list(util.powers_of(2, hidden_dim, glimpse_dim))[:-1]
+        # hidden_dim and glimpse_dim.
+        dims = list(util.powers_of(2, hidden_dim, glimpse_dim))
         dims.sort()
 
         generators = []
-        for dim in dims:
-            in_space = types.tensor_type(torch.float, dim)
-            prior = DensityDecoder(dim, glimpse_dim, gaussian_likelihood,
-                                   convolve=True)
-            posterior = DensityEncoder(glimpse_dim, dim, DiagonalGaussian,
-                                       convolve=True)
-            generator = closed.TypedDaggerBox(prior.density_name, in_space,
-                                              glimpse_space, prior, posterior,
-                                              posterior.density_name)
+        for dim_a, dim_b in itertools.combinations(dims, 2):
+            lower, higher = sorted([dim_a, dim_b])
+            # Construct the decoder and encoder
+            if higher == glimpse_dim:
+                decoder = DensityDecoder(lower, higher, gaussian_likelihood,
+                                         convolve=True)
+                encoder = DensityEncoder(higher, lower, DiagonalGaussian,
+                                         convolve=True)
+            else:
+                decoder = DensityDecoder(lower, higher, DiagonalGaussian)
+                encoder = DensityEncoder(higher, lower, DiagonalGaussian)
+            in_space, out_space = decoder.type.arrow()
+            generator = closed.TypedDaggerBox(decoder.density_name, in_space,
+                                              out_space, decoder, encoder,
+                                              encoder.density_name)
             generators.append(generator)
 
         background = NullPrior(self._data_dim, 'X^{%d}' % self._data_dim)
