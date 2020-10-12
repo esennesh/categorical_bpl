@@ -246,6 +246,14 @@ class GlimpseCategoryModel(CategoryModel):
         name = '$p(%s)$' % background.random_var_name
         global_elements = [closed.TypedBox(name, top, space, background)]
 
+        # Construct monoidal unit for spatial attention
+        prior = CanvasPrior(data_side, glimpse_side)
+        posterior = CanvasEncoder(data_side, glimpse_side)
+        l, r = prior.type.arrow()
+        generator = closed.TypedDaggerBox(prior.name, l, r, prior, posterior,
+                                          posterior.name)
+        generators.append(generator)
+
         # Construct writer/reader pair for spatial attention
         writer = SpatialTransformerWriter(data_side, glimpse_side)
         writer_l, writer_r = writer.type.arrow()
