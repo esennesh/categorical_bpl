@@ -637,6 +637,61 @@ class SpatialTransformerWriter(TypedModel):
                                                       self._canvas_side ** 2)
         return self.distribution(flat_canvas, flat_canvas_precision)
 
+class CanvasEncoder(TypedModel):
+    def __init__(self, canvas_side=28, glimpse_side=7):
+        super().__init__()
+        self._canvas_side = canvas_side
+        self._glimpse_side = glimpse_side
+
+        glimpse_name = 'Z^{%d}' % glimpse_side ** 2
+        self.glimpse_dist = DiagonalGaussian(
+            self._glimpse_side ** 2, latent_name=glimpse_name, likelihood=True,
+        )
+        self.glimpse_precision = nn.Sequential(
+            nn.Conv2d(1, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
+            nn.ConvTranspose2d(3, 1, 4, 2, 1), nn.Softplus(),
+        )
+
+
+    @property
+    def type(self):
+        canvas_type = types.tensor_type(torch.float, self._canvas_side ** 2)
+        glimpse_type = types.tensor_type(torch.float, self._glimpse_side ** 2)
+
+        return closed.CartesianClosed.ARROW(canvas_type, glimpse_type)
+
+    @property
+    def name(self):
+        canvas_name = 'X^{%d}' % self._canvas_side ** 2
+        glimpse_name = 'Z^{%d}' % self._glimpse_side ** 2
+        name = 'q(%s \\mid %s)' % (glimpse_name, canvas_name)
+        return '$%s$' % name
+
+    def canvas_shape(self, imgs):
+        return torch.Size([imgs.shape[0], 1, self._canvas_side,
+                           self._canvas_side])
+
+    def glimpse_shape(self, imgs):
+        return torch.Size([imgs.shape[0], 1, self._glimpse_side,
+                           self._glimpse_side])
+
+    def forward(self, canvas):
+        canvas = canvas.view(*self.canvas_shape(canvas))
+
+        coords = torch.tensor([1., 0., 0.]).to(canvas).expand(canvas.shape[0],
+                                                              3)
+        transforms = glimpse_transform(inverse_glimpse(coords))
+        grid = F.affine_grid(transforms, self.glimpse_shape(canvas),
+                             align_corners=True)
+        glimpse = F.grid_sample(canvas, grid, align_corners=True)
+        flat_glimpse = glimpse.view(-1, self._glimpse_side ** 2)
+        glimpse_precision = self.glimpse_precision(glimpse).view(
+            -1, self._glimpse_side ** 2
+        )
+
+        glimpse = self.glimpse_dist(flat_glimpse, glimpse_precision)
+        return glimpse
+
 class SpatialTransformerReader(TypedModel):
     def __init__(self, canvas_side=28, glimpse_side=7):
         super().__init__()
