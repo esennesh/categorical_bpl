@@ -212,11 +212,6 @@ class GlimpseCategoryModel(CategoryModel):
         data_side = int(math.sqrt(self._data_dim))
         glimpse_side = data_side // 2
         glimpse_dim = glimpse_side ** 2
-        glimpse_space = types.tensor_type(torch.float, glimpse_dim)
-
-        gaussian_likelihood = lambda dim, name=None: DiagonalGaussian(
-            dim, name, likelihood=True
-        )
 
         # Build up a bunch of torch.Sizes for the powers of two between
         # hidden_dim and glimpse_dim.
@@ -228,7 +223,7 @@ class GlimpseCategoryModel(CategoryModel):
             lower, higher = sorted([dim_a, dim_b])
             # Construct the decoder and encoder
             if higher == glimpse_dim:
-                decoder = DensityDecoder(lower, higher, gaussian_likelihood,
+                decoder = DensityDecoder(lower, higher, DiagonalGaussian,
                                          convolve=True)
                 encoder = DensityEncoder(higher, lower, DiagonalGaussian,
                                          convolve=True)
