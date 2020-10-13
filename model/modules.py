@@ -503,10 +503,8 @@ class CanvasPrior(TypedModel):
         self._canvas_side = canvas_side
         self._glimpse_side = glimpse_side
         canvas_name = 'X^{%d}' % canvas_side ** 2
-        self.distribution = DiagonalGaussian(
-            self._canvas_side ** 2, latent_name=canvas_name,
-            likelihood=True,
-        )
+        self.distribution = DiagonalGaussian(self._canvas_side ** 2,
+                                             latent_name=canvas_name)
 
         self.canvas_precision = nn.Sequential(
             nn.Conv2d(1, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
