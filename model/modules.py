@@ -640,9 +640,8 @@ class CanvasEncoder(TypedModel):
         self._glimpse_side = glimpse_side
 
         glimpse_name = 'Z^{%d}' % glimpse_side ** 2
-        self.glimpse_dist = DiagonalGaussian(
-            self._glimpse_side ** 2, latent_name=glimpse_name, likelihood=True,
-        )
+        self.glimpse_dist = DiagonalGaussian(self._glimpse_side ** 2,
+                                             latent_name=glimpse_name)
         self.glimpse_precision = nn.Sequential(
             nn.Conv2d(1, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
             nn.ConvTranspose2d(3, 1, 4, 2, 1), nn.Softplus(),
