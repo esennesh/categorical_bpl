@@ -212,33 +212,37 @@ class GlimpseCategoryModel(CategoryModel):
         data_side = int(math.sqrt(self._data_dim))
         glimpse_side = data_side // 2
         glimpse_dim = glimpse_side ** 2
-        glimpse_space = types.tensor_type(torch.float, glimpse_dim)
-
-        gaussian_likelihood = lambda dim, name=None: DiagonalGaussian(
-            dim, name, likelihood=True
-        )
 
         # Build up a bunch of torch.Sizes for the powers of two between
-        # hidden_dim and data_dim.
-        dims = list(util.powers_of(2, hidden_dim, glimpse_dim))[:-1]
+        # hidden_dim and glimpse_dim.
+        dims = list(util.powers_of(2, hidden_dim, glimpse_dim))
         dims.sort()
 
         generators = []
-        for dim in dims:
-            in_space = types.tensor_type(torch.float, dim)
-            prior = DensityDecoder(dim, glimpse_dim, gaussian_likelihood,
-                                   convolve=True)
-            posterior = DensityEncoder(glimpse_dim, dim, DiagonalGaussian,
-                                       convolve=True)
-            generator = closed.TypedDaggerBox(prior.density_name, in_space,
-                                              glimpse_space, prior, posterior,
-                                              posterior.density_name)
+        for dim_a, dim_b in itertools.combinations(dims, 2):
+            lower, higher = sorted([dim_a, dim_b])
+            # Construct the decoder and encoder
+            if higher == glimpse_dim:
+                decoder = DensityDecoder(lower, higher, DiagonalGaussian,
+                                         convolve=True)
+                encoder = DensityEncoder(higher, lower, DiagonalGaussian,
+                                         convolve=True)
+            else:
+                decoder = DensityDecoder(lower, higher, DiagonalGaussian)
+                encoder = DensityEncoder(higher, lower, DiagonalGaussian)
+            in_space, out_space = decoder.type.arrow()
+            generator = closed.TypedDaggerBox(decoder.density_name, in_space,
+                                              out_space, decoder, encoder,
+                                              encoder.density_name)
             generators.append(generator)
 
-        background = NullPrior(self._data_dim, 'X^{%d}' % self._data_dim)
-        top, space = background.type.arrow()
-        name = '$p(%s)$' % background.random_var_name
-        global_elements = [closed.TypedBox(name, top, space, background)]
+        # Construct monoidal unit for spatial attention
+        prior = CanvasPrior(data_side, glimpse_side)
+        posterior = CanvasEncoder(data_side, glimpse_side)
+        l, r = prior.type.arrow()
+        generator = closed.TypedDaggerBox(prior.name, l, r, prior, posterior,
+                                          posterior.name)
+        generators.append(generator)
 
         # Construct writer/reader pair for spatial attention
         writer = SpatialTransformerWriter(data_side, glimpse_side)
@@ -248,5 +252,5 @@ class GlimpseCategoryModel(CategoryModel):
                                           writer, reader, reader.name)
         generators.append(generator)
 
-        super().__init__(generators, global_elements, data_dim,
-                         guide_hidden_dim, [glimpse_dim])
+        super().__init__(generators, [], data_dim, guide_hidden_dim,
+                         [glimpse_dim])
