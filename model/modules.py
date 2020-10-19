@@ -507,10 +507,8 @@ class CanvasPrior(TypedModel):
                                              latent_name=canvas_name)
 
         self.canvas_precision = nn.Sequential(
-            nn.Conv2d(1, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
-            nn.Conv2d(3, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
-            nn.ConvTranspose2d(3, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
-            nn.ConvTranspose2d(3, 1, 4, 2, 1), nn.Softplus(),
+            nn.Linear(self._glimpse_side ** 2, self._canvas_side ** 2),
+            nn.Softplus(),
         )
 
     @property
@@ -543,15 +541,13 @@ class CanvasPrior(TypedModel):
         glimpse_transforms = glimpse_transform(coords)
         grids = F.affine_grid(glimpse_transforms, canvas_shape,
                               align_corners=True)
+        precision = self.canvas_precision(glimpse)
         glimpse = glimpse.view(glimpse_shape)
-        glimpse = F.grid_sample(glimpse, grids, align_corners=True)
+        flat_canvas = F.grid_sample(glimpse, grids, align_corners=True).view(
+            -1, self._canvas_side ** 2
+        )
 
-        canvas_precision = self.canvas_precision(glimpse)
-
-        flat_canvas = glimpse.view(-1, self._canvas_side ** 2)
-        flat_canvas_precision = canvas_precision.view(-1,
-                                                      self._canvas_side ** 2)
-        return self.distribution(flat_canvas, flat_canvas_precision)
+        return self.distribution(flat_canvas, precision)
 
 class SpatialTransformerWriter(TypedModel):
     def __init__(self, canvas_side=28, glimpse_side=7):
