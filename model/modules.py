@@ -633,10 +633,9 @@ class CanvasEncoder(TypedModel):
         self.glimpse_dist = DiagonalGaussian(self._glimpse_side ** 2,
                                              latent_name=glimpse_name)
         self.glimpse_precision = nn.Sequential(
-            nn.Conv2d(1, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
-            nn.ConvTranspose2d(3, 1, 4, 2, 1), nn.Softplus(),
+            nn.Linear(self._canvas_side ** 2, self._glimpse_side ** 2),
+            nn.Softplus(),
         )
-
 
     @property
     def type(self):
@@ -661,6 +660,7 @@ class CanvasEncoder(TypedModel):
                            self._glimpse_side])
 
     def forward(self, canvas):
+        glimpse_precision = self.glimpse_precision(canvas)
         canvas = canvas.view(*self.canvas_shape(canvas))
 
         coords = torch.tensor([1., 0., 0.]).to(canvas).expand(canvas.shape[0],
@@ -670,9 +670,6 @@ class CanvasEncoder(TypedModel):
                              align_corners=True)
         glimpse = F.grid_sample(canvas, grid, align_corners=True)
         flat_glimpse = glimpse.view(-1, self._glimpse_side ** 2)
-        glimpse_precision = self.glimpse_precision(glimpse).view(
-            -1, self._glimpse_side ** 2
-        )
 
         glimpse = self.glimpse_dist(flat_glimpse, glimpse_precision)
         return glimpse
