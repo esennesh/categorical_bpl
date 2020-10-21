@@ -460,7 +460,7 @@ class LadderPosterior(TypedModel):
 
         self.distribution = noise_dist(noise_dim)
         noise_features = noise_dim
-        if noise_dist == DiagonalGaussian:
+        if isinstance(self.distribution, DiagonalGaussian):
             noise_features *= 2
 
         self.noise_dense = nn.Sequential(
