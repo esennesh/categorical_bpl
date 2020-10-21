@@ -255,7 +255,7 @@ class LadderDecoder(TypedModel):
 
         self.distribution = out_dist(out_dim)
         final_features = out_dim
-        if out_dist == DiagonalGaussian:
+        if isinstance(self.distribution, DiagonalGaussian):
             final_features *= 2
 
         self.noise_layer = nn.Sequential(nn.Linear(self._noise_dim, in_dim),
@@ -264,7 +264,7 @@ class LadderDecoder(TypedModel):
             out_side = int(np.sqrt(self._out_dim))
             self._multiplier = max(out_side // 4, 1) ** 2
             channels = self._num_channels
-            if out_dist == DiagonalGaussian:
+            if isinstance(self.distribution, DiagonalGaussian):
                 channels *= 2
             self.dense_layers = nn.Sequential(
                 nn.Linear(self._in_dim * 2, self._multiplier * 2 * out_side),
