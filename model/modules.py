@@ -372,11 +372,11 @@ class LadderEncoder(TypedModel):
 
         self.ladder_distribution = out_dist(out_dim)
         out_features = out_dim
-        if out_dist == DiagonalGaussian:
+        if isinstance(self.ladder_distribution, DiagonalGaussian):
             out_features *= 2
         self.noise_distribution = noise_dist(noise_dim)
         noise_features = noise_dim
-        if out_dist == DiagonalGaussian:
+        if isinstance(self.ladder_distribution, DiagonalGaussian):
             noise_features *= 2
 
         if self._convolve:
