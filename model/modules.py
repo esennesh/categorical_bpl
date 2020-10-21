@@ -328,8 +328,10 @@ class LadderPrior(TypedModel):
         self._out_dim = out_dim
         self._num_channels = channels
 
+        self.distribution = out_dist(out_dim)
+
         final_features = out_dim
-        if out_dist == DiagonalGaussian:
+        if isinstance(self.distribution, DiagonalGaussian):
             final_features *= 2
         self.noise_dense = nn.Sequential(
             nn.Linear(self._in_dim, self._out_dim),
@@ -340,7 +342,6 @@ class LadderPrior(TypedModel):
             nn.LayerNorm(self._out_dim), nn.PReLU(),
             nn.Linear(self._out_dim, final_features)
         )
-        self.distribution = out_dist(out_dim)
 
     @property
     def type(self):
