@@ -571,8 +571,9 @@ class SpatialTransformerWriter(TypedModel):
                                        3 * 2)
         self.coordinates_dist = DiagonalGaussian(3)
 
-        self.canvas_precision = nn.Sequential(
-            nn.Linear(3, self._canvas_side ** 2), nn.Softplus()
+        self.precision = nn.Sequential(
+            nn.Linear(self._canvas_side ** 2 + 3, self._canvas_side ** 2),
+            nn.Softplus()
         )
 
     @property
@@ -619,10 +620,11 @@ class SpatialTransformerWriter(TypedModel):
         glimpse_contents = glimpse_contents.view(*self.glimpse_shape(canvas))
         glimpse = F.grid_sample(glimpse_contents, grids, align_corners=True)
 
-        canvas = canvas + glimpse
-
-        flat_canvas = canvas.view(-1, self._canvas_side ** 2)
-        return self.distribution(flat_canvas, self.canvas_precision(coords))
+        canvas = canvas.flatten(1)
+        glimpse = glimpse.flatten(1)
+        precision = self.precision(torch.cat((canvas, coords), dim=-1)) +\
+                    self.precision(torch.cat((glimpse, coords), dim=-1))
+        return self.distribution(canvas + glimpse, precision)
 
 class CanvasEncoder(TypedModel):
     def __init__(self, canvas_side=28, glimpse_side=7):
