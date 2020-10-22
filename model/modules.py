@@ -698,16 +698,17 @@ class SpatialTransformerReader(TypedModel):
         self.canvas_dist = DiagonalGaussian(self._canvas_side ** 2,
                                             latent_name=canvas_name)
         self.canvas_precision = nn.Sequential(
-            nn.Linear(3, self._canvas_side ** 2), nn.Softplus()
+            nn.Linear(self._canvas_side ** 2 + 3, self._canvas_side ** 2),
+            nn.Softplus()
         )
 
         glimpse_name = 'Z^{%d}' % glimpse_side ** 2
         self.glimpse_dist = DiagonalGaussian(self._glimpse_side ** 2,
                                              latent_name=glimpse_name)
         self.glimpse_precision = nn.Sequential(
-            nn.Linear(3, self._glimpse_side ** 2), nn.Softplus()
+            nn.Linear(self._glimpse_side ** 2 + 3, self._glimpse_side ** 2),
+            nn.Softplus()
         )
-
 
     @property
     def type(self):
@@ -760,8 +761,12 @@ class SpatialTransformerReader(TypedModel):
         residual = images - glimpse_recon
         flat_residual = residual.view(-1, self._canvas_side ** 2)
 
-        glimpse = self.glimpse_dist(flat_glimpse,
-                                    self.glimpse_precision(coords))
-        residual = self.canvas_dist(flat_residual,
-                                    self.canvas_precision(coords))
+        glimpse_precision = self.glimpse_precision(
+            torch.cat((flat_glimpse, coords), dim=-1)
+        )
+        glimpse = self.glimpse_dist(flat_glimpse, glimpse_precision)
+        residual_precision = self.canvas_precision(
+            torch.cat((flat_residual, coords), dim=-1)
+        )
+        residual = self.canvas_dist(flat_residual, residual_precision)
         return residual, glimpse
