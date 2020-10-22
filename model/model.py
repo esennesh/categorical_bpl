@@ -215,7 +215,8 @@ class GlimpseCategoryModel(CategoryModel):
 
         # Build up a bunch of torch.Sizes for the powers of two between
         # hidden_dim and glimpse_dim.
-        dims = list(util.powers_of(2, hidden_dim, glimpse_dim))
+        dims = list(util.powers_of(2, hidden_dim, glimpse_dim // 4)) +\
+               [glimpse_dim]
         dims.sort()
 
         generators = []
