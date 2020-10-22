@@ -611,7 +611,7 @@ class SpatialTransformerWriter(TypedModel):
             coords.view(-1, (self._canvas_side // (2 ** 3)) ** 2)
         ).view(-1, 2, 3)
         coords = self.coordinates_dist(coords[:, 0], coords[:, 1])
-        coords = torch.cat((coords[:, :1].exp(), coords[:, 1:]), dim=-1)
+        coords = torch.cat((F.softplus(coords[:, :1]), coords[:, 1:]), dim=-1)
 
         glimpse_transforms = glimpse_transform(coords)
         grids = F.affine_grid(glimpse_transforms, self.canvas_shape(canvas),
