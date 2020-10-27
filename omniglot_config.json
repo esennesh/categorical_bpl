@@ -37,10 +37,10 @@
         }
     },
     "trainer": {
-        "epochs": 2000,
+        "epochs": 600,
 
         "save_dir": "saved/",
-        "save_period": 50,
+        "save_period": 10,
         "verbosity": 2,
 
         "monitor": "min val_loss",

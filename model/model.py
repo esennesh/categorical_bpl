@@ -207,7 +207,7 @@ class VlaeCategoryModel(CategoryModel):
         super().__init__(generators, [], data_dim, guide_hidden_dim)
 
 class GlimpseCategoryModel(CategoryModel):
-    def __init__(self, data_dim=28*28, hidden_dim=4, guide_hidden_dim=256):
+    def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=256):
         self._data_dim = data_dim
         data_side = int(math.sqrt(self._data_dim))
         glimpse_side = data_side // 2
@@ -215,7 +215,8 @@ class GlimpseCategoryModel(CategoryModel):
 
         # Build up a bunch of torch.Sizes for the powers of two between
         # hidden_dim and glimpse_dim.
-        dims = list(util.powers_of(2, hidden_dim, glimpse_dim))
+        dims = list(util.powers_of(2, hidden_dim, glimpse_dim // 4)) +\
+               [glimpse_dim]
         dims.sort()
 
         generators = []
@@ -236,13 +237,44 @@ class GlimpseCategoryModel(CategoryModel):
                                               encoder.density_name)
             generators.append(generator)
 
-        # Construct monoidal unit for spatial attention
-        prior = CanvasPrior(data_side, glimpse_side)
-        posterior = CanvasEncoder(data_side, glimpse_side)
-        l, r = prior.type.arrow()
-        generator = closed.TypedDaggerBox(prior.name, l, r, prior, posterior,
-                                          posterior.name)
-        generators.append(generator)
+        # Build up a bunch of torch.Sizes for the powers of two between
+        # hidden_dim and data_dim.
+        dims = dims + [data_dim]
+        dims.sort()
+
+        gaussian_likelihood = lambda dim: DiagonalGaussian(
+            dim, latent_name='X^{%d}' % dim
+        )
+
+        generators = []
+        for lower, higher in zip(dims, dims[1:]):
+            # Construct the VLAE decoder and encoder
+            if higher == self._data_dim:
+                decoder = LadderDecoder(lower, higher, noise_dim=2, conv=True,
+                                        out_dist=gaussian_likelihood)
+                encoder = LadderEncoder(higher, lower, DiagonalGaussian,
+                                        DiagonalGaussian, noise_dim=2,
+                                        conv=True)
+            else:
+                decoder = LadderDecoder(lower, higher, noise_dim=2, conv=False,
+                                        out_dist=DiagonalGaussian)
+                encoder = LadderEncoder(higher, lower, DiagonalGaussian,
+                                        DiagonalGaussian, noise_dim=2,
+                                        conv=False)
+            in_space, out_space = decoder.type.arrow()
+            generator = closed.TypedDaggerBox(decoder.name, in_space, out_space,
+                                              decoder, encoder, encoder.name)
+            generators.append(generator)
+
+        # For each dimensionality, construct a prior/posterior ladder pair
+        for dim in set(dims) - {glimpse_dim, data_dim}:
+            noise_space = types.tensor_type(torch.float, 2)
+            space = types.tensor_type(torch.float, dim)
+            prior = LadderPrior(2, dim, DiagonalGaussian)
+            posterior = LadderPosterior(dim, 2, DiagonalGaussian)
+            generator = closed.TypedDaggerBox(prior.name, noise_space, space,
+                                              prior, posterior, posterior.name)
+            generators.append(generator)
 
         # Construct writer/reader pair for spatial attention
         writer = SpatialTransformerWriter(data_side, glimpse_side)

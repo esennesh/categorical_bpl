@@ -255,7 +255,7 @@ class LadderDecoder(TypedModel):
 
         self.distribution = out_dist(out_dim)
         final_features = out_dim
-        if out_dist == DiagonalGaussian:
+        if isinstance(self.distribution, DiagonalGaussian):
             final_features *= 2
 
         self.noise_layer = nn.Sequential(nn.Linear(self._noise_dim, in_dim),
@@ -264,7 +264,7 @@ class LadderDecoder(TypedModel):
             out_side = int(np.sqrt(self._out_dim))
             self._multiplier = max(out_side // 4, 1) ** 2
             channels = self._num_channels
-            if out_dist == DiagonalGaussian:
+            if isinstance(self.distribution, DiagonalGaussian):
                 channels *= 2
             self.dense_layers = nn.Sequential(
                 nn.Linear(self._in_dim * 2, self._multiplier * 2 * out_side),
@@ -328,8 +328,10 @@ class LadderPrior(TypedModel):
         self._out_dim = out_dim
         self._num_channels = channels
 
+        self.distribution = out_dist(out_dim)
+
         final_features = out_dim
-        if out_dist == DiagonalGaussian:
+        if isinstance(self.distribution, DiagonalGaussian):
             final_features *= 2
         self.noise_dense = nn.Sequential(
             nn.Linear(self._in_dim, self._out_dim),
@@ -340,7 +342,6 @@ class LadderPrior(TypedModel):
             nn.LayerNorm(self._out_dim), nn.PReLU(),
             nn.Linear(self._out_dim, final_features)
         )
-        self.distribution = out_dist(out_dim)
 
     @property
     def type(self):
@@ -371,11 +372,11 @@ class LadderEncoder(TypedModel):
 
         self.ladder_distribution = out_dist(out_dim)
         out_features = out_dim
-        if out_dist == DiagonalGaussian:
+        if isinstance(self.ladder_distribution, DiagonalGaussian):
             out_features *= 2
         self.noise_distribution = noise_dist(noise_dim)
         noise_features = noise_dim
-        if out_dist == DiagonalGaussian:
+        if isinstance(self.ladder_distribution, DiagonalGaussian):
             noise_features *= 2
 
         if self._convolve:
@@ -459,7 +460,7 @@ class LadderPosterior(TypedModel):
 
         self.distribution = noise_dist(noise_dim)
         noise_features = noise_dim
-        if noise_dist == DiagonalGaussian:
+        if isinstance(self.distribution, DiagonalGaussian):
             noise_features *= 2
 
         self.noise_dense = nn.Sequential(
@@ -507,10 +508,8 @@ class CanvasPrior(TypedModel):
                                              latent_name=canvas_name)
 
         self.canvas_precision = nn.Sequential(
-            nn.Conv2d(1, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
-            nn.Conv2d(3, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
-            nn.ConvTranspose2d(3, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
-            nn.ConvTranspose2d(3, 1, 4, 2, 1), nn.Softplus(),
+            nn.Linear(self._glimpse_side ** 2, self._canvas_side ** 2),
+            nn.Softplus(),
         )
 
     @property
@@ -543,15 +542,13 @@ class CanvasPrior(TypedModel):
         glimpse_transforms = glimpse_transform(coords)
         grids = F.affine_grid(glimpse_transforms, canvas_shape,
                               align_corners=True)
+        precision = self.canvas_precision(glimpse)
         glimpse = glimpse.view(glimpse_shape)
-        glimpse = F.grid_sample(glimpse, grids, align_corners=True)
+        flat_canvas = F.grid_sample(glimpse, grids, align_corners=True).view(
+            -1, self._canvas_side ** 2
+        )
 
-        canvas_precision = self.canvas_precision(glimpse)
-
-        flat_canvas = glimpse.view(-1, self._canvas_side ** 2)
-        flat_canvas_precision = canvas_precision.view(-1,
-                                                      self._canvas_side ** 2)
-        return self.distribution(flat_canvas, flat_canvas_precision)
+        return self.distribution(flat_canvas, precision)
 
 class SpatialTransformerWriter(TypedModel):
     def __init__(self, canvas_side=28, glimpse_side=7):
@@ -574,11 +571,9 @@ class SpatialTransformerWriter(TypedModel):
                                        3 * 2)
         self.coordinates_dist = DiagonalGaussian(3)
 
-        self.canvas_precision = nn.Sequential(
-            nn.Conv2d(1, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
-            nn.Conv2d(3, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
-            nn.ConvTranspose2d(3, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
-            nn.ConvTranspose2d(3, 1, 4, 2, 1), nn.Softplus(),
+        self.precision = nn.Sequential(
+            nn.Linear(self._canvas_side ** 2 + 3, self._canvas_side ** 2),
+            nn.Softplus()
         )
 
     @property
@@ -617,7 +612,7 @@ class SpatialTransformerWriter(TypedModel):
             coords.view(-1, (self._canvas_side // (2 ** 3)) ** 2)
         ).view(-1, 2, 3)
         coords = self.coordinates_dist(coords[:, 0], coords[:, 1])
-        coords = torch.cat((coords[:, :1].exp(), coords[:, 1:]), dim=-1)
+        coords = torch.cat((F.softplus(coords[:, :1]), coords[:, 1:]), dim=-1)
 
         glimpse_transforms = glimpse_transform(coords)
         grids = F.affine_grid(glimpse_transforms, self.canvas_shape(canvas),
@@ -625,13 +620,11 @@ class SpatialTransformerWriter(TypedModel):
         glimpse_contents = glimpse_contents.view(*self.glimpse_shape(canvas))
         glimpse = F.grid_sample(glimpse_contents, grids, align_corners=True)
 
-        canvas = canvas + glimpse
-        canvas_precision = self.canvas_precision(canvas)
-
-        flat_canvas = canvas.view(-1, self._canvas_side ** 2)
-        flat_canvas_precision = canvas_precision.view(-1,
-                                                      self._canvas_side ** 2)
-        return self.distribution(flat_canvas, flat_canvas_precision)
+        canvas = canvas.flatten(1)
+        glimpse = glimpse.flatten(1)
+        precision = self.precision(torch.cat((canvas, coords), dim=-1)) +\
+                    self.precision(torch.cat((glimpse, coords), dim=-1))
+        return self.distribution(canvas + glimpse, precision)
 
 class CanvasEncoder(TypedModel):
     def __init__(self, canvas_side=28, glimpse_side=7):
@@ -643,10 +636,9 @@ class CanvasEncoder(TypedModel):
         self.glimpse_dist = DiagonalGaussian(self._glimpse_side ** 2,
                                              latent_name=glimpse_name)
         self.glimpse_precision = nn.Sequential(
-            nn.Conv2d(1, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
-            nn.ConvTranspose2d(3, 1, 4, 2, 1), nn.Softplus(),
+            nn.Linear(self._canvas_side ** 2, self._glimpse_side ** 2),
+            nn.Softplus(),
         )
-
 
     @property
     def type(self):
@@ -671,6 +663,7 @@ class CanvasEncoder(TypedModel):
                            self._glimpse_side])
 
     def forward(self, canvas):
+        glimpse_precision = self.glimpse_precision(canvas)
         canvas = canvas.view(*self.canvas_shape(canvas))
 
         coords = torch.tensor([1., 0., 0.]).to(canvas).expand(canvas.shape[0],
@@ -680,9 +673,6 @@ class CanvasEncoder(TypedModel):
                              align_corners=True)
         glimpse = F.grid_sample(canvas, grid, align_corners=True)
         flat_glimpse = glimpse.view(-1, self._glimpse_side ** 2)
-        glimpse_precision = self.glimpse_precision(glimpse).view(
-            -1, self._glimpse_side ** 2
-        )
 
         glimpse = self.glimpse_dist(flat_glimpse, glimpse_precision)
         return glimpse
@@ -708,20 +698,17 @@ class SpatialTransformerReader(TypedModel):
         self.canvas_dist = DiagonalGaussian(self._canvas_side ** 2,
                                             latent_name=canvas_name)
         self.canvas_precision = nn.Sequential(
-            nn.Conv2d(1, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
-            nn.Conv2d(3, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
-            nn.ConvTranspose2d(3, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
-            nn.ConvTranspose2d(3, 1, 4, 2, 1), nn.Softplus(),
+            nn.Linear(self._canvas_side ** 2 + 3, self._canvas_side ** 2),
+            nn.Softplus()
         )
 
         glimpse_name = 'Z^{%d}' % glimpse_side ** 2
         self.glimpse_dist = DiagonalGaussian(self._glimpse_side ** 2,
                                              latent_name=glimpse_name)
         self.glimpse_precision = nn.Sequential(
-            nn.Conv2d(1, 3, 4, 2, 1), nn.InstanceNorm2d(3), nn.PReLU(),
-            nn.ConvTranspose2d(3, 1, 4, 2, 1), nn.Softplus(),
+            nn.Linear(self._glimpse_side ** 2 + 3, self._glimpse_side ** 2),
+            nn.Softplus()
         )
-
 
     @property
     def type(self):
@@ -751,7 +738,6 @@ class SpatialTransformerReader(TypedModel):
 
     def forward(self, images):
         images = images.view(*self.canvas_shape(images))
-        images_precision = self.canvas_precision(images)
 
         coords = self.glimpse_conv(images)
         coords = self.glimpse_selector(coords).sum(dim=1)
@@ -759,32 +745,28 @@ class SpatialTransformerReader(TypedModel):
             coords.view(-1, (self._canvas_side // (2 ** 3)) ** 2)
         ).view(-1, 2, 3)
         coords = self.coordinates_dist(coords[:, 0], coords[:, 1])
-        coords = torch.cat((coords[:, :1].exp(), coords[:, 1:]), dim=-1)
+        coords = torch.cat((F.softplus(coords[:, :1]), coords[:, 1:]), dim=-1)
         transforms = glimpse_transform(inverse_glimpse(coords))
 
         grid = F.affine_grid(transforms, self.glimpse_shape(images),
                              align_corners=True)
         glimpse = F.grid_sample(images, grid, align_corners=True)
         flat_glimpse = glimpse.view(-1, self._glimpse_side ** 2)
-        glimpse_precision = self.glimpse_precision(glimpse)
 
         recon_transforms = glimpse_transform(coords)
         recon_grid = F.affine_grid(recon_transforms, self.canvas_shape(images),
                                    align_corners=True)
         glimpse_recon = F.grid_sample(glimpse, recon_grid, align_corners=True)
-        recon_precision = F.grid_sample(glimpse_precision, recon_grid,
-                                        align_corners=True)
 
         residual = images - glimpse_recon
         flat_residual = residual.view(-1, self._canvas_side ** 2)
 
-        glimpse_precision = glimpse_precision.view(
-            -1, self._glimpse_side ** 2
+        glimpse_precision = self.glimpse_precision(
+            torch.cat((flat_glimpse, coords), dim=-1)
         )
-        residual_precision = (images_precision + recon_precision).view(
-            -1, self._canvas_side ** 2
-        )
-
         glimpse = self.glimpse_dist(flat_glimpse, glimpse_precision)
+        residual_precision = self.canvas_precision(
+            torch.cat((flat_residual, coords), dim=-1)
+        )
         residual = self.canvas_dist(flat_residual, residual_precision)
         return residual, glimpse
