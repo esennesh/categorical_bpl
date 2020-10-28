@@ -174,12 +174,16 @@ class VlaeCategoryModel(CategoryModel):
         dims = list(util.powers_of(2, hidden_dim, data_dim // 4)) + [data_dim]
         dims.sort()
 
+        gaussian_likelihood = lambda dim: DiagonalGaussian(
+            dim, latent_name='X^{%d}' % dim, likelihood=True
+        )
+
         generators = []
         for lower, higher in zip(dims, dims[1:]):
             # Construct the VLAE decoder and encoder
             if higher == self._data_dim:
                 decoder = LadderDecoder(lower, higher, noise_dim=2, conv=True,
-                                        out_dist=ContinuousBernoulliModel)
+                                        out_dist=gaussian_likelihood)
                 encoder = LadderEncoder(higher, lower, DiagonalGaussian,
                                         DiagonalGaussian, noise_dim=2,
                                         conv=True)
