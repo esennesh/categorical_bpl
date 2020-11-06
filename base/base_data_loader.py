@@ -72,7 +72,7 @@ class BaseTargetBatchDataLoader(DataLoader):
     """
     def __init__(self, dataset, batch_size, shuffle, validation_split,
                  num_workers, targets, collate_fn=default_collate,
-                 drop_train_last=True, drop_valid_last=True):
+                 drop_train_last=True, drop_valid_last=True, evaluation=None):
         self.validation_split = validation_split
         self.shuffle = shuffle
 
@@ -81,8 +81,10 @@ class BaseTargetBatchDataLoader(DataLoader):
 
         self.sampler, self.valid_sampler = self._split_sampler(self.validation_split,
                                                                targets, batch_size,
+                                                               self.n_samples,
                                                                drop_train_last,
                                                                drop_valid_last)
+
         self._batch_length = batch_size
         self.init_kwargs = {
             'dataset': dataset,
@@ -91,17 +93,23 @@ class BaseTargetBatchDataLoader(DataLoader):
             'num_workers': num_workers
         }
         super().__init__(batch_sampler=self.sampler, **self.init_kwargs)
+        if evaluation:
+            self.eval_dataset, eval_targets = evaluation
+            valid_idx = np.arange(len(self.eval_dataset))
+
+            self.valid_sampler = TargetBatchRandomSampler(valid_idx, eval_targets[valid_idx],
+                                                          batch_size, drop_valid_last)
 
     @property
     def batch_length(self):
         return self._batch_length
 
-    def _split_sampler(self, split, targets, batch_size, drop_train_last=True,
-                       drop_valid_last=True):
+    def _split_sampler(self, split, targets, batch_size, n_samples,
+                       drop_train_last=True, drop_valid_last=True):
         if split == 0.0:
             return None, None
 
-        idx_full = np.arange(self.n_samples)
+        idx_full = np.arange(n_samples)
 
         np.random.seed(0)
         np.random.shuffle(idx_full)
@@ -131,7 +139,10 @@ class BaseTargetBatchDataLoader(DataLoader):
         if self.valid_sampler is None:
             return None
         else:
-            return DataLoader(batch_sampler=self.valid_sampler, **self.init_kwargs)
+            init_kwargs = dict(self.init_kwargs)
+            if self.eval_dataset:
+                init_kwargs['dataset'] = self.eval_dataset
+            return DataLoader(batch_sampler=self.valid_sampler, **init_kwargs)
 
 class TargetBatchRandomSampler(Sampler):
     def __init__(self, indices, targets, batch_size, drop_last=False):
