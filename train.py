@@ -12,6 +12,8 @@ import model.model as module_arch
 from parse_config import ConfigParser
 from trainer import Trainer
 
+pyro.enable_validation(True)
+torch.autograd.set_detect_anomaly(True)
 
 # fix random seeds for reproducibility
 SEED = 123

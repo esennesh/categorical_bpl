@@ -3,10 +3,10 @@
     "n_gpu": 1,
 
     "arch": {
-        "type": "VAECategoryModel",
+        "type": "VaeCategoryModel",
         "args": {
           "data_dim": 784,
-          "hidden_dim": 64
+          "hidden_dim": 8
         }
     },
     "data_loader": {
@@ -44,7 +44,7 @@
         "verbosity": 2,
 
         "monitor": "min val_loss",
-        "early_stop": 50,
+        "early_stop": 75,
 
         "tensorboard": true
     }
