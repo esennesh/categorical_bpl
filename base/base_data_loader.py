@@ -99,6 +99,8 @@ class BaseTargetBatchDataLoader(DataLoader):
 
             self.valid_sampler = TargetBatchRandomSampler(valid_idx, eval_targets[valid_idx],
                                                           batch_size, drop_valid_last)
+        else:
+            self.eval_dataset = None
 
     @property
     def batch_length(self):
