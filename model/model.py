@@ -43,7 +43,7 @@ class CategoryModel(BaseModel):
             space = types.tensor_type(torch.float, dim)
             prior = StandardNormal(dim)
             name = '$p(%s)$' % prior.random_var_name
-            global_element = closed.TypedBox(name, Ty(), space, prior)
+            global_element = callable.CallableBox(name, Ty(), space, prior)
             global_elements.append(global_element)
 
         self._category = cartesian_cat.CartesianCategory(generators,
@@ -160,10 +160,11 @@ class VaeCategoryModel(CategoryModel):
             else:
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
                 encoder = DensityEncoder(higher, lower, DiagonalGaussian)
-            generator = closed.TypedDaggerBox(decoder.density_name,
-                                              decoder.type.left,
-                                              decoder.type.right, decoder,
-                                              encoder, encoder.density_name)
+            generator = callable.CallableDaggerBox(decoder.density_name,
+                                                   decoder.type.left,
+                                                   decoder.type.right, decoder,
+                                                   encoder,
+                                                   encoder.density_name)
             generators.append(generator)
 
         super().__init__(generators, [], data_dim, guide_hidden_dim)
@@ -196,9 +197,10 @@ class VlaeCategoryModel(CategoryModel):
                 encoder = LadderEncoder(higher, lower, DiagonalGaussian,
                                         DiagonalGaussian, noise_dim=2,
                                         conv=False)
-            generator = closed.TypedDaggerBox(decoder.name, decoder.type.left,
-                                              decoder.type.right, decoder,
-                                              encoder, encoder.name)
+            generator = callable.CallableDaggerBox(decoder.name,
+                                                   decoder.type.left,
+                                                   decoder.type.right, decoder,
+                                                   encoder, encoder.name)
             generators.append(generator)
 
         # For each dimensionality, construct a prior/posterior ladder pair
@@ -207,8 +209,9 @@ class VlaeCategoryModel(CategoryModel):
             space = types.tensor_type(torch.float, dim)
             prior = LadderPrior(2, dim, DiagonalGaussian)
             posterior = LadderPosterior(dim, 2, DiagonalGaussian)
-            generator = closed.TypedDaggerBox(prior.name, noise_space, space,
-                                              prior, posterior, posterior.name)
+            generator = callable.CallableDaggerBox(prior.name, noise_space,
+                                                   space, prior, posterior,
+                                                   posterior.name)
             generators.append(generator)
 
         super().__init__(generators, [], data_dim, guide_hidden_dim)
@@ -238,10 +241,11 @@ class GlimpseCategoryModel(CategoryModel):
             else:
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
                 encoder = DensityEncoder(higher, lower, DiagonalGaussian)
-            generator = closed.TypedDaggerBox(decoder.density_name,
-                                              decoder.type.left,
-                                              decoder.type.right, decoder,
-                                              encoder, encoder.density_name)
+            generator = callable.CallableDaggerBox(decoder.density_name,
+                                                   decoder.type.left,
+                                                   decoder.type.right, decoder,
+                                                   encoder,
+                                                   encoder.density_name)
             generators.append(generator)
 
         # Build up a bunch of torch.Sizes for the powers of two between
@@ -268,9 +272,10 @@ class GlimpseCategoryModel(CategoryModel):
                 encoder = LadderEncoder(higher, lower, DiagonalGaussian,
                                         DiagonalGaussian, noise_dim=2,
                                         conv=False)
-            generator = closed.TypedDaggerBox(decoder.name, decoder.type.left,
-                                              decoder.type.right, decoder,
-                                              encoder, encoder.name)
+            generator = callable.CallableDaggerBox(decoder.name,
+                                                   decoder.type.left,
+                                                   decoder.type.right, decoder,
+                                                   encoder, encoder.name)
             generators.append(generator)
 
         # For each dimensionality, construct a prior/posterior ladder pair
@@ -279,16 +284,17 @@ class GlimpseCategoryModel(CategoryModel):
             space = types.tensor_type(torch.float, dim)
             prior = LadderPrior(2, dim, DiagonalGaussian)
             posterior = LadderPosterior(dim, 2, DiagonalGaussian)
-            generator = closed.TypedDaggerBox(prior.name, noise_space, space,
-                                              prior, posterior, posterior.name)
+            generator = callable.CallableDaggerBox(prior.name, noise_space,
+                                                   space, prior, posterior,
+                                                   posterior.name)
             generators.append(generator)
 
         # Construct writer/reader pair for spatial attention
         writer = SpatialTransformerWriter(data_side, glimpse_side)
         writer_l, writer_r = writer.type.arrow()
         reader = SpatialTransformerReader(data_side, glimpse_side)
-        generator = closed.TypedDaggerBox(writer.name, writer_l, writer_r,
-                                          writer, reader, reader.name)
+        generator = callable.CallableDaggerBox(writer.name, writer_l, writer_r,
+                                               writer, reader, reader.name)
         generators.append(generator)
 
         super().__init__(generators, [], data_dim, guide_hidden_dim,
