@@ -1,4 +1,5 @@
 import collections
+from discopy.biclosed import Ty
 from discopyro import cartesian_cat, closed
 import itertools
 import math
@@ -40,7 +41,7 @@ class CategoryModel(BaseModel):
             space = types.tensor_type(torch.float, dim)
             prior = StandardNormal(dim)
             name = '$p(%s)$' % prior.random_var_name
-            global_element = closed.TypedBox(name, closed.TOP, space, prior)
+            global_element = closed.TypedBox(name, Ty(), space, prior)
             global_elements.append(global_element)
 
         self._category = cartesian_cat.CartesianCategory(generators,
