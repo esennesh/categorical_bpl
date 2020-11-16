@@ -28,9 +28,11 @@ class CategoryModel(BaseModel):
 
         obs = set()
         for generator in generators:
-            obs = obs | closed.base_elements(generator.type)
+            ty = generator.dom >> generator.cod
+            obs = obs | unification.base_elements(ty)
         for element in global_elements:
-            obs = obs - closed.base_elements(element.type)
+            ty = element.dom >> element.cod
+            obs = obs - unification.base_elements(ty)
 
         no_prior_dims = no_prior_dims + [self._data_dim]
         for ob in obs:
