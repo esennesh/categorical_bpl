@@ -1,6 +1,5 @@
 from adt import adt, Case
 from discopy.biclosed import Ty
-from discopyro import closed
 import re
 import torch
 import uuid
@@ -20,4 +19,4 @@ def type_size(label):
     return int(match[0])
 
 def tensor_type(dtype, size):
-    return Ty('%s^{%d}' % (_label_dtype(dtype), size))
+    return Ty('$%s^{%d}$' % (_label_dtype(dtype), size))
