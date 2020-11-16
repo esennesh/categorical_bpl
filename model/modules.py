@@ -1,6 +1,5 @@
 from abc import abstractproperty
-from discopy import Ty
-from discopyro import cartesian_cat, closed
+from discopy.biclosed import Ty
 import numpy as np
 import pyro
 import pyro.distributions as dist
@@ -29,9 +28,7 @@ class DiagonalGaussian(TypedModel):
     @property
     def type(self):
         dim_space = types.tensor_type(torch.float, self._dim)
-        return closed.CartesianClosed.ARROW(
-            closed.CartesianClosed.BASE(Ty(dim_space, dim_space)), dim_space,
-        )
+        return (dim_space @ dim_space) >> dim_space
 
     def forward(self, loc, precision):
         scale = torch.sqrt(F.softplus(precision)) ** (-1.)
@@ -55,9 +52,7 @@ class StandardNormal(TypedModel):
 
     @property
     def type(self):
-        return closed.CartesianClosed.ARROW(
-            closed.TOP, types.tensor_type(torch.float, self._dim),
-        )
+        return Ty() >> types.tensor_type(torch.float, self._dim)
 
     def forward(self):
         z_loc = self._batch.new_zeros(torch.Size((self._batch.shape[0],
@@ -81,9 +76,7 @@ class NullPrior(TypedModel):
 
     @property
     def type(self):
-        return closed.CartesianClosed.ARROW(
-            closed.TOP, types.tensor_type(torch.float, self._dim),
-        )
+        return Ty() >> types.tensor_type(torch.float, self._dim)
 
     def forward(self):
         size = torch.Size((self._batch.shape[0], self._dim))
@@ -107,10 +100,8 @@ class ContinuousBernoulliModel(TypedModel):
 
     @property
     def type(self):
-        return closed.CartesianClosed.ARROW(
-            types.tensor_type(torch.float, self._dim),
-            types.tensor_type(torch.float, self._dim),
-        )
+        return types.tensor_type(torch.float, self._dim) >>\
+               types.tensor_type(torch.float, self._dim)
 
     def forward(self, inputs):
         xs = torch.clamp(inputs.view(-1, self._dim[0]), 0., 1.)
@@ -183,7 +174,7 @@ class DensityNet(TypedModel):
 
     @property
     def type(self):
-        return closed.CartesianClosed.ARROW(self._in_space, self._out_space)
+        return self._in_space >> self._out_space
 
     @abstractproperty
     def density_name(self):
@@ -290,10 +281,8 @@ class LadderDecoder(TypedModel):
     def type(self):
         input_space = types.tensor_type(torch.float, self._in_dim)
         noise_space = types.tensor_type(torch.float, self._noise_dim)
-        return closed.CartesianClosed.ARROW(
-            closed.CartesianClosed.BASE(Ty(input_space, noise_space)),
-            types.tensor_type(torch.float, self._out_dim)
-        )
+        return (input_space @ noise_space) >>\
+               types.tensor_type(torch.float, self._out_dim)
 
     @property
     def name(self):
@@ -345,10 +334,8 @@ class LadderPrior(TypedModel):
 
     @property
     def type(self):
-        return closed.CartesianClosed.ARROW(
-            types.tensor_type(torch.float, self._in_dim),
-            types.tensor_type(torch.float, self._out_dim)
-        )
+        return types.tensor_type(torch.float, self._in_dim) >>\
+               types.tensor_type(torch.float, self._out_dim)
 
     @property
     def name(self):
@@ -415,10 +402,8 @@ class LadderEncoder(TypedModel):
     def type(self):
         output_space = types.tensor_type(torch.float, self._out_dim)
         noise_space = types.tensor_type(torch.float, self._noise_dim)
-        return closed.CartesianClosed.ARROW(
-            types.tensor_type(torch.float, self._in_dim),
-            closed.CartesianClosed.BASE(Ty(output_space, noise_space)),
-        )
+        return types.tensor_type(torch.float, self._in_dim) >>\
+               (output_space @ noise_space)
 
     @property
     def name(self):
@@ -472,10 +457,8 @@ class LadderPosterior(TypedModel):
 
     @property
     def type(self):
-        return closed.CartesianClosed.ARROW(
-            types.tensor_type(torch.float, self._in_dim),
-            types.tensor_type(torch.float, self._out_dim)
-        )
+        return types.tensor_type(torch.float, self._in_dim) >>\
+               types.tensor_type(torch.float, self._out_dim)
 
     @property
     def name(self):
@@ -516,7 +499,7 @@ class CanvasPrior(TypedModel):
     def type(self):
         glimpse_type = types.tensor_type(torch.float, self._glimpse_side ** 2)
         canvas_type = types.tensor_type(torch.float, self._canvas_side ** 2)
-        return closed.CartesianClosed.ARROW(glimpse_type, canvas_type)
+        return glimpse_type >> canvas_type
 
     @property
     def name(self):
@@ -581,10 +564,7 @@ class SpatialTransformerWriter(TypedModel):
         canvas_type = types.tensor_type(torch.float, self._canvas_side ** 2)
         glimpse_type = types.tensor_type(torch.float, self._glimpse_side ** 2)
 
-        return closed.CartesianClosed.ARROW(
-            closed.CartesianClosed.BASE(Ty(canvas_type, glimpse_type)),
-            canvas_type
-        )
+        return (canvas_type @ glimpse_type) >> canvas_type
 
     @property
     def name(self):
@@ -645,7 +625,7 @@ class CanvasEncoder(TypedModel):
         canvas_type = types.tensor_type(torch.float, self._canvas_side ** 2)
         glimpse_type = types.tensor_type(torch.float, self._glimpse_side ** 2)
 
-        return closed.CartesianClosed.ARROW(canvas_type, glimpse_type)
+        return canvas_type >> glimpse_type
 
     @property
     def name(self):
@@ -715,10 +695,7 @@ class SpatialTransformerReader(TypedModel):
         canvas_type = types.tensor_type(torch.float, self._canvas_side ** 2)
         glimpse_type = types.tensor_type(torch.float, self._glimpse_side ** 2)
 
-        return closed.CartesianClosed.ARROW(
-            canvas_type,
-            closed.CartesianClosed.BASE(Ty(canvas_type, glimpse_type)),
-        )
+        return canvas_type >> (canvas_type @ glimpse_type)
 
     @property
     def name(self):
