@@ -1,6 +1,6 @@
 import collections
 from discopy.biclosed import Ty
-from discopyro import cartesian_cat, closed
+from discopyro import callable, freecat, unification
 import itertools
 import math
 import matplotlib.pyplot as plt
@@ -46,8 +46,7 @@ class CategoryModel(BaseModel):
             global_element = callable.CallableBox(name, Ty(), space, prior)
             global_elements.append(global_element)
 
-        self._category = cartesian_cat.CartesianCategory(generators,
-                                                         global_elements)
+        self._category = freecat.FreeCategory(generators, global_elements)
 
         self.guide_temperatures = nn.Sequential(
             nn.Linear(data_dim, guide_hidden_dim),
