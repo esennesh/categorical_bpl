@@ -36,7 +36,7 @@ class CategoryModel(BaseModel):
 
         no_prior_dims = no_prior_dims + [self._data_dim]
         for ob in obs:
-            dim = types.type_size(ob.name)
+            dim = types.type_size(str(ob))
             if dim in no_prior_dims:
                 continue
 
