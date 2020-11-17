@@ -290,7 +290,7 @@ class GlimpseCategoryModel(CategoryModel):
 
         # Construct writer/reader pair for spatial attention
         writer = SpatialTransformerWriter(data_side, glimpse_side)
-        writer_l, writer_r = writer.type.arrow()
+        writer_l, writer_r = writer.type.left, writer.type.right
         reader = SpatialTransformerReader(data_side, glimpse_side)
         generator = callable.CallableDaggerBox(writer.name, writer_l, writer_r,
                                                writer, reader, reader.name)
