@@ -786,3 +786,41 @@ class MolecularEncoder(TypedModel):
         precision = (-self.embedding_log_scale(features)).exp()
 
         return self.embedding_dist(loc, precision)
+
+class MolecularDecoder(TypedModel):
+    def __init__(self):
+        super().__init__()
+
+        self.pre_recurrence_linear = nn.Sequential(
+            nn.Linear(292, 292),
+            nn.SELU(),
+        )
+        self.recurrence = nn.GRU(292, 501, 3, batch_first=True)
+        self.decoder = nn.Sequential(
+            nn.Linear(501, 33),
+            nn.Softmax(dim=1)
+        )
+
+    @property
+    def type(self):
+        embedding_type = types.tensor_type(torch.float, 292)
+        smiles_type = type.tensor_type(torch.float, 120)
+        return embedding_type >> smiles_type
+
+    @property
+    def name(self):
+        embedding_name = 'Z^{292}'
+        smiles_name = 'X^{120}'
+        name = 'p(%s \\mid %s)' % (embedding_name, smiles_name)
+        return '$%s$' % name
+
+    def forward(self, zs):
+        features = self.pre_recurrence_linear(zs).view(
+            zs.shape[0], 1, zs.shape[-1]
+        ).repeat(1, 120, 1)
+
+        features, _ = self.recurrence(features)
+        features = features.view(-1, features.shape[-1])
+        logits = self.decoder(features)
+        logits = logits.view(features.shape[0], -1, logits.shape[-1])
+        return logits
