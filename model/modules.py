@@ -836,3 +836,49 @@ class ConvMolecularEncoder(TypedModel):
         precision = (-self.embedding_log_scale(features)).exp()
 
         return self.embedding_dist(loc, precision)
+
+class MolecularDecoder(TypedModel):
+    def __init__(self, hidden_dim=196, recurrent_dim=488, charset_len=34,
+                 max_len=120):
+        super().__init__()
+        self._hidden_dim = hidden_dim
+        self._charset_len = charset_len
+        self._max_len = max_len
+
+        self.pre_recurrence_linear = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SELU(),
+        )
+        self.recurrence = nn.GRU(hidden_dim, recurrent_dim, 3, batch_first=True)
+        self.decoder = nn.Sequential(
+            nn.Linear(recurrent_dim, self._charset_len),
+            nn.LogSoftmax(dim=-1)
+        )
+
+    @property
+    def _smiles_name(self):
+        return 'X^{(%d, %d)}' % (self._max_len, self._charset_len)
+
+    @property
+    def type(self):
+        embedding_type = types.tensor_type(torch.float, self._hidden_dim)
+        smiles_type = types.tensor_type(torch.float,
+                                        (self._max_len, self._charset_len))
+        return embedding_type >> smiles_type
+
+    @property
+    def name(self):
+        embedding_name = 'Z^{%d}' % self._hidden_dim
+        name = 'p(%s \\mid %s)' % (embedding_name, self._smiles_name)
+        return '$%s$' % name
+
+    def forward(self, zs):
+        features = self.pre_recurrence_linear(zs).unsqueeze(1).repeat(
+            1, self._max_len, 1
+        )
+
+        features, _ = self.recurrence(features)
+        logits = self.decoder(features)
+
+        logits_categorical = dist.OneHotCategorical(logits=logits).to_event(1)
+        return pyro.sample('$%s$' % self._smiles_name, logits_categorical)
