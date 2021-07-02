@@ -749,8 +749,9 @@ class SpatialTransformerReader(TypedModel):
         return residual, glimpse
 
 class MolecularEncoder(TypedModel):
-    def __init__(self):
+    def __init__(self, charset_len=34):
         super().__init__()
+        self._charset_len = charset_len
 
         self.smiles_conv = nn.Sequential(
             nn.Conv1d(120, 9, kernel_size=9), nn.ReLU(),
@@ -779,6 +780,7 @@ class MolecularEncoder(TypedModel):
         return '$%s$' % name
 
     def forward(self, smiles):
+        smiles = smiles.view(-1, 120, self._charset_len + 1)
         features = self.smiles_conv(smiles)
         features = self.smiles_linear(features)
 
