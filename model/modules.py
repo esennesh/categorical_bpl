@@ -804,7 +804,7 @@ class MolecularDecoder(TypedModel):
     @property
     def type(self):
         embedding_type = types.tensor_type(torch.float, 292)
-        smiles_type = type.tensor_type(torch.float, 120)
+        smiles_type = types.tensor_type(torch.float, 120)
         return embedding_type >> smiles_type
 
     @property
