@@ -303,3 +303,37 @@ class GlimpseCategoryModel(CategoryModel):
 
         super().__init__(generators, [], data_dim, guide_hidden_dim,
                          [glimpse_dim])
+
+class MolecularVaeCategoryModel(CategoryModel):
+    def __init__(self, max_len=120, guide_hidden_dim=256, charset_len=34):
+        hidden_dims = [196, 292, 435]
+        recurrent_dims = [50, 488, 501]
+        generators = []
+
+        for hidden in hidden_dims:
+            for recurrent in recurrent_dims:
+                encoder = ConvMolecularEncoder(hidden, charset_len, max_len)
+                decoder = MolecularDecoder(hidden, recurrent_dim=recurrent,
+                                           charset_len=charset_len,
+                                           max_len=max_len)
+                conv_generator = callable.CallableDaggerBox(decoder.name,
+                                                            decoder.type.left,
+                                                            decoder.type.right,
+                                                            decoder, encoder,
+                                                            encoder.name)
+                generators.append(conv_generator)
+
+                encoder = RecurrentMolecularEncoder(hidden, recurrent,
+                                                    charset_len, max_len)
+                decoder = MolecularDecoder(hidden, recurrent_dim=recurrent,
+                                           charset_len=charset_len,
+                                           max_len=max_len)
+                rec_generator = callable.CallableDaggerBox(decoder.name,
+                                                           decoder.type.left,
+                                                           decoder.type.right,
+                                                           decoder, encoder,
+                                                           encoder.name)
+                generators.append(rec_generator)
+
+        super().__init__(generators, [], data_space=(max_len, charset_len),
+                         guide_hidden_dim=guide_hidden_dim)
