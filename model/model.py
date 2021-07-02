@@ -298,3 +298,18 @@ class GlimpseCategoryModel(CategoryModel):
 
         super().__init__(generators, [], data_dim, guide_hidden_dim,
                          [glimpse_dim])
+
+class MolecularVaeCategoryModel(CategoryModel):
+    def __init__(self, data_dim=120, hidden_dim=292, guide_hidden_dim=256,
+                 charset_len=34):
+        generators = []
+
+        encoder = MolecularEncoder(charset_len)
+        decoder = MolecularDecoder(charset_len)
+        generator = callable.CallableDaggerBox(decoder.name, decoder.type.left,
+                                               decoder.type.right, decoder,
+                                               encoder, encoder.name)
+        generators.append(generator)
+
+        super().__init__(generators, [], (data_dim, charset_len + 1),
+                         guide_hidden_dim)
