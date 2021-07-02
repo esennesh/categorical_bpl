@@ -790,8 +790,9 @@ class MolecularEncoder(TypedModel):
         return self.embedding_dist(loc, precision)
 
 class MolecularDecoder(TypedModel):
-    def __init__(self):
+    def __init__(self, charset_len=34):
         super().__init__()
+        self._charset_len = charset_len
 
         self.pre_recurrence_linear = nn.Sequential(
             nn.Linear(292, 292),
