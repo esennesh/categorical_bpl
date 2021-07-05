@@ -200,16 +200,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pandas as pd
+import json
+import logging
 import numpy as np
+import os
+import pandas as pd
 import pickle as pkl
 from rdkit.Chem import AllChem as Chem
-import logging
 
-logging.getLogger('autoencoder')
-logging.getLogger().setLevel(20)
 logging.getLogger().addHandler(logging.StreamHandler())
 
+DEFAULT_CHARLIST = 'char_list.json'
+MAX_LEN = 120
+PADDING = 'right'
+
+# RDKit Chem-based SMILES loading
+def load_onehots(csv, charset_file='', max_len=MAX_LEN, padding=PADDING):
+    if not charset_file:
+        charset_file = os.path.join(os.path.dirname(csv), DEFAULT_CHARLIST)
+    with open(charset_file, 'rb') as charset_json:
+        charset = json.load(charset_json)
+        char_indices = {c: charset.index(c) for c in charset}
+
+    smiles, reg_data = load_smiles_and_data_df(csv, max_len, ['logp'])
+    smiles = smiles_to_hot(smiles, max_len, padding, char_indices, len(charset))
+
+    return smiles, reg_data
 
 # =================
 # text io functions
