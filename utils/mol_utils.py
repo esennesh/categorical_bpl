@@ -216,7 +216,8 @@ PADDING = 'right'
 
 # RDKit Chem-based SMILES loading
 def load_onehots(csv, charset_file='', max_len=MAX_LEN, padding=PADDING):
-    smiles, reg_data = load_smiles_and_data_df(csv, max_len, ['logp'])
+    smiles, reg_data = load_smiles_and_data_df(csv, max_len, ['logp'],
+                                               dtype='float32')
 
     if not charset_file:
         charset_file = os.path.join(os.path.dirname(csv), DEFAULT_CHARLIST)
