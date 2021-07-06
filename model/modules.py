@@ -792,9 +792,10 @@ class MolecularEncoder(TypedModel):
         return self.embedding_dist(loc, precision)
 
 class MolecularDecoder(TypedModel):
-    def __init__(self, charset_len=34):
+    def __init__(self, charset_len=34, max_len=120):
         super().__init__()
         self._charset_len = charset_len
+        self._max_len = max_len
 
         self.pre_recurrence_linear = nn.Sequential(
             nn.Linear(292, 292),
@@ -802,30 +803,35 @@ class MolecularDecoder(TypedModel):
         )
         self.recurrence = nn.GRU(292, 501, 3, batch_first=True)
         self.decoder = nn.Sequential(
-            nn.Linear(501, 33),
+            nn.Linear(501, self._charset_len),
             nn.Softmax(dim=1)
         )
 
     @property
+    def _smiles_name(self):
+        return 'X^{(%d, %d)}' % (self._max_len, self._charset_len)
+
+    @property
     def type(self):
         embedding_type = types.tensor_type(torch.float, 292)
-        smiles_type = types.tensor_type(torch.float, 120)
+        smiles_type = types.tensor_type(torch.float,
+                                        (self._max_len, self._charset_len))
         return embedding_type >> smiles_type
 
     @property
     def name(self):
         embedding_name = 'Z^{292}'
-        smiles_name = 'X^{120}'
-        name = 'p(%s \\mid %s)' % (embedding_name, smiles_name)
+        name = 'p(%s \\mid %s)' % (embedding_name, self._smiles_name)
         return '$%s$' % name
 
     def forward(self, zs):
         features = self.pre_recurrence_linear(zs).view(
             zs.shape[0], 1, zs.shape[-1]
-        ).repeat(1, 120, 1)
+        ).repeat(1, self._max_len, 1)
 
         features, _ = self.recurrence(features)
-        features = features.view(-1, features.shape[-1])
         logits = self.decoder(features)
-        logits = logits.view(features.shape[0], -1, logits.shape[-1])
-        return logits
+        logits = logits.view(-1, self._max_len, self._charset_len)
+
+        logits_categorical = dist.OneHotCategorical(logits=logits).to_event(1)
+        return pyro.sample('$%s$' % self._smiles_name, logits_categorical)
