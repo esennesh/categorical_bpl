@@ -749,9 +749,10 @@ class SpatialTransformerReader(TypedModel):
         return residual, glimpse
 
 class MolecularEncoder(TypedModel):
-    def __init__(self, charset_len=34):
+    def __init__(self, charset_len=34, max_len=120):
         super().__init__()
         self._charset_len = charset_len
+        self._max_len = max_len
 
         self.smiles_conv = nn.Sequential(
             nn.Conv1d(120, 9, kernel_size=9), nn.ReLU(),
@@ -759,7 +760,7 @@ class MolecularEncoder(TypedModel):
             nn.Conv1d(9, 10, kernel_size=11), nn.ReLU(),
         )
         self.smiles_linear = nn.Sequential(
-            nn.Linear(70, 435),
+            nn.Linear(80, 435),
             nn.SELU(),
         )
         self.embedding_loc = nn.Linear(435, 292)
@@ -768,20 +769,21 @@ class MolecularEncoder(TypedModel):
 
     @property
     def type(self):
-        smiles_type = types.tensor_type(torch.float, 120)
+        smiles_type = types.tensor_type(torch.float,
+                                        (self._max_len, self._charset_len))
         embedding_type = types.tensor_type(torch.float, 292)
         return smiles_type >> embedding_type
 
     @property
     def name(self):
-        smiles_name = 'X^{120}'
+        smiles_name = 'X^{(120, 34)}'
         embedding_name = 'Z^{292}'
         name = 'q(%s \\mid %s)' % (embedding_name, smiles_name)
         return '$%s$' % name
 
     def forward(self, smiles):
-        smiles = smiles.view(-1, 120, self._charset_len + 1)
-        features = self.smiles_conv(smiles)
+        smiles = smiles.view(-1, self._max_len, self._charset_len)
+        features = self.smiles_conv(smiles).flatten(start_dim=1)
         features = self.smiles_linear(features)
 
         loc = self.embedding_loc(features)
