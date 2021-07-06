@@ -207,6 +207,7 @@ import os
 import pandas as pd
 import pickle as pkl
 from rdkit.Chem import AllChem as Chem
+import torch.utils.data
 
 logging.getLogger().addHandler(logging.StreamHandler())
 
@@ -215,6 +216,11 @@ MAX_LEN = 120
 PADDING = 'right'
 
 # RDKit Chem-based SMILES loading
+class Zinc15Dataset(torch.utils.data.TensorDataset):
+    def __init__(self, csv, charset_file='', max_len=MAX_LEN, padding=PADDING):
+        smiles, reg_data = load_onehots(csv, charset_file, max_len, padding)
+        super().__init__(torch.from_numpy(smiles), torch.from_numpy(reg_data))
+
 def load_onehots(csv, charset_file='', max_len=MAX_LEN, padding=PADDING):
     smiles, reg_data = load_smiles_and_data_df(csv, max_len, ['logp'],
                                                dtype='float32')
