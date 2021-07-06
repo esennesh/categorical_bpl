@@ -309,12 +309,12 @@ class MolecularVaeCategoryModel(CategoryModel):
                  charset_len=34):
         generators = []
 
-        encoder = MolecularEncoder(charset_len)
-        decoder = MolecularDecoder(charset_len)
+        encoder = MolecularEncoder(charset_len, data_dim)
+        decoder = MolecularDecoder(charset_len, data_dim)
         generator = callable.CallableDaggerBox(decoder.name, decoder.type.left,
                                                decoder.type.right, decoder,
                                                encoder, encoder.name)
         generators.append(generator)
 
-        super().__init__(generators, [], (data_dim, charset_len + 1),
-                         guide_hidden_dim)
+        super().__init__(generators, [], data_space=(data_dim, charset_len),
+                         guide_hidden_dim=guide_hidden_dim)
