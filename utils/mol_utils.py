@@ -216,13 +216,20 @@ PADDING = 'right'
 
 # RDKit Chem-based SMILES loading
 def load_onehots(csv, charset_file='', max_len=MAX_LEN, padding=PADDING):
+    smiles, reg_data = load_smiles_and_data_df(csv, max_len, ['logp'])
+
     if not charset_file:
         charset_file = os.path.join(os.path.dirname(csv), DEFAULT_CHARLIST)
-    with open(charset_file, 'rb') as charset_json:
-        charset = json.load(charset_json)
-        char_indices = {c: charset.index(c) for c in charset}
+    if os.path.exists(charset_file):
+        with open(charset_file, 'rb') as charset_json:
+            charset = json.load(charset_json)
+    else:
+        charset = smiles2one_hot_chars(smiles, max_len)
+        with open(charset_file, 'w') as charset_json:
+            json.dump(list(charset), charset_json)
 
-    smiles, reg_data = load_smiles_and_data_df(csv, max_len, ['logp'])
+    char_indices = {c: charset.index(c) for c in charset}
+
     smiles = smiles_to_hot(smiles, max_len, padding, char_indices, len(charset))
 
     return smiles, reg_data
