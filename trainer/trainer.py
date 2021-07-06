@@ -63,7 +63,7 @@ class Trainer(BaseTrainer):
     """
     def __init__(self, model, metric_ftns, optimizer, config, data_loader,
                  valid_data_loader=None, lr_scheduler=None, len_epoch=None,
-                 jit=False):
+                 jit=False, log_images=True):
         super().__init__(model, metric_ftns, optimizer, config)
         self.config = config
         self.data_loader = data_loader
@@ -79,6 +79,7 @@ class Trainer(BaseTrainer):
         self.lr_scheduler = lr_scheduler
         self.log_step = int(np.sqrt(data_loader.batch_length))
         self.jit = jit
+        self.log_images = log_images
 
         self.train_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
         self.valid_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
@@ -111,7 +112,8 @@ class Trainer(BaseTrainer):
                     epoch,
                     self._progress(batch_idx, current=current),
                     loss))
-                self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
+                if self.log_images:
+                    self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
 
             if batch_idx == self.len_epoch:
                 break
@@ -146,7 +148,8 @@ class Trainer(BaseTrainer):
                 self.valid_metrics.update('loss', loss)
                 for met in self.metric_ftns:
                     self.valid_metrics.update(met.__name__, met(output, target))
-                self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
+                if self.log_images:
+                    self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
 
         return self.valid_metrics.result()
 
