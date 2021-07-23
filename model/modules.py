@@ -748,7 +748,52 @@ class SpatialTransformerReader(TypedModel):
         residual = self.canvas_dist(flat_residual, residual_precision)
         return residual, glimpse
 
-class MolecularEncoder(TypedModel):
+class RecurrentMolecularEncoder(TypedModel):
+    def __init__(self, hidden_dim=196, recurrent_dim=488, charset_len=34,
+                 max_len=120):
+        super().__init__()
+        self._hidden_dim = hidden_dim
+        self._charset_len = charset_len
+        self._max_len = max_len
+
+        self.encoder_linear = nn.Sequential(
+            nn.Linear(self._charset_len, recurrent_dim),
+            nn.SELU(),
+        )
+        self.recurrence = nn.GRU(recurrent_dim, hidden_dim, 3, batch_first=True)
+        self.postrecurrence_linear = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SELU(),
+        )
+        self.embedding_loc = nn.Linear(hidden_dim, hidden_dim)
+        self.embedding_log_scale = nn.Linear(hidden_dim, hidden_dim)
+        self.embedding_dist = DiagonalGaussian(hidden_dim)
+
+    @property
+    def type(self):
+        smiles_type = types.tensor_type(torch.float,
+                                        (self._max_len, self._charset_len))
+        embedding_type = types.tensor_type(torch.float, self._hidden_dim)
+        return smiles_type >> embedding_type
+
+    @property
+    def name(self):
+        smiles_name = 'X^{(%d, %d)}' % (self._max_len, self._charset_len)
+        embedding_name = 'Z^{%d}' % self._hidden_dim
+        name = 'q(%s \\mid %s)' % (embedding_name, smiles_name)
+        return '$%s$' % name
+
+    def forward(self, smiles):
+        smiles = smiles.view(-1, self._max_len, self._charset_len)
+        features, _ = self.recurrence(self.encoder_linear(smiles))
+        features = self.postrecurrence_linear(features[:, 0])
+
+        loc = self.embedding_loc(features)
+        precision = (-self.embedding_log_scale(features)).exp()
+        return self.embedding_dist(loc, precision)
+
+
+class ConvMolecularEncoder(TypedModel):
     def __init__(self, hidden_dim=196, charset_len=34, max_len=120):
         super().__init__()
         self._hidden_dim = hidden_dim
