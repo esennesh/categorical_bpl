@@ -20,11 +20,15 @@ from utils.name_stack import name_push, name_pop
 VAE_MIN_DEPTH = 2
 
 class CategoryModel(BaseModel):
-    def __init__(self, generators, global_elements=[], data_dim=28*28,
+    def __init__(self, generators, global_elements=[], data_space=(784,),
                  guide_hidden_dim=256, no_prior_dims=[]):
         super().__init__()
-        self._data_dim = data_dim
-        self._observation_name = '$X^{%d}$' % self._data_dim
+        self._data_space = data_space
+        self._data_dim = math.prod(data_space)
+        if len(self._data_space) == 1:
+            self._observation_name = '$X^{%d}$' % self._data_dim
+        else:
+            self._observation_name = '$X^{%s}$' % str(self._data_space)
 
         obs = set()
         for generator in generators:
@@ -49,12 +53,12 @@ class CategoryModel(BaseModel):
         self._category = freecat.FreeCategory(generators, global_elements)
 
         self.guide_temperatures = nn.Sequential(
-            nn.Linear(data_dim, guide_hidden_dim),
+            nn.Linear(self._data_dim, guide_hidden_dim),
             nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
             nn.Linear(guide_hidden_dim, 1 * 2), nn.Softplus(),
         )
         self.guide_arrow_weights = nn.Sequential(
-            nn.Linear(data_dim, guide_hidden_dim),
+            nn.Linear(self._data_dim, guide_hidden_dim),
             nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
             nn.Linear(guide_hidden_dim,
                       self._category.arrow_weight_alphas.shape[0] * 2),
@@ -65,7 +69,7 @@ class CategoryModel(BaseModel):
 
     @property
     def data_space(self):
-        return types.tensor_type(torch.float, self._data_dim)
+        return types.tensor_type(torch.float, self._data_space)
 
     @pnn.pyro_method
     def model(self, observations=None, train=True):
@@ -74,12 +78,12 @@ class CategoryModel(BaseModel):
         elif observations is not None:
             data = observations
             observations = {
-                self._observation_name: observations.view(-1, self._data_dim)
+                self._observation_name: observations.view(-1, *self._data_space)
             }
         else:
-            data = torch.zeros(1, self._data_dim)
+            data = torch.zeros(1, *self._data_space)
             observations = {}
-        data = data.view(data.shape[0], self._data_dim)
+        data = data.view(data.shape[0], *self._data_space)
         for module in self._category.children():
             if isinstance(module, BaseModel):
                 module.set_batching(data)
@@ -100,17 +104,18 @@ class CategoryModel(BaseModel):
             data = observations['$X^{%d}$' % self._data_dim]
         else:
             data = observations
-        data = data.view(data.shape[0], self._data_dim)
+        data = data.view(data.shape[0], *self._data_space)
+        flat_data = data.view(data.shape[0], self._data_dim)
         for module in self._category.children():
             if isinstance(module, BaseModel):
                 module.set_batching(data)
 
-        temperatures = self.guide_temperatures(data).mean(dim=0).view(1, 2)
+        temperatures = self.guide_temperatures(flat_data).mean(dim=0).view(1, 2)
         temperature_gamma = dist.Gamma(temperatures[0, 0],
                                        temperatures[0, 1]).to_event(0)
         temperature = pyro.sample('weights_temperature', temperature_gamma)
 
-        data_arrow_weights = self.guide_arrow_weights(data)
+        data_arrow_weights = self.guide_arrow_weights(flat_data)
         data_arrow_weights = data_arrow_weights.mean(dim=0).view(-1, 2)
         arrow_weights = pyro.sample(
             'arrow_weights',
@@ -298,3 +303,37 @@ class GlimpseCategoryModel(CategoryModel):
 
         super().__init__(generators, [], data_dim, guide_hidden_dim,
                          [glimpse_dim])
+
+class MolecularVaeCategoryModel(CategoryModel):
+    def __init__(self, max_len=120, guide_hidden_dim=256, charset_len=34):
+        hidden_dims = [196, 292, 435]
+        recurrent_dims = [50, 488, 501]
+        generators = []
+
+        for hidden in hidden_dims:
+            for recurrent in recurrent_dims:
+                encoder = ConvMolecularEncoder(hidden, charset_len, max_len)
+                decoder = MolecularDecoder(hidden, recurrent_dim=recurrent,
+                                           charset_len=charset_len,
+                                           max_len=max_len)
+                conv_generator = callable.CallableDaggerBox(decoder.name,
+                                                            decoder.type.left,
+                                                            decoder.type.right,
+                                                            decoder, encoder,
+                                                            encoder.name)
+                generators.append(conv_generator)
+
+                encoder = RecurrentMolecularEncoder(hidden, recurrent,
+                                                    charset_len, max_len)
+                decoder = MolecularDecoder(hidden, recurrent_dim=recurrent,
+                                           charset_len=charset_len,
+                                           max_len=max_len)
+                rec_generator = callable.CallableDaggerBox(decoder.name,
+                                                           decoder.type.left,
+                                                           decoder.type.right,
+                                                           decoder, encoder,
+                                                           encoder.name)
+                generators.append(rec_generator)
+
+        super().__init__(generators, [], data_space=(max_len, charset_len),
+                         guide_hidden_dim=guide_hidden_dim)

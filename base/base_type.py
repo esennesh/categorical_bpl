@@ -19,4 +19,6 @@ def type_size(label):
     return int(match[0])
 
 def tensor_type(dtype, size):
+    if isinstance(size, tuple):
+        return Ty('$%s^{%s}$' % (_label_dtype(dtype), str(size)))
     return Ty('$%s^{%d}$' % (_label_dtype(dtype), size))
