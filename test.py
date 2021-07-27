@@ -37,7 +37,7 @@ def main(config):
     model.load_state_dict(state_dict)
 
     # prepare model for testing
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() and config['n_gpu'] > 0 else 'cpu')
     model = model.to(device)
     model.eval()
 
