@@ -13,7 +13,7 @@
         "type": "ZincMolecularDataLoader",
         "args":{
             "csv": "data/ZINC/zinc15_250K_2D.csv",
-            "batch_size": 128,
+            "batch_size": 192,
             "shuffle": true,
             "validation_split": 0.1,
             "num_workers": 2
