@@ -869,7 +869,7 @@ class MolecularDecoder(TypedModel):
     @property
     def name(self):
         embedding_name = 'Z^{%d}' % self._hidden_dim
-        name = 'p(%s \\mid %s)' % (embedding_name, self._smiles_name)
+        name = 'p(%s \\mid %s)' % (self._smiles_name, embedding_name)
         return '$%s$' % name
 
     def forward(self, zs):
