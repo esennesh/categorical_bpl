@@ -24,7 +24,7 @@ class CategoryModel(BaseModel):
                  guide_hidden_dim=256, no_prior_dims=[]):
         super().__init__()
         if isinstance(data_space, int):
-            data_space = [data_space]
+            data_space = (data_space,)
         self._data_space = data_space
         self._data_dim = math.prod(data_space)
         if len(self._data_space) == 1:
@@ -71,7 +71,7 @@ class CategoryModel(BaseModel):
 
     @property
     def data_space(self):
-        return types.tensor_type(torch.float, self._data_dim)
+        return types.tensor_type(torch.float, self._data_space)
 
     @pnn.pyro_method
     def model(self, observations=None, train=True):
