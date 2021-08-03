@@ -1,6 +1,5 @@
 from adt import adt, Case
 from discopy.biclosed import Ty
-import functools
 import re
 import torch
 import uuid
@@ -21,6 +20,7 @@ def type_size(label):
 
 def tensor_type(dtype, size):
     if isinstance(size, tuple):
-        return functools.reduce(lambda x, y: x @ y,
-                                (tensor_type(dtype, s) for s in size))
+        if len(size) > 1:
+            return Ty('$%s^{%s}$' % (_label_dtype(dtype), str(size)))
+        size = size[0]
     return Ty('$%s^{%d}$' % (_label_dtype(dtype), size))
