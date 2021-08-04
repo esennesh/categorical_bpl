@@ -207,6 +207,7 @@ import os
 import pandas as pd
 import pickle as pkl
 from rdkit.Chem import AllChem as Chem
+from rdkit.Chem import Draw
 import torch.utils.data
 
 logging.getLogger().addHandler(logging.StreamHandler())
@@ -218,28 +219,48 @@ PADDING = 'right'
 # RDKit Chem-based SMILES loading
 class Zinc15Dataset(torch.utils.data.TensorDataset):
     def __init__(self, csv, charset_file='', max_len=MAX_LEN, padding=PADDING):
-        smiles, reg_data = load_onehots(csv, charset_file, max_len, padding)
+        smiles, reg_data = load_smiles_and_data_df(csv, max_len, ['logp'],
+                                                   dtype='float32')
+        if not charset_file:
+            charset_file = os.path.join(os.path.dirname(csv), DEFAULT_CHARLIST)
+        if os.path.exists(charset_file):
+            with open(charset_file, 'rb') as charset_json:
+                self.charset = json.load(charset_json)
+        else:
+            self.charset = smiles2one_hot_chars(smiles, max_len)
+            with open(charset_file, 'w') as charset_json:
+                json.dump(list(self.charset), charset_json)
+
+        self.char_indices = {c: self.charset.index(c) for c in self.charset}
+        smiles = smiles_to_hot(smiles, max_len, padding, self.char_indices,
+                               len(self.charset))
+
         super().__init__(torch.from_numpy(smiles), torch.from_numpy(reg_data))
 
-def load_onehots(csv, charset_file='', max_len=MAX_LEN, padding=PADDING):
-    smiles, reg_data = load_smiles_and_data_df(csv, max_len, ['logp'],
-                                               dtype='float32')
+    def to_smiles(self, onehot_xs):
+        for smiles in hot_to_smiles(onehot_xs.numpy(), self.charset):
+            if CheckSmiFeasible(smiles):
+                yield canon_smiles(smiles)
+            else:
+                yield None
 
-    if not charset_file:
-        charset_file = os.path.join(os.path.dirname(csv), DEFAULT_CHARLIST)
-    if os.path.exists(charset_file):
-        with open(charset_file, 'rb') as charset_json:
-            charset = json.load(charset_json)
-    else:
-        charset = smiles2one_hot_chars(smiles, max_len)
-        with open(charset_file, 'w') as charset_json:
-            json.dump(list(charset), charset_json)
+    def to_mols(self, onehot_xs):
+        smiless = list(self.to_smiles(onehot_xs))
+        for k, smiles in enumerate(smiless):
+            if smiles:
+                smiless[k] = smiles_to_mol(smiles)
+        return smiless
 
-    char_indices = {c: charset.index(c) for c in charset}
+# RDKit Chem-based Mol drawing
 
-    smiles = smiles_to_hot(smiles, max_len, padding, char_indices, len(charset))
+def draw_mol(mol, filename=None, size=(300, 300)):
+    if filename:
+        return Draw.MolToFile(mol, filename, size=size)
+    return Draw.MolToMPL(mol, size=size)
 
-    return smiles, reg_data
+def draw_mols(mols, mols_per_row=3, subimg_size=(200, 200)):
+    return Draw.MolsToGridImage(mols, molsPerRow=mols_per_row,
+                                subImgSize=subimg_size)
 
 # =================
 # text io functions
