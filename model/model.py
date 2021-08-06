@@ -338,4 +338,5 @@ class MolecularVaeCategoryModel(CategoryModel):
                 generators.append(rec_generator)
 
         super().__init__(generators, [], data_space=(max_len, charset_len),
-                         guide_hidden_dim=guide_hidden_dim)
+                         guide_hidden_dim=guide_hidden_dim,
+                         no_prior_dims=[max_len, charset_len])
