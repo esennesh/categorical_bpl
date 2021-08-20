@@ -4,6 +4,7 @@ import numpy as np
 import pyro
 import pyro.distributions as dist
 import pyro.nn as pnn
+from pyro.poutine.condition_messenger import ConditionMessenger
 import pyro.poutine.runtime as runtime
 import torch.distributions
 import torch.distributions.constraints as constraints
@@ -877,7 +878,8 @@ class MolecularDecoder(TypedModel):
         embedding = self.pre_recurrence_linear(zs)
         hiddens = None
         teacher = None
-        if runtime.am_i_wrapped():
+        if runtime.am_i_wrapped() and\
+           isinstance(runtime._PYRO_STACK[-1], ConditionMessenger):
             data = runtime._PYRO_STACK[-1].data
             if '$%s$' % self._smiles_name in data:
                 teacher = data['$%s$' % self._smiles_name]
