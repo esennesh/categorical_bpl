@@ -851,7 +851,8 @@ class MolecularDecoder(TypedModel):
             nn.Linear(hidden_dim, self._charset_len),
             nn.SELU(),
         )
-        self.recurrence = nn.GRUCell(self._charset_len, recurrent_dim)
+        self.recurrence1 = nn.GRUCell(self._charset_len, recurrent_dim)
+        self.recurrence2 = nn.GRUCell(recurrent_dim, recurrent_dim)
         self.decoder = nn.Sequential(
             nn.Linear(recurrent_dim, self._charset_len),
             nn.Softmax(dim=-1)
@@ -876,7 +877,7 @@ class MolecularDecoder(TypedModel):
 
     def forward(self, zs):
         embedding = self.pre_recurrence_linear(zs)
-        hiddens = None
+        hiddens = [None, None]
         teacher = None
         if runtime.am_i_wrapped() and\
            isinstance(runtime._PYRO_STACK[-1], ConditionMessenger):
@@ -886,8 +887,9 @@ class MolecularDecoder(TypedModel):
 
         probs = []
         for i in range(self._max_len):
-            hiddens = self.recurrence(embedding, hiddens)
-            embedding = self.decoder(hiddens)
+            hiddens[0] = self.recurrence1(embedding, hiddens[0])
+            hiddens[1] = self.recurrence2(hiddens[0], hiddens[1])
+            embedding = self.decoder(hiddens[1])
 
             probs.append(embedding)
             if teacher is not None:
