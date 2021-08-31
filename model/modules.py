@@ -4,6 +4,8 @@ import numpy as np
 import pyro
 import pyro.distributions as dist
 import pyro.nn as pnn
+from pyro.poutine.condition_messenger import ConditionMessenger
+import pyro.poutine.runtime as runtime
 import torch.distributions
 import torch.distributions.constraints as constraints
 import torch.nn as nn
@@ -846,13 +848,14 @@ class MolecularDecoder(TypedModel):
         self._max_len = max_len
 
         self.pre_recurrence_linear = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(hidden_dim, self._charset_len),
             nn.SELU(),
         )
-        self.recurrence = nn.GRU(hidden_dim, recurrent_dim, 3, batch_first=True)
+        self.recurrence1 = nn.GRUCell(self._charset_len, recurrent_dim)
+        self.recurrence2 = nn.GRUCell(recurrent_dim, recurrent_dim)
         self.decoder = nn.Sequential(
             nn.Linear(recurrent_dim, self._charset_len),
-            nn.LogSoftmax(dim=-1)
+            nn.Softmax(dim=-1)
         )
 
     @property
@@ -873,12 +876,25 @@ class MolecularDecoder(TypedModel):
         return '$%s$' % name
 
     def forward(self, zs):
-        features = self.pre_recurrence_linear(zs).unsqueeze(1).repeat(
-            1, self._max_len, 1
-        )
+        embedding = self.pre_recurrence_linear(zs)
+        hiddens = [None, None]
+        teacher = None
+        if runtime.am_i_wrapped() and\
+           isinstance(runtime._PYRO_STACK[-1], ConditionMessenger):
+            data = runtime._PYRO_STACK[-1].data
+            if '$%s$' % self._smiles_name in data:
+                teacher = data['$%s$' % self._smiles_name]
 
-        features, _ = self.recurrence(features)
-        logits = self.decoder(features)
+        probs = []
+        for i in range(self._max_len):
+            hiddens[0] = self.recurrence1(embedding, hiddens[0])
+            hiddens[1] = self.recurrence2(hiddens[0], hiddens[1])
+            embedding = self.decoder(hiddens[1])
 
-        logits_categorical = dist.OneHotCategorical(logits=logits).to_event(1)
+            probs.append(embedding)
+            if teacher is not None:
+                embedding = teacher[:, i]
+        probs = torch.stack(probs, dim=1)
+
+        logits_categorical = dist.OneHotCategorical(probs=probs).to_event(1)
         return pyro.sample('$%s$' % self._smiles_name, logits_categorical)

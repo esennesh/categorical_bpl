@@ -309,7 +309,7 @@ class GlimpseCategoryModel(CategoryModel):
 class MolecularVaeCategoryModel(CategoryModel):
     def __init__(self, max_len=120, guide_hidden_dim=256, charset_len=34):
         hidden_dims = [196, 292, 435]
-        recurrent_dims = [50, 488, 501]
+        recurrent_dims = [64, 128, 256]
         generators = []
 
         for hidden in hidden_dims:
