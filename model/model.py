@@ -1,5 +1,6 @@
 import collections
 from discopy.biclosed import Ty
+from discopy import wiring
 from discopyro import cart_closed, freecat, unification
 import itertools
 import math
@@ -92,7 +93,8 @@ class CategoryModel(BaseModel):
             if isinstance(module, BaseModel):
                 module.set_batching(data)
 
-        morphism = self._category(self.data_space, min_depth=VAE_MIN_DEPTH)
+        morphism = self._category(wiring.Box('', Ty(), self.data_space),
+                                  min_depth=VAE_MIN_DEPTH)
         if observations is not None and train:
             score_morphism = pyro.condition(morphism, data=observations)
         else:
@@ -127,7 +129,8 @@ class CategoryModel(BaseModel):
                        data_arrow_weights[:, 1]).to_event(1)
         )
 
-        morphism = self._category(self.data_space, min_depth=VAE_MIN_DEPTH,
+        morphism = self._category(wiring.Box('', Ty(), self.data_space),
+                                  min_depth=VAE_MIN_DEPTH,
                                   temperature=temperature,
                                   arrow_weights=arrow_weights)
         with pyro.plate('data', len(data)):
