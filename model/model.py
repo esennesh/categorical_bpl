@@ -168,11 +168,13 @@ class VaeCategoryModel(CategoryModel):
             else:
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
                 encoder = DensityEncoder(higher, lower, DiagonalGaussian)
+            data = {'effect': decoder.effect}
             generator = callable.CallableDaggerBox(decoder.density_name,
                                                    decoder.type.left,
                                                    decoder.type.right, decoder,
                                                    encoder,
-                                                   encoder.density_name)
+                                                   encoder.density_name,
+                                                   data=data)
             generators.append(generator)
 
         super().__init__(generators, [], data_dim, guide_hidden_dim)
