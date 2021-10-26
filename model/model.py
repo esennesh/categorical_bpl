@@ -48,8 +48,10 @@ class CategoryModel(BaseModel):
 
             space = types.tensor_type(torch.float, dim)
             prior = StandardNormal(dim)
-            name = '$p(%s)$' % prior.random_var_name
-            global_element = callable.CallableBox(name, Ty(), space, prior)
+            name = '$p(%s)$' % prior.effects
+            effect = {'effect': prior.effect}
+            global_element = callable.CallableBox(name, Ty(), space, prior,
+                                                  data=effect)
             global_elements.append(global_element)
 
         self._category = freecat.FreeCategory(generators, global_elements)
