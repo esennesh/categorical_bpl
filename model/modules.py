@@ -193,9 +193,8 @@ class DensityDecoder(DensityNet):
 
     @property
     def density_name(self):
-        sample_name = self.distribution.random_var_name
         condition_name = 'Z^{%d}' % self._in_dim
-        return '$p(%s | %s)$' % (sample_name, condition_name)
+        return '$p(%s | %s)$' % (self.effects, condition_name)
 
     def forward(self, inputs):
         if self._convolve:
@@ -222,9 +221,8 @@ class DensityEncoder(DensityNet):
 
     @property
     def density_name(self):
-        sample_name = self.distribution.random_var_name
         condition_name = 'Z^{%d}' % self._in_dim
-        return '$q(%s | %s)$' % (sample_name, condition_name)
+        return '$q(%s | %s)$' % (self.effects, condition_name)
 
     def forward(self, inputs):
         if self._convolve:
