@@ -418,6 +418,10 @@ class LadderEncoder(TypedModel):
                (output_space @ noise_space)
 
     @property
+    def effect(self):
+        return self.ladder_distribution.effect + self.noise_distribution.effect
+
+    @property
     def name(self):
         args_name = '(\\mathbb{R}^{%d} \\times \\mathbb{R}^{%d})'
         args_name = args_name % (self._out_dim, self._noise_dim)
