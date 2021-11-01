@@ -346,6 +346,10 @@ class LadderPrior(TypedModel):
                types.tensor_type(torch.float, self._out_dim)
 
     @property
+    def effect(self):
+        return self.distribution.effect
+
+    @property
     def name(self):
         name = 'p(%s \\mid \\mathbb{R}^{%d})'
         name = name % (self.distribution.random_var_name, self._in_dim)
