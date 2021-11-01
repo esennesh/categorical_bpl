@@ -590,12 +590,15 @@ class SpatialTransformerWriter(TypedModel):
         return (canvas_type @ glimpse_type) >> canvas_type
 
     @property
+    def effect(self):
+        return self.distribution.effect + self.coordinates_dist.effect
+
+    @property
     def name(self):
         canvas_name = 'Z^{%d}' % self._canvas_side ** 2
         glimpse_name = 'Z^{%d}' % self._glimpse_side ** 2
         inputs_tuple = ' \\times '.join([canvas_name, glimpse_name])
-        name = 'p(%s \\mid %s)' % (self.distribution.random_var_name,
-                                   inputs_tuple)
+        name = 'p(%s \\mid %s)' % (self.distribution.effect[0], inputs_tuple)
         return '$%s$' % name
 
     def canvas_shape(self, imgs):
