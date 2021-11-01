@@ -296,7 +296,7 @@ class LadderDecoder(TypedModel):
     def name(self):
         args_name = '(\\mathbb{R}^{%d} \\times \\mathbb{R}^{%d})'
         args_name = args_name % (self._in_dim, self._noise_dim)
-        name = 'p(%s \\mid %s)' % (self.distribution.random_var_name, args_name)
+        name = 'p(%s \\mid %s)' % (self.effects, args_name)
         return '$%s$' % name
 
     def forward(self, ladder_input, noise):
