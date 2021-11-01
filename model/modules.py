@@ -812,6 +812,10 @@ class RecurrentMolecularEncoder(TypedModel):
         return smiles_type >> embedding_type
 
     @property
+    def effect(self):
+        return self.embedding_dist.effect
+
+    @property
     def name(self):
         smiles_name = 'X^{(%d, %d)}' % (self._max_len, self._charset_len)
         embedding_name = 'Z^{%d}' % self._hidden_dim
