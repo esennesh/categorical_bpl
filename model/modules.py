@@ -728,6 +728,11 @@ class SpatialTransformerReader(TypedModel):
         return canvas_type >> (canvas_type @ glimpse_type)
 
     @property
+    def effect(self):
+        return self.coordinates_dist.effect + self.canvas_dist.effect +\
+               self.glimpse_dist.effect
+
+    @property
     def name(self):
         canvas_name = 'Z^{%d}' % self._canvas_side ** 2
         glimpse_name = 'Z^{%d}' % self._glimpse_side ** 2
