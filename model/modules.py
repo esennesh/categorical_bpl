@@ -481,7 +481,7 @@ class LadderPosterior(TypedModel):
 
     @property
     def name(self):
-        name = 'q(%s \\mid %s)' % (self.distribution.random_var_name,
+        name = 'q(%s \\mid %s)' % (self.effects,
                                    '\\mathbb{R}^{%d}' % self._in_dim)
         return '$%s$' % name
 
