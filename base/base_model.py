@@ -50,4 +50,17 @@ class TypedModel(BaseModel):
 
         :return: A FirstOrderType for the model's arrow type
         """
-        raise NotImplementedError
+        raise NotImplementedError()
+
+    @abstractproperty
+    def effect(self):
+        """
+        Effect signature for a layer as an arrow between two vector spaces
+
+        :return: List of strings string for sampled random variables (if any)
+        """
+        raise NotImplementedError()
+
+    @property
+    def effects(self):
+        return ', '.join(self.effect)

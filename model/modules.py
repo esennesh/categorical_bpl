@@ -24,8 +24,8 @@ class DiagonalGaussian(TypedModel):
         self._likelihood = likelihood
 
     @property
-    def random_var_name(self):
-        return self._latent_name
+    def effect(self):
+        return [self._latent_name]
 
     @property
     def type(self):
@@ -49,8 +49,8 @@ class StandardNormal(TypedModel):
         self._dim = dim
 
     @property
-    def random_var_name(self):
-        return self._latent_name
+    def effect(self):
+        return [self._latent_name]
 
     @property
     def type(self):
@@ -73,8 +73,8 @@ class NullPrior(TypedModel):
         self._random_var_name = random_var_name
 
     @property
-    def random_var_name(self):
-        return self._random_var_name
+    def effect(self):
+        return [self._random_var_name]
 
     @property
     def type(self):
@@ -97,8 +97,8 @@ class ContinuousBernoulliModel(TypedModel):
         self._likelihood = likelihood
 
     @property
-    def random_var_name(self):
-        return self._random_var_name
+    def effect(self):
+        return [self._random_var_name]
 
     @property
     def type(self):
@@ -178,6 +178,10 @@ class DensityNet(TypedModel):
     def type(self):
         return self._in_space >> self._out_space
 
+    @property
+    def effect(self):
+        return self.distribution.effect
+
     @abstractproperty
     def density_name(self):
         raise NotImplementedError()
@@ -189,9 +193,8 @@ class DensityDecoder(DensityNet):
 
     @property
     def density_name(self):
-        sample_name = self.distribution.random_var_name
         condition_name = 'Z^{%d}' % self._in_dim
-        return '$p(%s | %s)$' % (sample_name, condition_name)
+        return '$p(%s | %s)$' % (self.effects, condition_name)
 
     def forward(self, inputs):
         if self._convolve:
@@ -218,9 +221,8 @@ class DensityEncoder(DensityNet):
 
     @property
     def density_name(self):
-        sample_name = self.distribution.random_var_name
         condition_name = 'Z^{%d}' % self._in_dim
-        return '$q(%s | %s)$' % (sample_name, condition_name)
+        return '$q(%s | %s)$' % (self.effects, condition_name)
 
     def forward(self, inputs):
         if self._convolve:
@@ -287,10 +289,14 @@ class LadderDecoder(TypedModel):
                types.tensor_type(torch.float, self._out_dim)
 
     @property
+    def effect(self):
+        return self.distribution.effect
+
+    @property
     def name(self):
         args_name = '(\\mathbb{R}^{%d} \\times \\mathbb{R}^{%d})'
         args_name = args_name % (self._in_dim, self._noise_dim)
-        name = 'p(%s \\mid %s)' % (self.distribution.random_var_name, args_name)
+        name = 'p(%s \\mid %s)' % (self.effects, args_name)
         return '$%s$' % name
 
     def forward(self, ladder_input, noise):
@@ -340,9 +346,13 @@ class LadderPrior(TypedModel):
                types.tensor_type(torch.float, self._out_dim)
 
     @property
+    def effect(self):
+        return self.distribution.effect
+
+    @property
     def name(self):
         name = 'p(%s \\mid \\mathbb{R}^{%d})'
-        name = name % (self.distribution.random_var_name, self._in_dim)
+        name = name % (self.effects, self._in_dim)
         return '$%s$' % name
 
     def forward(self, noise):
@@ -408,10 +418,13 @@ class LadderEncoder(TypedModel):
                (output_space @ noise_space)
 
     @property
+    def effect(self):
+        return self.ladder_distribution.effect + self.noise_distribution.effect
+
+    @property
     def name(self):
-        args_name = '(\\mathbb{R}^{%d} \\times \\mathbb{R}^{%d})'
-        args_name = args_name % (self._out_dim, self._noise_dim)
-        name = 'q(%s \\mid %s)' % (args_name, '\\mathbb{R}^{%d}' % self._in_dim)
+        name = 'q(%s \\mid %s)' % (self.effects,
+                                   '\\mathbb{R}^{%d}' % self._in_dim)
         return '$%s$' % name
 
     def forward(self, ladder_input):
@@ -463,8 +476,12 @@ class LadderPosterior(TypedModel):
                types.tensor_type(torch.float, self._out_dim)
 
     @property
+    def effect(self):
+        return self.distribution.effect
+
+    @property
     def name(self):
-        name = 'q(%s \\mid %s)' % (self.distribution.random_var_name,
+        name = 'q(%s \\mid %s)' % (self.effects,
                                    '\\mathbb{R}^{%d}' % self._in_dim)
         return '$%s$' % name
 
@@ -504,9 +521,13 @@ class CanvasPrior(TypedModel):
         return glimpse_type >> canvas_type
 
     @property
+    def effect(self):
+        return self.distribution.effect
+
+    @property
     def name(self):
         glimpse_name = 'Z^{%d}' % self._glimpse_side ** 2
-        name = 'p(%s \\mid %s)' % (self.distribution.random_var_name,
+        name = 'p(%s \\mid %s)' % (self.distribution.effect[0],
                                    glimpse_name)
         return '$%s$' % name
 
@@ -569,12 +590,15 @@ class SpatialTransformerWriter(TypedModel):
         return (canvas_type @ glimpse_type) >> canvas_type
 
     @property
+    def effect(self):
+        return self.distribution.effect + self.coordinates_dist.effect
+
+    @property
     def name(self):
         canvas_name = 'Z^{%d}' % self._canvas_side ** 2
         glimpse_name = 'Z^{%d}' % self._glimpse_side ** 2
         inputs_tuple = ' \\times '.join([canvas_name, glimpse_name])
-        name = 'p(%s \\mid %s)' % (self.distribution.random_var_name,
-                                   inputs_tuple)
+        name = 'p(%s \\mid %s)' % (self.distribution.effect[0], inputs_tuple)
         return '$%s$' % name
 
     def canvas_shape(self, imgs):
@@ -628,6 +652,10 @@ class CanvasEncoder(TypedModel):
         glimpse_type = types.tensor_type(torch.float, self._glimpse_side ** 2)
 
         return canvas_type >> glimpse_type
+
+    @property
+    def effect(self):
+        return self.glimpse_dist.effect
 
     @property
     def name(self):
@@ -698,6 +726,11 @@ class SpatialTransformerReader(TypedModel):
         glimpse_type = types.tensor_type(torch.float, self._glimpse_side ** 2)
 
         return canvas_type >> (canvas_type @ glimpse_type)
+
+    @property
+    def effect(self):
+        return self.coordinates_dist.effect + self.canvas_dist.effect +\
+               self.glimpse_dist.effect
 
     @property
     def name(self):
@@ -779,6 +812,10 @@ class RecurrentMolecularEncoder(TypedModel):
         return smiles_type >> embedding_type
 
     @property
+    def effect(self):
+        return self.embedding_dist.effect
+
+    @property
     def name(self):
         smiles_name = 'X^{(%d, %d)}' % (self._max_len, self._charset_len)
         embedding_name = 'Z^{%d}' % self._hidden_dim
@@ -821,6 +858,10 @@ class ConvMolecularEncoder(TypedModel):
                                         (self._max_len, self._charset_len))
         embedding_type = types.tensor_type(torch.float, self._hidden_dim)
         return smiles_type >> embedding_type
+
+    @property
+    def effect(self):
+        return self.embedding_dist.effect
 
     @property
     def name(self):
@@ -868,6 +909,10 @@ class MolecularDecoder(TypedModel):
         smiles_type = types.tensor_type(torch.float,
                                         (self._max_len, self._charset_len))
         return embedding_type >> smiles_type
+
+    @property
+    def effect(self):
+        return [self._smiles_name]
 
     @property
     def name(self):
