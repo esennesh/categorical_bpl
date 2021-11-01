@@ -332,11 +332,13 @@ class MolecularVaeCategoryModel(CategoryModel):
                 decoder = MolecularDecoder(hidden, recurrent_dim=recurrent,
                                            charset_len=charset_len,
                                            max_len=max_len)
+                data = {'effect': decoder.effect}
                 conv_generator = callable.CallableDaggerBox(decoder.name,
                                                             decoder.type.left,
                                                             decoder.type.right,
                                                             decoder, encoder,
-                                                            encoder.name)
+                                                            encoder.name,
+                                                            data=data)
                 generators.append(conv_generator)
 
                 encoder = RecurrentMolecularEncoder(hidden, recurrent,
@@ -344,11 +346,13 @@ class MolecularVaeCategoryModel(CategoryModel):
                 decoder = MolecularDecoder(hidden, recurrent_dim=recurrent,
                                            charset_len=charset_len,
                                            max_len=max_len)
+                data = {'effect': decoder.effect}
                 rec_generator = callable.CallableDaggerBox(decoder.name,
                                                            decoder.type.left,
                                                            decoder.type.right,
                                                            decoder, encoder,
-                                                           encoder.name)
+                                                           encoder.name,
+                                                           data=data)
                 generators.append(rec_generator)
 
         super().__init__(generators, [], data_space=(max_len, charset_len),
