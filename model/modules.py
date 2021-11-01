@@ -178,6 +178,10 @@ class DensityNet(TypedModel):
     def type(self):
         return self._in_space >> self._out_space
 
+    @property
+    def effect(self):
+        return self.distribution.effect
+
     @abstractproperty
     def density_name(self):
         raise NotImplementedError()
