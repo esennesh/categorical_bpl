@@ -289,6 +289,10 @@ class LadderDecoder(TypedModel):
                types.tensor_type(torch.float, self._out_dim)
 
     @property
+    def effect(self):
+        return self.distribution.effect
+
+    @property
     def name(self):
         args_name = '(\\mathbb{R}^{%d} \\times \\mathbb{R}^{%d})'
         args_name = args_name % (self._in_dim, self._noise_dim)
