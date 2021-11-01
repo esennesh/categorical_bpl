@@ -476,6 +476,10 @@ class LadderPosterior(TypedModel):
                types.tensor_type(torch.float, self._out_dim)
 
     @property
+    def effect(self):
+        return self.distribution.effect
+
+    @property
     def name(self):
         name = 'q(%s \\mid %s)' % (self.distribution.random_var_name,
                                    '\\mathbb{R}^{%d}' % self._in_dim)
