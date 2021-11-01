@@ -521,9 +521,13 @@ class CanvasPrior(TypedModel):
         return glimpse_type >> canvas_type
 
     @property
+    def effect(self):
+        return self.distribution.effect
+
+    @property
     def name(self):
         glimpse_name = 'Z^{%d}' % self._glimpse_side ** 2
-        name = 'p(%s \\mid %s)' % (self.distribution.random_var_name,
+        name = 'p(%s \\mid %s)' % (self.distribution.effect[0],
                                    glimpse_name)
         return '$%s$' % name
 
