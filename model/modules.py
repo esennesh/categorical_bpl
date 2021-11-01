@@ -24,8 +24,8 @@ class DiagonalGaussian(TypedModel):
         self._likelihood = likelihood
 
     @property
-    def random_var_name(self):
-        return self._latent_name
+    def effect(self):
+        return [self._latent_name]
 
     @property
     def type(self):
@@ -49,8 +49,8 @@ class StandardNormal(TypedModel):
         self._dim = dim
 
     @property
-    def random_var_name(self):
-        return self._latent_name
+    def effect(self):
+        return [self._latent_name]
 
     @property
     def type(self):
@@ -73,8 +73,8 @@ class NullPrior(TypedModel):
         self._random_var_name = random_var_name
 
     @property
-    def random_var_name(self):
-        return self._random_var_name
+    def effect(self):
+        return [self._random_var_name]
 
     @property
     def type(self):
@@ -97,8 +97,8 @@ class ContinuousBernoulliModel(TypedModel):
         self._likelihood = likelihood
 
     @property
-    def random_var_name(self):
-        return self._random_var_name
+    def effect(self):
+        return [self._random_var_name]
 
     @property
     def type(self):
