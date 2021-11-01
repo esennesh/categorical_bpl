@@ -911,6 +911,10 @@ class MolecularDecoder(TypedModel):
         return embedding_type >> smiles_type
 
     @property
+    def effect(self):
+        return [self._smiles_name]
+
+    @property
     def name(self):
         embedding_name = 'Z^{%d}' % self._hidden_dim
         name = 'p(%s \\mid %s)' % (self._smiles_name, embedding_name)
