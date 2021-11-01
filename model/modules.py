@@ -352,7 +352,7 @@ class LadderPrior(TypedModel):
     @property
     def name(self):
         name = 'p(%s \\mid \\mathbb{R}^{%d})'
-        name = name % (self.distribution.random_var_name, self._in_dim)
+        name = name % (self.effects, self._in_dim)
         return '$%s$' % name
 
     def forward(self, noise):
