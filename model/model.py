@@ -207,10 +207,12 @@ class VlaeCategoryModel(CategoryModel):
                 encoder = LadderEncoder(higher, lower, DiagonalGaussian,
                                         DiagonalGaussian, noise_dim=2,
                                         conv=False)
+            data = {'effect': decoder.effect}
             generator = callable.CallableDaggerBox(decoder.name,
                                                    decoder.type.left,
                                                    decoder.type.right, decoder,
-                                                   encoder, encoder.name)
+                                                   encoder, encoder.name,
+                                                   data=data)
             generators.append(generator)
 
         # For each dimensionality, construct a prior/posterior ladder pair
@@ -219,9 +221,10 @@ class VlaeCategoryModel(CategoryModel):
             space = types.tensor_type(torch.float, dim)
             prior = LadderPrior(2, dim, DiagonalGaussian)
             posterior = LadderPosterior(dim, 2, DiagonalGaussian)
+            data = {'effect': prior.effect}
             generator = callable.CallableDaggerBox(prior.name, noise_space,
                                                    space, prior, posterior,
-                                                   posterior.name)
+                                                   posterior.name, data=data)
             generators.append(generator)
 
         super().__init__(generators, [], data_dim, guide_hidden_dim)
