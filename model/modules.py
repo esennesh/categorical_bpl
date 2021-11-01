@@ -423,9 +423,8 @@ class LadderEncoder(TypedModel):
 
     @property
     def name(self):
-        args_name = '(\\mathbb{R}^{%d} \\times \\mathbb{R}^{%d})'
-        args_name = args_name % (self._out_dim, self._noise_dim)
-        name = 'q(%s \\mid %s)' % (args_name, '\\mathbb{R}^{%d}' % self._in_dim)
+        name = 'q(%s \\mid %s)' % (self.effects,
+                                   '\\mathbb{R}^{%d}' % self._in_dim)
         return '$%s$' % name
 
     def forward(self, ladder_input):
