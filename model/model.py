@@ -1,6 +1,6 @@
 import collections
 from discopy.biclosed import Ty
-from discopyro import callable, freecat, unification
+from discopyro import cart_closed, freecat, unification
 import itertools
 import math
 import matplotlib.pyplot as plt
@@ -50,8 +50,8 @@ class CategoryModel(BaseModel):
             prior = StandardNormal(dim)
             name = '$p(%s)$' % prior.effects
             effect = {'effect': prior.effect}
-            global_element = callable.CallableBox(name, Ty(), space, prior,
-                                                  data=effect)
+            global_element = cart_closed.Box(name, Ty(), space, prior,
+                                             data=effect)
             global_elements.append(global_element)
 
         self._category = freecat.FreeCategory(generators, global_elements)
@@ -169,12 +169,11 @@ class VaeCategoryModel(CategoryModel):
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
                 encoder = DensityEncoder(higher, lower, DiagonalGaussian)
             data = {'effect': decoder.effect}
-            generator = callable.CallableDaggerBox(decoder.density_name,
-                                                   decoder.type.left,
-                                                   decoder.type.right, decoder,
-                                                   encoder,
-                                                   encoder.density_name,
-                                                   data=data)
+            generator = cart_closed.DaggerBox(decoder.density_name,
+                                              decoder.type.left,
+                                              decoder.type.right, decoder,
+                                              encoder, encoder.density_name,
+                                              data=data)
             generators.append(generator)
 
         super().__init__(generators, [], data_dim, guide_hidden_dim)
@@ -208,11 +207,9 @@ class VlaeCategoryModel(CategoryModel):
                                         DiagonalGaussian, noise_dim=2,
                                         conv=False)
             data = {'effect': decoder.effect}
-            generator = callable.CallableDaggerBox(decoder.name,
-                                                   decoder.type.left,
-                                                   decoder.type.right, decoder,
-                                                   encoder, encoder.name,
-                                                   data=data)
+            generator = cart_closed.DaggerBox(decoder.name, decoder.type.left,
+                                              decoder.type.right, decoder,
+                                              encoder, encoder.name, data=data)
             generators.append(generator)
 
         # For each dimensionality, construct a prior/posterior ladder pair
@@ -222,9 +219,9 @@ class VlaeCategoryModel(CategoryModel):
             prior = LadderPrior(2, dim, DiagonalGaussian)
             posterior = LadderPosterior(dim, 2, DiagonalGaussian)
             data = {'effect': prior.effect}
-            generator = callable.CallableDaggerBox(prior.name, noise_space,
-                                                   space, prior, posterior,
-                                                   posterior.name, data=data)
+            generator = cart_closed.DaggerBox(prior.name, noise_space, space,
+                                              prior, posterior, posterior.name,
+                                              data=data)
             generators.append(generator)
 
         super().__init__(generators, [], data_dim, guide_hidden_dim)
@@ -255,12 +252,11 @@ class GlimpseCategoryModel(CategoryModel):
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
                 encoder = DensityEncoder(higher, lower, DiagonalGaussian)
             data = {'effect': decoder.effect}
-            generator = callable.CallableDaggerBox(decoder.density_name,
-                                                   decoder.type.left,
-                                                   decoder.type.right, decoder,
-                                                   encoder,
-                                                   encoder.density_name,
-                                                   data=data)
+            generator = cart_closed.DaggerBox(decoder.density_name,
+                                              decoder.type.left,
+                                              decoder.type.right, decoder,
+                                              encoder, encoder.density_name,
+                                              data=data)
             generators.append(generator)
 
         # Build up a bunch of torch.Sizes for the powers of two between
@@ -288,11 +284,9 @@ class GlimpseCategoryModel(CategoryModel):
                                         DiagonalGaussian, noise_dim=2,
                                         conv=False)
             data = {'effect': decoder.effect}
-            generator = callable.CallableDaggerBox(decoder.name,
-                                                   decoder.type.left,
-                                                   decoder.type.right, decoder,
-                                                   encoder, encoder.name,
-                                                   data=data)
+            generator = cart_closed.DaggerBox(decoder.name, decoder.type.left,
+                                              decoder.type.right, decoder,
+                                              encoder, encoder.name, data=data)
             generators.append(generator)
 
         # For each dimensionality, construct a prior/posterior ladder pair
@@ -302,9 +296,9 @@ class GlimpseCategoryModel(CategoryModel):
             prior = LadderPrior(2, dim, DiagonalGaussian)
             posterior = LadderPosterior(dim, 2, DiagonalGaussian)
             data = {'effect': prior.effect}
-            generator = callable.CallableDaggerBox(prior.name, noise_space,
-                                                   space, prior, posterior,
-                                                   posterior.name, data=data)
+            generator = cart_closed.DaggerBox(prior.name, noise_space, space,
+                                              prior, posterior, posterior.name,
+                                              data=data)
             generators.append(generator)
 
         # Construct writer/reader pair for spatial attention
@@ -312,9 +306,9 @@ class GlimpseCategoryModel(CategoryModel):
         writer_l, writer_r = writer.type.left, writer.type.right
         reader = SpatialTransformerReader(data_side, glimpse_side)
         data = {'effect': writer.effect}
-        generator = callable.CallableDaggerBox(writer.name, writer_l, writer_r,
-                                               writer, reader, reader.name,
-                                               data=data)
+        generator = cart_closed.DaggerBox(writer.name, writer_l, writer_r,
+                                          writer, reader, reader.name,
+                                          data=data)
         generators.append(generator)
 
         super().__init__(generators, [], data_dim, guide_hidden_dim,
@@ -333,12 +327,11 @@ class MolecularVaeCategoryModel(CategoryModel):
                                            charset_len=charset_len,
                                            max_len=max_len)
                 data = {'effect': decoder.effect}
-                conv_generator = callable.CallableDaggerBox(decoder.name,
-                                                            decoder.type.left,
-                                                            decoder.type.right,
-                                                            decoder, encoder,
-                                                            encoder.name,
-                                                            data=data)
+                conv_generator = cart_closed.DaggerBox(decoder.name,
+                                                       decoder.type.left,
+                                                       decoder.type.right,
+                                                       decoder, encoder,
+                                                       encoder.name, data=data)
                 generators.append(conv_generator)
 
                 encoder = RecurrentMolecularEncoder(hidden, recurrent,
@@ -347,12 +340,11 @@ class MolecularVaeCategoryModel(CategoryModel):
                                            charset_len=charset_len,
                                            max_len=max_len)
                 data = {'effect': decoder.effect}
-                rec_generator = callable.CallableDaggerBox(decoder.name,
-                                                           decoder.type.left,
-                                                           decoder.type.right,
-                                                           decoder, encoder,
-                                                           encoder.name,
-                                                           data=data)
+                rec_generator = cart_closed.DaggerBox(decoder.name,
+                                                      decoder.type.left,
+                                                      decoder.type.right,
+                                                      decoder, encoder,
+                                                      encoder.name, data=data)
                 generators.append(rec_generator)
 
         super().__init__(generators, [], data_space=(max_len, charset_len),
