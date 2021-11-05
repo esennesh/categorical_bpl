@@ -347,7 +347,8 @@ class MolecularVaeCategoryModel(CategoryModel):
                 decoder = MolecularDecoder(hidden, recurrent_dim=recurrent,
                                            charset_len=charset_len,
                                            max_len=max_len)
-                data = {'effect': decoder.effect}
+                data = {'effect': decoder.effect,
+                        'dagger_effect': encoder.effect}
                 conv_generator = cart_closed.DaggerBox(decoder.name,
                                                        decoder.type.left,
                                                        decoder.type.right,
@@ -360,7 +361,8 @@ class MolecularVaeCategoryModel(CategoryModel):
                 decoder = MolecularDecoder(hidden, recurrent_dim=recurrent,
                                            charset_len=charset_len,
                                            max_len=max_len)
-                data = {'effect': decoder.effect}
+                data = {'effect': decoder.effect,
+                        'dagger_effect': encoder.effect}
                 rec_generator = cart_closed.DaggerBox(decoder.name,
                                                       decoder.type.left,
                                                       decoder.type.right,
