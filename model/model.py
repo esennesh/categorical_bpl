@@ -142,9 +142,16 @@ class CategoryModel(BaseModel):
                                   min_depth=VAE_MIN_DEPTH,
                                   temperature=temperature,
                                   arrow_weights=arrow_weights)
+
+
+        wires = EffectDaggerFunctor()(morphism).dagger()
+        dagger = self._category(wires, min_depth=VAE_MIN_DEPTH,
+                                temperature=temperature,
+                                arrow_weights=arrow_weights,
+                                infer={'is_auxiliary': True})
         with pyro.plate('data', len(data)):
             with name_push(name_stack=self._random_variable_names):
-                morphism[::-1](data)
+                dagger(data)
 
         return morphism
 
