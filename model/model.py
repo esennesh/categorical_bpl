@@ -227,7 +227,7 @@ class VlaeCategoryModel(CategoryModel):
                 encoder = LadderEncoder(higher, lower, DiagonalGaussian,
                                         DiagonalGaussian, noise_dim=2,
                                         conv=False)
-            data = {'effect': decoder.effect}
+            data = {'effect': decoder.effect, 'dagger_effect': encoder.effect}
             generator = cart_closed.DaggerBox(decoder.name, decoder.type.left,
                                               decoder.type.right, decoder,
                                               encoder, encoder.name, data=data)
@@ -239,7 +239,7 @@ class VlaeCategoryModel(CategoryModel):
             space = types.tensor_type(torch.float, dim)
             prior = LadderPrior(2, dim, DiagonalGaussian)
             posterior = LadderPosterior(dim, 2, DiagonalGaussian)
-            data = {'effect': prior.effect}
+            data = {'effect': prior.effect, 'dagger_effect': posterior.effect}
             generator = cart_closed.DaggerBox(prior.name, noise_space, space,
                                               prior, posterior, posterior.name,
                                               data=data)
