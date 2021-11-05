@@ -59,7 +59,7 @@ class CategoryModel(BaseModel):
             space = types.tensor_type(torch.float, dim)
             prior = StandardNormal(dim)
             name = '$p(%s)$' % prior.effects
-            effect = {'effect': prior.effect}
+            effect = {'effect': prior.effect, 'dagger_effect': []}
             global_element = cart_closed.Box(name, Ty(), space, prior,
                                              data=effect)
             global_elements.append(global_element)
