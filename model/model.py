@@ -272,7 +272,7 @@ class GlimpseCategoryModel(CategoryModel):
             else:
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
                 encoder = DensityEncoder(higher, lower, DiagonalGaussian)
-            data = {'effect': decoder.effect}
+            data = {'effect': decoder.effect, 'dagger_effect': encoder.effect}
             generator = cart_closed.DaggerBox(decoder.density_name,
                                               decoder.type.left,
                                               decoder.type.right, decoder,
@@ -304,7 +304,7 @@ class GlimpseCategoryModel(CategoryModel):
                 encoder = LadderEncoder(higher, lower, DiagonalGaussian,
                                         DiagonalGaussian, noise_dim=2,
                                         conv=False)
-            data = {'effect': decoder.effect}
+            data = {'effect': decoder.effect, 'dagger_effect': encoder.effect}
             generator = cart_closed.DaggerBox(decoder.name, decoder.type.left,
                                               decoder.type.right, decoder,
                                               encoder, encoder.name, data=data)
@@ -316,7 +316,7 @@ class GlimpseCategoryModel(CategoryModel):
             space = types.tensor_type(torch.float, dim)
             prior = LadderPrior(2, dim, DiagonalGaussian)
             posterior = LadderPosterior(dim, 2, DiagonalGaussian)
-            data = {'effect': prior.effect}
+            data = {'effect': prior.effect, 'dagger_effect': posterior.effect}
             generator = cart_closed.DaggerBox(prior.name, noise_space, space,
                                               prior, posterior, posterior.name,
                                               data=data)
@@ -326,7 +326,7 @@ class GlimpseCategoryModel(CategoryModel):
         writer = SpatialTransformerWriter(data_side, glimpse_side)
         writer_l, writer_r = writer.type.left, writer.type.right
         reader = SpatialTransformerReader(data_side, glimpse_side)
-        data = {'effect': writer.effect}
+        data = {'effect': writer.effect, 'dagger_effect': reader.effect}
         generator = cart_closed.DaggerBox(writer.name, writer_l, writer_r,
                                           writer, reader, reader.name,
                                           data=data)
