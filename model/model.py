@@ -20,6 +20,15 @@ from utils.name_stack import name_push, name_pop
 
 VAE_MIN_DEPTH = 2
 
+class EffectDaggerFunctor(wiring.Functor):
+    def __init__(self):
+        super().__init__(lambda t: t, self.box)
+
+    @staticmethod
+    def box(f):
+        data = {'effect': f.data['dagger_effect']}
+        return wiring.Box(f.name, f.dom, f.cod, data=data)
+
 class CategoryModel(BaseModel):
     def __init__(self, generators, global_elements=[], data_space=(784,),
                  guide_hidden_dim=256, no_prior_dims=[]):
