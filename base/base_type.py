@@ -1,4 +1,3 @@
-from adt import adt, Case
 from discopy.biclosed import Ty
 import re
 import torch
