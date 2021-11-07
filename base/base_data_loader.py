@@ -1,6 +1,5 @@
 import numpy as np
 import torch
-from torch._six import int_classes as _int_classes
 from torch.utils.data import DataLoader
 from torch.utils.data.dataloader import default_collate
 from torch.utils.data.sampler import Sampler, SubsetRandomSampler
@@ -148,7 +147,7 @@ class BaseTargetBatchDataLoader(DataLoader):
 
 class TargetBatchRandomSampler(Sampler):
     def __init__(self, indices, targets, batch_size, drop_last=False):
-        if not isinstance(batch_size, _int_classes) or\
+        if not isinstance(batch_size, int) or\
            isinstance(batch_size, bool) or batch_size <= 0:
             raise ValueError("batch_size should be a positive integer value, "
                              "but got batch_size={}".format(batch_size))
