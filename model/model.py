@@ -107,7 +107,8 @@ class CategoryModel(BaseModel):
             if isinstance(module, BaseModel):
                 module.set_batching(data)
 
-        morphism = self._category(wiring.Box('', Ty(), self.data_space),
+        morphism = self._category(wiring.Box('', Ty(), self.data_space,
+                                             data={'effect': lambda e: True}),
                                   min_depth=VAE_MIN_DEPTH)
         if observations is not None and train:
             score_morphism = pyro.condition(morphism, data=observations)
@@ -143,14 +144,16 @@ class CategoryModel(BaseModel):
                        data_arrow_weights[:, 1]).to_event(1)
         )
 
-        morphism = self._category(wiring.Box('', Ty(), self.data_space),
+        morphism = self._category(wiring.Box('', Ty(), self.data_space,
+                                             data={'effect': lambda e: True}),
                                   min_depth=VAE_MIN_DEPTH,
                                   temperature=temperature,
                                   arrow_weights=arrow_weights)
 
-
-        wires = EffectDaggerFunctor()(morphism).dagger()
-        dagger = self._category(wires, min_depth=VAE_MIN_DEPTH,
+        wires = EffectDaggerFunctor()(morphism).dagger().collapse(
+            _null_posterior_falg
+        )
+        dagger = self._category(wires, min_depth=VAE_MIN_DEPTH-1,
                                 temperature=temperature,
                                 arrow_weights=arrow_weights,
                                 infer={'is_auxiliary': True})
