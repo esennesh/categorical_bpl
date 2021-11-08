@@ -69,12 +69,6 @@ class CategoryModel(BaseModel):
                                              data=effect)
             global_elements.append(global_element)
 
-            effect = {'effect': [], 'dagger_effect': prior.effect}
-            name = '$%s^{\\dagger}$' % name
-            global_element = cart_closed.Box(name, space, Ty(),
-                                             lambda *args: (), data=effect)
-            generators.append(global_element)
-
         self._category = freecat.FreeCategory(generators, global_elements)
 
         self.guide_temperatures = nn.Sequential(
