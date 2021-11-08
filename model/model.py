@@ -29,6 +29,11 @@ class EffectDaggerFunctor(wiring.Functor):
         data = {'effect': f.data['dagger_effect']}
         return wiring.Box(f.name, f.dom, f.cod, data=data)
 
+def _null_posterior_falg(f):
+    if isinstance(f, wiring.Box) and f.cod == Ty():
+        return wiring.Id(f.dom)
+    return f
+
 class CategoryModel(BaseModel):
     def __init__(self, generators, global_elements=[], data_space=(784,),
                  guide_hidden_dim=256, no_prior_dims=[]):
