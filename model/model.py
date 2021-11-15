@@ -150,10 +150,8 @@ class CategoryModel(BaseModel):
                                   temperature=temperature,
                                   arrow_weights=arrow_weights)
 
-        wires = EffectDaggerFunctor()(morphism).dagger().collapse(
-            _null_posterior_falg
-        )
-        dagger = self._category(wires, min_depth=VAE_MIN_DEPTH-1,
+        wires = EffectDaggerFunctor()(morphism).dagger()
+        dagger = self._category(wires, min_depth=VAE_MIN_DEPTH,
                                 temperature=temperature,
                                 arrow_weights=arrow_weights,
                                 infer={'is_auxiliary': True})
