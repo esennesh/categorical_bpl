@@ -268,7 +268,7 @@ def draw_mols(mols, mols_per_row=3, subimg_size=(200, 200)):
 
 def smiles_to_mol(smiles):
     from rdkit.Chem import AllChem as Chem
-    try
+    try:
         mol = Chem.MolFromSmiles(smiles)
         return mol
     except:
