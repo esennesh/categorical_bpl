@@ -694,22 +694,6 @@ class SpatialTransformerReader(TypedModel):
                                        3 * 2)
         self.coordinates_dist = DiagonalGaussian(3)
 
-        canvas_name = 'X^{%d}' % canvas_side ** 2
-        self.canvas_dist = DiagonalGaussian(self._canvas_side ** 2,
-                                            latent_name=canvas_name)
-        self.canvas_precision = nn.Sequential(
-            nn.Linear(self._canvas_side ** 2 + 3, self._canvas_side ** 2),
-            nn.Softplus()
-        )
-
-        glimpse_name = 'Z^{%d}' % glimpse_side ** 2
-        self.glimpse_dist = DiagonalGaussian(self._glimpse_side ** 2,
-                                             latent_name=glimpse_name)
-        self.glimpse_precision = nn.Sequential(
-            nn.Linear(self._glimpse_side ** 2 + 3, self._glimpse_side ** 2),
-            nn.Softplus()
-        )
-
     @property
     def type(self):
         canvas_type = types.tensor_type(torch.float, self._canvas_side ** 2)
@@ -719,8 +703,7 @@ class SpatialTransformerReader(TypedModel):
 
     @property
     def effect(self):
-        return self.coordinates_dist.effect + self.canvas_dist.effect +\
-               self.glimpse_dist.effect
+        return self.coordinates_dist.effect
 
     @property
     def name(self):
@@ -753,7 +736,6 @@ class SpatialTransformerReader(TypedModel):
         grid = F.affine_grid(transforms, self.glimpse_shape(images),
                              align_corners=True)
         glimpse = F.grid_sample(images, grid, align_corners=True)
-        flat_glimpse = glimpse.view(-1, self._glimpse_side ** 2)
 
         recon_transforms = glimpse_transform(coords)
         recon_grid = F.affine_grid(recon_transforms, self.canvas_shape(images),
@@ -761,16 +743,7 @@ class SpatialTransformerReader(TypedModel):
         glimpse_recon = F.grid_sample(glimpse, recon_grid, align_corners=True)
 
         residual = images - glimpse_recon
-        flat_residual = residual.view(-1, self._canvas_side ** 2)
 
-        glimpse_precision = self.glimpse_precision(
-            torch.cat((flat_glimpse, coords), dim=-1)
-        )
-        glimpse = self.glimpse_dist(flat_glimpse, glimpse_precision)
-        residual_precision = self.canvas_precision(
-            torch.cat((flat_residual, coords), dim=-1)
-        )
-        residual = self.canvas_dist(flat_residual, residual_precision)
         return residual, glimpse
 
 class RecurrentMolecularEncoder(TypedModel):
