@@ -206,8 +206,6 @@ import numpy as np
 import os
 import pandas as pd
 import pickle as pkl
-from rdkit.Chem import AllChem as Chem
-from rdkit.Chem import Draw
 import torch.utils.data
 
 logging.getLogger().addHandler(logging.StreamHandler())
@@ -254,11 +252,13 @@ class Zinc15Dataset(torch.utils.data.TensorDataset):
 # RDKit Chem-based Mol drawing
 
 def draw_mol(mol, filename=None, size=(300, 300)):
+    from rdkit.Chem import Draw
     if filename:
         return Draw.MolToFile(mol, filename, size=size)
     return Draw.MolToMPL(mol, size=size)
 
 def draw_mols(mols, mols_per_row=3, subimg_size=(200, 200)):
+    from rdkit.Chem import Draw
     return Draw.MolsToGridImage(mols, molsPerRow=mols_per_row,
                                 subImgSize=subimg_size)
 
@@ -267,7 +267,8 @@ def draw_mols(mols, mols_per_row=3, subimg_size=(200, 200)):
 # ==================
 
 def smiles_to_mol(smiles):
-    try:
+    from rdkit.Chem import AllChem as Chem
+    try
         mol = Chem.MolFromSmiles(smiles)
         return mol
     except:
@@ -276,6 +277,7 @@ def smiles_to_mol(smiles):
 
 
 def verify_smiles(smile):
+    from rdkit.Chem import AllChem as Chem
     return (smile != '') and pd.notnull(smile) and (Chem.MolFromSmiles(smile) is not None)
 
 
@@ -461,6 +463,7 @@ def make_charset(smi_file, char_file):
 # ==================
 
 def CheckSmiFeasible(smi):
+    from rdkit.Chem import AllChem as Chem
     # See if you can make a smiles with mol object
     #    if you can't, then skip
     try:
@@ -498,10 +501,12 @@ def fast_verify(s):
 
 
 def get_molecule_smi(mol_obj):
+    from rdkit.Chem import AllChem as Chem
     return Chem.MolToSmiles(mol_obj)
 
 
 def canon_smiles(smi):
+    from rdkit.Chem import AllChem as Chem
     return Chem.MolToSmiles(Chem.MolFromSmiles(smi), isomericSmiles=True, canonical=True)
 
 
