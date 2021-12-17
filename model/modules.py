@@ -561,9 +561,6 @@ class SpatialTransformerWriter(TypedModel):
         super().__init__()
         self._canvas_side = canvas_side
         self._glimpse_side = glimpse_side
-        canvas_name = 'X^{%d}' % canvas_side ** 2
-        self.distribution = DiagonalGaussian(self._canvas_side ** 2,
-                                             latent_name=canvas_name)
 
         self.glimpse_conv = nn.Sequential(
             nn.Conv2d(1, canvas_side, 4, 2, 1),
@@ -577,11 +574,6 @@ class SpatialTransformerWriter(TypedModel):
                                        3 * 2)
         self.coordinates_dist = DiagonalGaussian(3)
 
-        self.precision = nn.Sequential(
-            nn.Linear(self._canvas_side ** 2 + 3, self._canvas_side ** 2),
-            nn.Softplus()
-        )
-
     @property
     def type(self):
         canvas_type = types.tensor_type(torch.float, self._canvas_side ** 2)
@@ -591,14 +583,14 @@ class SpatialTransformerWriter(TypedModel):
 
     @property
     def effect(self):
-        return self.distribution.effect + self.coordinates_dist.effect
+        return self.coordinates_dist.effect
 
     @property
     def name(self):
         canvas_name = 'Z^{%d}' % self._canvas_side ** 2
         glimpse_name = 'Z^{%d}' % self._glimpse_side ** 2
         inputs_tuple = ' \\times '.join([canvas_name, glimpse_name])
-        name = 'p(%s \\mid %s)' % (self.distribution.effect[0], inputs_tuple)
+        name = 'p(%s \\mid %s)' % (self.coordinates_dist.effect[0], inputs_tuple)
         return '$%s$' % name
 
     def canvas_shape(self, imgs):
@@ -628,9 +620,7 @@ class SpatialTransformerWriter(TypedModel):
 
         canvas = canvas.flatten(1)
         glimpse = glimpse.flatten(1)
-        precision = self.precision(torch.cat((canvas, coords), dim=-1)) +\
-                    self.precision(torch.cat((glimpse, coords), dim=-1))
-        return self.distribution(canvas + glimpse, precision)
+        return canvas + glimpse
 
 class CanvasEncoder(TypedModel):
     def __init__(self, canvas_side=28, glimpse_side=7):
