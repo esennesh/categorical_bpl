@@ -248,9 +248,11 @@ class LadderDecoder(TypedModel):
         self._out_dim = out_dim
         self._num_channels = channels
 
-        self.distribution = out_dist(out_dim)
+        if out_dist is not None:
+            self.distribution = out_dist(out_dim)
         final_features = out_dim
-        if isinstance(self.distribution, DiagonalGaussian):
+        if self.has_distribution and\
+           isinstance(self.distribution, DiagonalGaussian):
             final_features *= 2
 
         self.noise_layer = nn.Sequential(nn.Linear(self._noise_dim, in_dim),
@@ -259,7 +261,8 @@ class LadderDecoder(TypedModel):
             out_side = int(np.sqrt(self._out_dim))
             self._multiplier = max(out_side // 4, 1) ** 2
             channels = self._num_channels
-            if isinstance(self.distribution, DiagonalGaussian):
+            if self.has_distribution and\
+               isinstance(self.distribution, DiagonalGaussian):
                 channels *= 2
             self.dense_layers = nn.Sequential(
                 nn.Linear(self._in_dim * 2, self._multiplier * 2 * out_side),
@@ -290,7 +293,9 @@ class LadderDecoder(TypedModel):
 
     @property
     def effect(self):
-        return self.distribution.effect
+        if self.has_distribution:
+            return self.distribution.effect
+        return []
 
     @property
     def name(self):
@@ -298,6 +303,10 @@ class LadderDecoder(TypedModel):
         args_name = args_name % (self._in_dim, self._noise_dim)
         name = 'p(%s \\mid %s)' % (self.effects, args_name)
         return '$%s$' % name
+
+    @property
+    def has_distribution(self):
+        return hasattr(self, 'distribution')
 
     def forward(self, ladder_input, noise):
         hiddens = torch.cat((ladder_input, self.noise_layer(noise)), dim=-1)
@@ -312,10 +321,15 @@ class LadderDecoder(TypedModel):
         else:
             hiddens = self.neural_layers(hiddens)
 
-        if isinstance(self.distribution, ContinuousBernoulliModel):
-            return self.distribution(hiddens)
-        hiddens = hiddens.view(-1, 2, self._out_dim)
-        return self.distribution(hiddens[:, 0], hiddens[:, 1])
+        if self.has_distribution:
+            if isinstance(self.distribution, ContinuousBernoulliModel):
+                hiddens = self.distribution(hiddens)
+            else:
+                hiddens = hiddens.view(-1, 2, self._out_dim)
+                hiddens = self.distribution(hiddens[:, 0], hiddens[:, 1])
+        else:
+            hiddens = hiddens.view(-1, self._out_dim)
+        return hiddens
 
 class LadderPrior(TypedModel):
     def __init__(self, noise_dim, out_dim, out_dist=DiagonalGaussian,
