@@ -383,13 +383,15 @@ class LadderEncoder(TypedModel):
         self._out_dim = out_dim
         self._num_channels = channels
 
-        self.ladder_distribution = out_dist(out_dim)
+        if out_dist is not None:
+            self.ladder_distribution = out_dist(out_dim)
         out_features = out_dim
-        if isinstance(self.ladder_distribution, DiagonalGaussian):
+        if self.has_ladder_distribution and\
+           isinstance(self.ladder_distribution, DiagonalGaussian):
             out_features *= 2
         self.noise_distribution = noise_dist(noise_dim)
         noise_features = noise_dim
-        if isinstance(self.ladder_distribution, DiagonalGaussian):
+        if isinstance(self.noise_distribution, DiagonalGaussian):
             noise_features *= 2
 
         if self._convolve:
@@ -433,13 +435,20 @@ class LadderEncoder(TypedModel):
 
     @property
     def effect(self):
-        return self.ladder_distribution.effect + self.noise_distribution.effect
+        effect = self.noise_distribution.effect
+        if self.has_ladder_distribution:
+            effect += self.ladder_distribution.effect
+        return effect
 
     @property
     def name(self):
         name = 'q(%s \\mid %s)' % (self.effects,
                                    '\\mathbb{R}^{%d}' % self._in_dim)
         return '$%s$' % name
+
+    @property
+    def has_ladder_distribution(self):
+        return hasattr(self, 'ladder_distribution')
 
     def forward(self, ladder_input):
         if self._convolve:
@@ -461,8 +470,11 @@ class LadderEncoder(TypedModel):
         noise = noise.view(-1, 2, self._noise_dim)
         noise = self.noise_distribution(noise[:, 0], noise[:, 1])
 
-        hiddens = hiddens.view(-1, 2, self._out_dim)
-        hiddens = self.ladder_distribution(hiddens[:, 0], hiddens[:, 1])
+        if self.has_ladder_distribution:
+            hiddens = hiddens.view(-1, 2, self._out_dim)
+            hiddens = self.ladder_distribution(hiddens[:, 0], hiddens[:, 1])
+        else:
+            hiddens = hiddens.view(-1, self._out_dim)
 
         return hiddens, noise
 
