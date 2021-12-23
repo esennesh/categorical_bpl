@@ -218,15 +218,13 @@ class VlaeCategoryModel(CategoryModel):
             if higher == self._data_dim:
                 decoder = LadderDecoder(lower, higher, noise_dim=2, conv=True,
                                         out_dist=gaussian_likelihood)
-                encoder = LadderEncoder(higher, lower, DiagonalGaussian,
-                                        DiagonalGaussian, noise_dim=2,
-                                        conv=True)
+                encoder = LadderEncoder(higher, lower, None, DiagonalGaussian,
+                                        noise_dim=2, conv=True)
             else:
                 decoder = LadderDecoder(lower, higher, noise_dim=2, conv=False,
-                                        out_dist=DiagonalGaussian)
-                encoder = LadderEncoder(higher, lower, DiagonalGaussian,
-                                        DiagonalGaussian, noise_dim=2,
-                                        conv=False)
+                                        out_dist=None)
+                encoder = LadderEncoder(higher, lower, None, DiagonalGaussian,
+                                        noise_dim=2, conv=False)
             data = {'effect': decoder.effect, 'dagger_effect': encoder.effect}
             generator = cart_closed.DaggerBox(decoder.name, decoder.type.left,
                                               decoder.type.right, decoder,
