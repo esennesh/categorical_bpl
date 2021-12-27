@@ -226,21 +226,29 @@ class VlaeCategoryModel(CategoryModel):
                 encoder = LadderEncoder(higher, lower, None, DiagonalGaussian,
                                         noise_dim=2, conv=False)
             data = {'effect': decoder.effect, 'dagger_effect': encoder.effect}
-            generator = cart_closed.DaggerBox(decoder.name, decoder.type.left,
-                                              decoder.type.right, decoder,
-                                              encoder, encoder.name, data=data)
+            generator = cart_closed.Box(decoder.name, decoder.type.left,
+                                        decoder.type.right, decoder, data=data)
+            generators.append(generator)
+            data = {'effect': encoder.effect, 'dagger_effect': decoder.effect}
+            generator = cart_closed.Box(encoder.name, encoder.type.left,
+                                        encoder.type.right, encoder, data=data)
             generators.append(generator)
 
         # For each dimensionality, construct a prior/posterior ladder pair
         for dim in set(dims) - {data_dim}:
             noise_space = types.tensor_type(torch.float, 2)
             space = types.tensor_type(torch.float, dim)
-            prior = LadderPrior(2, dim, DiagonalGaussian)
+            prior = LadderPrior(2, dim, None)
             posterior = LadderPosterior(dim, 2, DiagonalGaussian)
+
             data = {'effect': prior.effect, 'dagger_effect': posterior.effect}
-            generator = cart_closed.DaggerBox(prior.name, noise_space, space,
-                                              prior, posterior, posterior.name,
-                                              data=data)
+            generator = cart_closed.Box(prior.name, noise_space, space, prior,
+                                        data=data)
+            generators.append(generator)
+
+            data = {'effect': posterior.effect, 'dagger_effect': prior.effect}
+            generator = cart_closed.Box(posterior.name, space, noise_space,
+                                        posterior, data=data)
             generators.append(generator)
 
         super().__init__(generators, [], data_dim, guide_hidden_dim)
