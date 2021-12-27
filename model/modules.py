@@ -339,10 +339,12 @@ class LadderPrior(TypedModel):
         self._out_dim = out_dim
         self._num_channels = channels
 
-        self.distribution = out_dist(out_dim)
+        if out_dist is not None:
+            self.distribution = out_dist(out_dim)
 
         final_features = out_dim
-        if isinstance(self.distribution, DiagonalGaussian):
+        if self.has_distribution and\
+           isinstance(self.distribution, DiagonalGaussian):
             final_features *= 2
         self.noise_dense = nn.Sequential(
             nn.Linear(self._in_dim, self._out_dim),
@@ -360,8 +362,14 @@ class LadderPrior(TypedModel):
                types.tensor_type(torch.float, self._out_dim)
 
     @property
+    def has_distribution(self):
+        return hasattr(self, 'distribution')
+
+    @property
     def effect(self):
-        return self.distribution.effect
+        if self.has_distribution:
+            return self.distribution.effect
+        return []
 
     @property
     def name(self):
@@ -370,8 +378,11 @@ class LadderPrior(TypedModel):
         return '$%s$' % name
 
     def forward(self, noise):
-        noise = self.noise_dense(noise).view(-1, 2, self._out_dim)
-        return self.distribution(noise[:, 0], noise[:, 1])
+        noise = self.noise_dense(noise)
+        if self.has_distribution:
+            noise = noise.view(-1, 2, self._out_dim)
+            return self.distribution(noise[:, 0], noise[:, 1])
+        return noise
 
 class LadderEncoder(TypedModel):
     def __init__(self, in_dim, out_dim, out_dist, noise_dist, noise_dim=2,
