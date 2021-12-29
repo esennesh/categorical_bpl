@@ -31,7 +31,7 @@ class EffectDaggerFunctor(wiring.Functor):
 
 class CategoryModel(BaseModel):
     def __init__(self, generators, global_elements=[], data_space=(784,),
-                 guide_hidden_dim=256, no_prior_dims=[]):
+                 guide_hidden_dim=256, no_prior_dims=[], dagger_generators=[]):
         super().__init__()
         if isinstance(data_space, int):
             data_space = (data_space,)
@@ -43,7 +43,7 @@ class CategoryModel(BaseModel):
             self._observation_name = '$X^{%s}$' % str(self._data_space)
 
         obs = set()
-        for generator in generators:
+        for generator in generators + dagger_generators:
             ty = generator.dom >> generator.cod
             obs = obs | unification.base_elements(ty)
         for element in global_elements:
@@ -65,6 +65,8 @@ class CategoryModel(BaseModel):
             global_elements.append(global_element)
 
         self._category = freecat.FreeCategory(generators, global_elements)
+        self._dagger_category = freecat.FreeCategory(dagger_generators,
+                                                     global_elements)
 
         self.guide_temperatures = nn.Sequential(
             nn.Linear(self._data_dim, guide_hidden_dim),
@@ -146,9 +148,10 @@ class CategoryModel(BaseModel):
                                   arrow_weights=arrow_weights)
 
         wires = EffectDaggerFunctor()(morphism).dagger()
-        dagger = self._category(wires, min_depth=0, temperature=temperature,
-                                arrow_weights=arrow_weights,
-                                infer={'is_auxiliary': True})
+        dagger = self._dagger_category(wires, min_depth=0,
+                                       temperature=temperature,
+                                       arrow_weights=arrow_weights,
+                                       infer={'is_auxiliary': True})
         with pyro.plate('data', len(data)):
             with name_push(name_stack=self._random_variable_names):
                 dagger(data)
