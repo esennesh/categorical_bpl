@@ -178,6 +178,7 @@ class VaeCategoryModel(CategoryModel):
         dims.sort()
 
         generators = []
+        dagger_generators = []
         for dim_a, dim_b in itertools.combinations(dims, 2):
             lower, higher = sorted([dim_a, dim_b])
             # Construct the decoder and encoder
@@ -198,9 +199,10 @@ class VaeCategoryModel(CategoryModel):
             data = {'effect': encoder.effect, 'dagger_effect': decoder.effect}
             generator = cart_closed.Box(encoder.density_name, encoder.type.left,
                                         encoder.type.right, encoder, data=data)
-            generators.append(generator)
+            dagger_generators.append(generator)
 
-        super().__init__(generators, [], data_dim, guide_hidden_dim)
+        super().__init__(generators, [], data_dim, guide_hidden_dim,
+                         dagger_generators=dagger_generators)
 
 class VlaeCategoryModel(CategoryModel):
     def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=256):
