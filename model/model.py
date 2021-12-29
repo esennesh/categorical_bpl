@@ -218,6 +218,7 @@ class VlaeCategoryModel(CategoryModel):
         )
 
         generators = []
+        dagger_generators = []
         for lower, higher in zip(dims, dims[1:]):
             # Construct the VLAE decoder and encoder
             if higher == self._data_dim:
@@ -237,7 +238,7 @@ class VlaeCategoryModel(CategoryModel):
             data = {'effect': encoder.effect, 'dagger_effect': decoder.effect}
             generator = cart_closed.Box(encoder.name, encoder.type.left,
                                         encoder.type.right, encoder, data=data)
-            generators.append(generator)
+            dagger_generators.append(generator)
 
         # For each dimensionality, construct a prior/posterior ladder pair
         for dim in set(dims) - {data_dim}:
@@ -254,9 +255,11 @@ class VlaeCategoryModel(CategoryModel):
             data = {'effect': posterior.effect, 'dagger_effect': prior.effect}
             generator = cart_closed.Box(posterior.name, space, noise_space,
                                         posterior, data=data)
-            generators.append(generator)
+            dagger_generators.append(generator)
 
-        super().__init__(generators, [], data_dim, guide_hidden_dim)
+        super().__init__(generators, [], data_dim, guide_hidden_dim,
+                         list(set(dims) - {data_dim}),
+                         dagger_generators=dagger_generators)
 
 class GlimpseCategoryModel(CategoryModel):
     def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=256):
