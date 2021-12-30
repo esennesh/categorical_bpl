@@ -332,12 +332,13 @@ class LadderDecoder(TypedModel):
         return hiddens
 
 class LadderPrior(TypedModel):
-    def __init__(self, noise_dim, out_dim, out_dist=DiagonalGaussian,
-                 channels=1):
+    def __init__(self, out_dim, out_dist=DiagonalGaussian, channels=1):
         super().__init__()
-        self._in_dim = noise_dim
+        self._noise_dim = out_dim // 2
         self._out_dim = out_dim
         self._num_channels = channels
+
+        self.noise_distribution = StandardNormal(self._noise_dim)
 
         if out_dist is not None:
             self.distribution = out_dist(out_dim)
@@ -347,7 +348,7 @@ class LadderPrior(TypedModel):
            isinstance(self.distribution, DiagonalGaussian):
             final_features *= 2
         self.noise_dense = nn.Sequential(
-            nn.Linear(self._in_dim, self._out_dim),
+            nn.Linear(self._noise_dim, self._out_dim),
             nn.LayerNorm(self._out_dim), nn.PReLU(),
             nn.Linear(self._out_dim, self._out_dim),
             nn.LayerNorm(self._out_dim), nn.PReLU(),
@@ -358,8 +359,7 @@ class LadderPrior(TypedModel):
 
     @property
     def type(self):
-        return types.tensor_type(torch.float, self._in_dim) >>\
-               types.tensor_type(torch.float, self._out_dim)
+        return Ty() >> types.tensor_type(torch.float, self._out_dim)
 
     @property
     def has_distribution(self):
@@ -367,18 +367,25 @@ class LadderPrior(TypedModel):
 
     @property
     def effect(self):
+        effect = self.noise_distribution.effect
         if self.has_distribution:
-            return self.distribution.effect
-        return []
+            effect += self.distribution.effect
+        return effect
 
     @property
     def name(self):
         name = 'p(%s \\mid \\mathbb{R}^{%d})'
-        name = name % (self.effects, self._in_dim)
+        name = name % (self.effects, self._noise_dim)
         return '$%s$' % name
 
-    def forward(self, noise):
-        noise = self.noise_dense(noise)
+    def set_batching(self, batch):
+        super().set_batching(batch)
+        self.noise_distribution.set_batching(batch)
+        if self.has_distribution:
+            self.distribution.set_batching(batch)
+
+    def forward(self):
+        noise = self.noise_dense(self.noise_distribution())
         if self.has_distribution:
             noise = noise.view(-1, 2, self._out_dim)
             return self.distribution(noise[:, 0], noise[:, 1])
