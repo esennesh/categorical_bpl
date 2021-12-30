@@ -242,18 +242,17 @@ class VlaeCategoryModel(CategoryModel):
 
         # For each dimensionality, construct a prior/posterior ladder pair
         for dim in set(dims) - {data_dim}:
-            noise_space = types.tensor_type(torch.float, 2)
             space = types.tensor_type(torch.float, dim)
-            prior = LadderPrior(2, dim, None)
-            posterior = LadderPosterior(dim, 2, DiagonalGaussian)
+            prior = LadderPrior(dim, None)
+            posterior = LadderPosterior(dim, DiagonalGaussian)
 
             data = {'effect': prior.effect, 'dagger_effect': posterior.effect}
-            generator = cart_closed.Box(prior.name, noise_space, space, prior,
+            generator = cart_closed.Box(prior.name, Ty(), space, prior,
                                         data=data)
             generators.append(generator)
 
             data = {'effect': posterior.effect, 'dagger_effect': prior.effect}
-            generator = cart_closed.Box(posterior.name, space, noise_space,
+            generator = cart_closed.Box(posterior.name, space, Ty(),
                                         posterior, data=data)
             dagger_generators.append(generator)
 
