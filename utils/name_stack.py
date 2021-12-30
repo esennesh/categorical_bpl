@@ -27,10 +27,9 @@ class NamePushMessenger(Messenger):
     """
     def __init__(self, name_stack=None):
         super().__init__()
-        if name_stack is not None:
-            self._names = name_stack
-        else:
+        if name_stack is None:
             name_stack = collections.defaultdict(int)
+        self._names = name_stack
 
     def _pyro_sample(self, msg):
         offset = int(not msg["is_observed"])
