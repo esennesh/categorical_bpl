@@ -27,6 +27,8 @@ class EffectDaggerFunctor(wiring.Functor):
     @staticmethod
     def box(f):
         data = {'effect': f.data['dagger_effect']}
+        if not data['effect']:
+            del data['effect']
         return wiring.Box(f.name, f.dom, f.cod, data=data)
 
 class CategoryModel(BaseModel):
