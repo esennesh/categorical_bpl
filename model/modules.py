@@ -497,13 +497,13 @@ class LadderEncoder(TypedModel):
         return hiddens, noise
 
 class LadderPosterior(TypedModel):
-    def __init__(self, in_dim, noise_dim, noise_dist):
+    def __init__(self, in_dim, noise_dist):
         super().__init__()
         self._in_dim = in_dim
-        self._out_dim = noise_dim
+        self._out_dim = in_dim // 2
 
-        self.distribution = noise_dist(noise_dim)
-        noise_features = noise_dim
+        self.distribution = noise_dist(self._out_dim)
+        noise_features = self._out_dim
         if isinstance(self.distribution, DiagonalGaussian):
             noise_features *= 2
 
@@ -516,8 +516,7 @@ class LadderPosterior(TypedModel):
 
     @property
     def type(self):
-        return types.tensor_type(torch.float, self._in_dim) >>\
-               types.tensor_type(torch.float, self._out_dim)
+        return types.tensor_type(torch.float, self._in_dim) >> Ty()
 
     @property
     def effect(self):
@@ -529,9 +528,14 @@ class LadderPosterior(TypedModel):
                                    '\\mathbb{R}^{%d}' % self._in_dim)
         return '$%s$' % name
 
+    def set_batching(self, batch):
+        super().set_batching(batch)
+        self.distribution.set_batching(batch)
+
     def forward(self, ladder_input):
         noise = self.noise_dense(ladder_input).view(-1, 2, self._out_dim)
-        return self.distribution(noise[:, 0], noise[:, 1])
+        self.distribution(noise[:, 0], noise[:, 1])
+        return ()
 
 def glimpse_transform(glimpse_code):
     scalings = torch.eye(2).expand(glimpse_code.shape[0], 2, 2).to(glimpse_code)
