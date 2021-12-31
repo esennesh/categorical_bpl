@@ -248,9 +248,11 @@ class LadderDecoder(TypedModel):
         self._out_dim = out_dim
         self._num_channels = channels
 
-        self.distribution = out_dist(out_dim)
+        if out_dist is not None:
+            self.distribution = out_dist(out_dim)
         final_features = out_dim
-        if isinstance(self.distribution, DiagonalGaussian):
+        if self.has_distribution and\
+           isinstance(self.distribution, DiagonalGaussian):
             final_features *= 2
 
         self.noise_layer = nn.Sequential(nn.Linear(self._noise_dim, in_dim),
@@ -259,7 +261,8 @@ class LadderDecoder(TypedModel):
             out_side = int(np.sqrt(self._out_dim))
             self._multiplier = max(out_side // 4, 1) ** 2
             channels = self._num_channels
-            if isinstance(self.distribution, DiagonalGaussian):
+            if self.has_distribution and\
+               isinstance(self.distribution, DiagonalGaussian):
                 channels *= 2
             self.dense_layers = nn.Sequential(
                 nn.Linear(self._in_dim * 2, self._multiplier * 2 * out_side),
@@ -290,7 +293,9 @@ class LadderDecoder(TypedModel):
 
     @property
     def effect(self):
-        return self.distribution.effect
+        if self.has_distribution:
+            return self.distribution.effect
+        return []
 
     @property
     def name(self):
@@ -298,6 +303,10 @@ class LadderDecoder(TypedModel):
         args_name = args_name % (self._in_dim, self._noise_dim)
         name = 'p(%s \\mid %s)' % (self.effects, args_name)
         return '$%s$' % name
+
+    @property
+    def has_distribution(self):
+        return hasattr(self, 'distribution')
 
     def forward(self, ladder_input, noise):
         hiddens = torch.cat((ladder_input, self.noise_layer(noise)), dim=-1)
@@ -312,26 +321,34 @@ class LadderDecoder(TypedModel):
         else:
             hiddens = self.neural_layers(hiddens)
 
-        if isinstance(self.distribution, ContinuousBernoulliModel):
-            return self.distribution(hiddens)
-        hiddens = hiddens.view(-1, 2, self._out_dim)
-        return self.distribution(hiddens[:, 0], hiddens[:, 1])
+        if self.has_distribution:
+            if isinstance(self.distribution, ContinuousBernoulliModel):
+                hiddens = self.distribution(hiddens)
+            else:
+                hiddens = hiddens.view(-1, 2, self._out_dim)
+                hiddens = self.distribution(hiddens[:, 0], hiddens[:, 1])
+        else:
+            hiddens = hiddens.view(-1, self._out_dim)
+        return hiddens
 
 class LadderPrior(TypedModel):
-    def __init__(self, noise_dim, out_dim, out_dist=DiagonalGaussian,
-                 channels=1):
+    def __init__(self, out_dim, out_dist=DiagonalGaussian, channels=1):
         super().__init__()
-        self._in_dim = noise_dim
+        self._noise_dim = out_dim // 2
         self._out_dim = out_dim
         self._num_channels = channels
 
-        self.distribution = out_dist(out_dim)
+        self.noise_distribution = StandardNormal(self._noise_dim)
+
+        if out_dist is not None:
+            self.distribution = out_dist(out_dim)
 
         final_features = out_dim
-        if isinstance(self.distribution, DiagonalGaussian):
+        if self.has_distribution and\
+           isinstance(self.distribution, DiagonalGaussian):
             final_features *= 2
         self.noise_dense = nn.Sequential(
-            nn.Linear(self._in_dim, self._out_dim),
+            nn.Linear(self._noise_dim, self._out_dim),
             nn.LayerNorm(self._out_dim), nn.PReLU(),
             nn.Linear(self._out_dim, self._out_dim),
             nn.LayerNorm(self._out_dim), nn.PReLU(),
@@ -342,22 +359,37 @@ class LadderPrior(TypedModel):
 
     @property
     def type(self):
-        return types.tensor_type(torch.float, self._in_dim) >>\
-               types.tensor_type(torch.float, self._out_dim)
+        return Ty() >> types.tensor_type(torch.float, self._out_dim)
+
+    @property
+    def has_distribution(self):
+        return hasattr(self, 'distribution')
 
     @property
     def effect(self):
-        return self.distribution.effect
+        effect = self.noise_distribution.effect
+        if self.has_distribution:
+            effect += self.distribution.effect
+        return effect
 
     @property
     def name(self):
         name = 'p(%s \\mid \\mathbb{R}^{%d})'
-        name = name % (self.effects, self._in_dim)
+        name = name % (self.effects, self._noise_dim)
         return '$%s$' % name
 
-    def forward(self, noise):
-        noise = self.noise_dense(noise).view(-1, 2, self._out_dim)
-        return self.distribution(noise[:, 0], noise[:, 1])
+    def set_batching(self, batch):
+        super().set_batching(batch)
+        self.noise_distribution.set_batching(batch)
+        if self.has_distribution:
+            self.distribution.set_batching(batch)
+
+    def forward(self):
+        noise = self.noise_dense(self.noise_distribution())
+        if self.has_distribution:
+            noise = noise.view(-1, 2, self._out_dim)
+            return self.distribution(noise[:, 0], noise[:, 1])
+        return noise
 
 class LadderEncoder(TypedModel):
     def __init__(self, in_dim, out_dim, out_dist, noise_dist, noise_dim=2,
@@ -369,13 +401,15 @@ class LadderEncoder(TypedModel):
         self._out_dim = out_dim
         self._num_channels = channels
 
-        self.ladder_distribution = out_dist(out_dim)
+        if out_dist is not None:
+            self.ladder_distribution = out_dist(out_dim)
         out_features = out_dim
-        if isinstance(self.ladder_distribution, DiagonalGaussian):
+        if self.has_ladder_distribution and\
+           isinstance(self.ladder_distribution, DiagonalGaussian):
             out_features *= 2
         self.noise_distribution = noise_dist(noise_dim)
         noise_features = noise_dim
-        if isinstance(self.ladder_distribution, DiagonalGaussian):
+        if isinstance(self.noise_distribution, DiagonalGaussian):
             noise_features *= 2
 
         if self._convolve:
@@ -419,13 +453,20 @@ class LadderEncoder(TypedModel):
 
     @property
     def effect(self):
-        return self.ladder_distribution.effect + self.noise_distribution.effect
+        effect = self.noise_distribution.effect
+        if self.has_ladder_distribution:
+            effect += self.ladder_distribution.effect
+        return effect
 
     @property
     def name(self):
         name = 'q(%s \\mid %s)' % (self.effects,
                                    '\\mathbb{R}^{%d}' % self._in_dim)
         return '$%s$' % name
+
+    @property
+    def has_ladder_distribution(self):
+        return hasattr(self, 'ladder_distribution')
 
     def forward(self, ladder_input):
         if self._convolve:
@@ -447,19 +488,22 @@ class LadderEncoder(TypedModel):
         noise = noise.view(-1, 2, self._noise_dim)
         noise = self.noise_distribution(noise[:, 0], noise[:, 1])
 
-        hiddens = hiddens.view(-1, 2, self._out_dim)
-        hiddens = self.ladder_distribution(hiddens[:, 0], hiddens[:, 1])
+        if self.has_ladder_distribution:
+            hiddens = hiddens.view(-1, 2, self._out_dim)
+            hiddens = self.ladder_distribution(hiddens[:, 0], hiddens[:, 1])
+        else:
+            hiddens = hiddens.view(-1, self._out_dim)
 
         return hiddens, noise
 
 class LadderPosterior(TypedModel):
-    def __init__(self, in_dim, noise_dim, noise_dist):
+    def __init__(self, in_dim, noise_dist):
         super().__init__()
         self._in_dim = in_dim
-        self._out_dim = noise_dim
+        self._out_dim = in_dim // 2
 
-        self.distribution = noise_dist(noise_dim)
-        noise_features = noise_dim
+        self.distribution = noise_dist(self._out_dim)
+        noise_features = self._out_dim
         if isinstance(self.distribution, DiagonalGaussian):
             noise_features *= 2
 
@@ -472,8 +516,7 @@ class LadderPosterior(TypedModel):
 
     @property
     def type(self):
-        return types.tensor_type(torch.float, self._in_dim) >>\
-               types.tensor_type(torch.float, self._out_dim)
+        return types.tensor_type(torch.float, self._in_dim) >> Ty()
 
     @property
     def effect(self):
@@ -485,9 +528,14 @@ class LadderPosterior(TypedModel):
                                    '\\mathbb{R}^{%d}' % self._in_dim)
         return '$%s$' % name
 
+    def set_batching(self, batch):
+        super().set_batching(batch)
+        self.distribution.set_batching(batch)
+
     def forward(self, ladder_input):
         noise = self.noise_dense(ladder_input).view(-1, 2, self._out_dim)
-        return self.distribution(noise[:, 0], noise[:, 1])
+        self.distribution(noise[:, 0], noise[:, 1])
+        return ()
 
 def glimpse_transform(glimpse_code):
     scalings = torch.eye(2).expand(glimpse_code.shape[0], 2, 2).to(glimpse_code)
@@ -561,9 +609,6 @@ class SpatialTransformerWriter(TypedModel):
         super().__init__()
         self._canvas_side = canvas_side
         self._glimpse_side = glimpse_side
-        canvas_name = 'X^{%d}' % canvas_side ** 2
-        self.distribution = DiagonalGaussian(self._canvas_side ** 2,
-                                             latent_name=canvas_name)
 
         self.glimpse_conv = nn.Sequential(
             nn.Conv2d(1, canvas_side, 4, 2, 1),
@@ -577,11 +622,6 @@ class SpatialTransformerWriter(TypedModel):
                                        3 * 2)
         self.coordinates_dist = DiagonalGaussian(3)
 
-        self.precision = nn.Sequential(
-            nn.Linear(self._canvas_side ** 2 + 3, self._canvas_side ** 2),
-            nn.Softplus()
-        )
-
     @property
     def type(self):
         canvas_type = types.tensor_type(torch.float, self._canvas_side ** 2)
@@ -591,14 +631,14 @@ class SpatialTransformerWriter(TypedModel):
 
     @property
     def effect(self):
-        return self.distribution.effect + self.coordinates_dist.effect
+        return self.coordinates_dist.effect
 
     @property
     def name(self):
         canvas_name = 'Z^{%d}' % self._canvas_side ** 2
         glimpse_name = 'Z^{%d}' % self._glimpse_side ** 2
         inputs_tuple = ' \\times '.join([canvas_name, glimpse_name])
-        name = 'p(%s \\mid %s)' % (self.distribution.effect[0], inputs_tuple)
+        name = 'p(%s \\mid %s)' % (self.coordinates_dist.effect[0], inputs_tuple)
         return '$%s$' % name
 
     def canvas_shape(self, imgs):
@@ -628,9 +668,7 @@ class SpatialTransformerWriter(TypedModel):
 
         canvas = canvas.flatten(1)
         glimpse = glimpse.flatten(1)
-        precision = self.precision(torch.cat((canvas, coords), dim=-1)) +\
-                    self.precision(torch.cat((glimpse, coords), dim=-1))
-        return self.distribution(canvas + glimpse, precision)
+        return canvas + glimpse
 
 class CanvasEncoder(TypedModel):
     def __init__(self, canvas_side=28, glimpse_side=7):
@@ -704,22 +742,6 @@ class SpatialTransformerReader(TypedModel):
                                        3 * 2)
         self.coordinates_dist = DiagonalGaussian(3)
 
-        canvas_name = 'X^{%d}' % canvas_side ** 2
-        self.canvas_dist = DiagonalGaussian(self._canvas_side ** 2,
-                                            latent_name=canvas_name)
-        self.canvas_precision = nn.Sequential(
-            nn.Linear(self._canvas_side ** 2 + 3, self._canvas_side ** 2),
-            nn.Softplus()
-        )
-
-        glimpse_name = 'Z^{%d}' % glimpse_side ** 2
-        self.glimpse_dist = DiagonalGaussian(self._glimpse_side ** 2,
-                                             latent_name=glimpse_name)
-        self.glimpse_precision = nn.Sequential(
-            nn.Linear(self._glimpse_side ** 2 + 3, self._glimpse_side ** 2),
-            nn.Softplus()
-        )
-
     @property
     def type(self):
         canvas_type = types.tensor_type(torch.float, self._canvas_side ** 2)
@@ -729,8 +751,7 @@ class SpatialTransformerReader(TypedModel):
 
     @property
     def effect(self):
-        return self.coordinates_dist.effect + self.canvas_dist.effect +\
-               self.glimpse_dist.effect
+        return self.coordinates_dist.effect
 
     @property
     def name(self):
@@ -763,7 +784,6 @@ class SpatialTransformerReader(TypedModel):
         grid = F.affine_grid(transforms, self.glimpse_shape(images),
                              align_corners=True)
         glimpse = F.grid_sample(images, grid, align_corners=True)
-        flat_glimpse = glimpse.view(-1, self._glimpse_side ** 2)
 
         recon_transforms = glimpse_transform(coords)
         recon_grid = F.affine_grid(recon_transforms, self.canvas_shape(images),
@@ -771,16 +791,7 @@ class SpatialTransformerReader(TypedModel):
         glimpse_recon = F.grid_sample(glimpse, recon_grid, align_corners=True)
 
         residual = images - glimpse_recon
-        flat_residual = residual.view(-1, self._canvas_side ** 2)
 
-        glimpse_precision = self.glimpse_precision(
-            torch.cat((flat_glimpse, coords), dim=-1)
-        )
-        glimpse = self.glimpse_dist(flat_glimpse, glimpse_precision)
-        residual_precision = self.canvas_precision(
-            torch.cat((flat_residual, coords), dim=-1)
-        )
-        residual = self.canvas_dist(flat_residual, residual_precision)
         return residual, glimpse
 
 class RecurrentMolecularEncoder(TypedModel):

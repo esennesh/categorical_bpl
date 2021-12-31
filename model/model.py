@@ -27,11 +27,13 @@ class EffectDaggerFunctor(wiring.Functor):
     @staticmethod
     def box(f):
         data = {'effect': f.data['dagger_effect']}
+        if not data['effect']:
+            del data['effect']
         return wiring.Box(f.name, f.dom, f.cod, data=data)
 
 class CategoryModel(BaseModel):
     def __init__(self, generators, global_elements=[], data_space=(784,),
-                 guide_hidden_dim=256, no_prior_dims=[]):
+                 guide_hidden_dim=256, no_prior_dims=[], dagger_generators=[]):
         super().__init__()
         if isinstance(data_space, int):
             data_space = (data_space,)
@@ -43,7 +45,7 @@ class CategoryModel(BaseModel):
             self._observation_name = '$X^{%s}$' % str(self._data_space)
 
         obs = set()
-        for generator in generators:
+        for generator in generators + dagger_generators:
             ty = generator.dom >> generator.cod
             obs = obs | unification.base_elements(ty)
         for element in global_elements:
@@ -65,6 +67,8 @@ class CategoryModel(BaseModel):
             global_elements.append(global_element)
 
         self._category = freecat.FreeCategory(generators, global_elements)
+        self._dagger_category = freecat.FreeCategory(dagger_generators,
+                                                     global_elements)
 
         self.guide_temperatures = nn.Sequential(
             nn.Linear(self._data_dim, guide_hidden_dim),
@@ -146,9 +150,10 @@ class CategoryModel(BaseModel):
                                   arrow_weights=arrow_weights)
 
         wires = EffectDaggerFunctor()(morphism).dagger()
-        dagger = self._category(wires, min_depth=0, temperature=temperature,
-                                arrow_weights=arrow_weights,
-                                infer={'is_auxiliary': True})
+        dagger = self._dagger_category(wires, min_depth=0,
+                                       temperature=temperature,
+                                       arrow_weights=arrow_weights,
+                                       infer={'is_auxiliary': True})
         with pyro.plate('data', len(data)):
             with name_push(name_stack=self._random_variable_names):
                 dagger(data)
@@ -175,6 +180,7 @@ class VaeCategoryModel(CategoryModel):
         dims.sort()
 
         generators = []
+        dagger_generators = []
         for dim_a, dim_b in itertools.combinations(dims, 2):
             lower, higher = sorted([dim_a, dim_b])
             # Construct the decoder and encoder
@@ -195,9 +201,10 @@ class VaeCategoryModel(CategoryModel):
             data = {'effect': encoder.effect, 'dagger_effect': decoder.effect}
             generator = cart_closed.Box(encoder.density_name, encoder.type.left,
                                         encoder.type.right, encoder, data=data)
-            generators.append(generator)
+            dagger_generators.append(generator)
 
-        super().__init__(generators, [], data_dim, guide_hidden_dim)
+        super().__init__(generators, [], data_dim, guide_hidden_dim,
+                         dagger_generators=dagger_generators)
 
 class VlaeCategoryModel(CategoryModel):
     def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=256):
@@ -213,39 +220,47 @@ class VlaeCategoryModel(CategoryModel):
         )
 
         generators = []
+        dagger_generators = []
         for lower, higher in zip(dims, dims[1:]):
             # Construct the VLAE decoder and encoder
             if higher == self._data_dim:
                 decoder = LadderDecoder(lower, higher, noise_dim=2, conv=True,
                                         out_dist=gaussian_likelihood)
-                encoder = LadderEncoder(higher, lower, DiagonalGaussian,
-                                        DiagonalGaussian, noise_dim=2,
-                                        conv=True)
+                encoder = LadderEncoder(higher, lower, None, DiagonalGaussian,
+                                        noise_dim=2, conv=True)
             else:
                 decoder = LadderDecoder(lower, higher, noise_dim=2, conv=False,
-                                        out_dist=DiagonalGaussian)
-                encoder = LadderEncoder(higher, lower, DiagonalGaussian,
-                                        DiagonalGaussian, noise_dim=2,
-                                        conv=False)
+                                        out_dist=None)
+                encoder = LadderEncoder(higher, lower, None, DiagonalGaussian,
+                                        noise_dim=2, conv=False)
             data = {'effect': decoder.effect, 'dagger_effect': encoder.effect}
-            generator = cart_closed.DaggerBox(decoder.name, decoder.type.left,
-                                              decoder.type.right, decoder,
-                                              encoder, encoder.name, data=data)
+            generator = cart_closed.Box(decoder.name, decoder.type.left,
+                                        decoder.type.right, decoder, data=data)
             generators.append(generator)
+            data = {'effect': encoder.effect, 'dagger_effect': decoder.effect}
+            generator = cart_closed.Box(encoder.name, encoder.type.left,
+                                        encoder.type.right, encoder, data=data)
+            dagger_generators.append(generator)
 
         # For each dimensionality, construct a prior/posterior ladder pair
         for dim in set(dims) - {data_dim}:
-            noise_space = types.tensor_type(torch.float, 2)
             space = types.tensor_type(torch.float, dim)
-            prior = LadderPrior(2, dim, DiagonalGaussian)
-            posterior = LadderPosterior(dim, 2, DiagonalGaussian)
+            prior = LadderPrior(dim, None)
+            posterior = LadderPosterior(dim, DiagonalGaussian)
+
             data = {'effect': prior.effect, 'dagger_effect': posterior.effect}
-            generator = cart_closed.DaggerBox(prior.name, noise_space, space,
-                                              prior, posterior, posterior.name,
-                                              data=data)
+            generator = cart_closed.Box(prior.name, Ty(), space, prior,
+                                        data=data)
             generators.append(generator)
 
-        super().__init__(generators, [], data_dim, guide_hidden_dim)
+            data = {'effect': posterior.effect, 'dagger_effect': prior.effect}
+            generator = cart_closed.Box(posterior.name, space, Ty(),
+                                        posterior, data=data)
+            dagger_generators.append(generator)
+
+        super().__init__(generators, [], data_dim, guide_hidden_dim,
+                         list(set(dims) - {data_dim}),
+                         dagger_generators=dagger_generators)
 
 class GlimpseCategoryModel(CategoryModel):
     def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=256):
