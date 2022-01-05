@@ -371,6 +371,7 @@ class MolecularVaeCategoryModel(CategoryModel):
         hidden_dims = [196, 292, 435]
         recurrent_dims = [64, 128, 256]
         generators = []
+        dagger_generators = []
 
         for hidden in hidden_dims:
             for recurrent in recurrent_dims:
@@ -380,12 +381,17 @@ class MolecularVaeCategoryModel(CategoryModel):
                                            max_len=max_len)
                 data = {'effect': decoder.effect,
                         'dagger_effect': encoder.effect}
-                conv_generator = cart_closed.DaggerBox(decoder.name,
-                                                       decoder.type.left,
-                                                       decoder.type.right,
-                                                       decoder, encoder,
-                                                       encoder.name, data=data)
+                conv_generator = cart_closed.Box(decoder.name,
+                                                 decoder.type.left,
+                                                 decoder.type.right, decoder,
+                                                 data=data)
                 generators.append(conv_generator)
+                data = {'dagger_effect': decoder.effect,
+                        'effect': encoder.effect}
+                conv_dagger = cart_closed.Box(encoder.name, encoder.type.left,
+                                              encoder.type.right, encoder,
+                                              data=data)
+                dagger_generators.append(conv_dagger)
 
                 encoder = RecurrentMolecularEncoder(hidden, recurrent,
                                                     charset_len, max_len)
@@ -394,13 +400,18 @@ class MolecularVaeCategoryModel(CategoryModel):
                                            max_len=max_len)
                 data = {'effect': decoder.effect,
                         'dagger_effect': encoder.effect}
-                rec_generator = cart_closed.DaggerBox(decoder.name,
-                                                      decoder.type.left,
-                                                      decoder.type.right,
-                                                      decoder, encoder,
-                                                      encoder.name, data=data)
+                rec_generator = cart_closed.Box(decoder.name, decoder.type.left,
+                                                decoder.type.right, decoder,
+                                                data=data)
                 generators.append(rec_generator)
+                data = {'dagger_effect': decoder.effect,
+                        'effect': encoder.effect}
+                rec_dagger = cart_closed.Box(encoder.name, encoder.type.left,
+                                             encoder.type.right, encoder,
+                                             data=data)
+                dagger_generators.append(rec_dagger)
 
         super().__init__(generators, [], data_space=(max_len, charset_len),
                          guide_hidden_dim=guide_hidden_dim,
-                         no_prior_dims=[max_len, charset_len])
+                         no_prior_dims=[max_len, charset_len],
+                         dagger_generators=dagger_generators)
