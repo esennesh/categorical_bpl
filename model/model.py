@@ -329,6 +329,14 @@ class GlimpseCategoryModel(CategoryModel):
                                     data=data)
         generators.append(generator)
 
+        # Construct the likelihood
+        likelihood = GaussianLikelihood(data_dim, 'X^{%d}' % data_dim)
+        data = {'effect': likelihood.effect}
+        generator = cart_closed.Box(likelihood.name, likelihood.type.left,
+                                    likelihood.type.right, likelihood,
+                                    data=data)
+        generators.append(generator)
+
         super().__init__(generators, [], data_dim, guide_hidden_dim,
                          no_prior_dims=[glimpse_dim, data_dim])
 
