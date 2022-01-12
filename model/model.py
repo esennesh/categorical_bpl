@@ -330,7 +330,7 @@ class GlimpseCategoryModel(CategoryModel):
         generators.append(generator)
 
         super().__init__(generators, [], data_dim, guide_hidden_dim,
-                         [glimpse_dim])
+                         no_prior_dims=[glimpse_dim, data_dim])
 
 class MolecularVaeCategoryModel(CategoryModel):
     def __init__(self, max_len=120, guide_hidden_dim=256, charset_len=34):
