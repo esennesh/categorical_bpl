@@ -106,6 +106,12 @@ class ContinuousBernoulliModel(TypedModel):
         return types.tensor_type(torch.float, self._dim) >>\
                types.tensor_type(torch.float, self._dim)
 
+    @property
+    def name(self):
+        name = 'p(%s \\mid \\mathbb{R}^{%d})'
+        name = name % (self._random_var_name, self._dim[0])
+        return '$%s$' % name
+
     def forward(self, inputs):
         xs = torch.clamp(inputs.view(-1, self._dim[0]), 0., 1.)
         bernoulli = dist.ContinuousBernoulli(probs=xs).to_event(1)
