@@ -335,8 +335,8 @@ class GlimpseCategoryModel(CategoryModel):
         for dim in set(dims) - {glimpse_dim, data_dim}:
             noise_space = types.tensor_type(torch.float, 2)
             space = types.tensor_type(torch.float, dim)
-            prior = LadderPrior(2, dim, DiagonalGaussian)
-            posterior = LadderPosterior(dim, 2, DiagonalGaussian)
+            prior = LadderPrior(dim, DiagonalGaussian)
+            posterior = LadderPosterior(dim, DiagonalGaussian)
 
             data = {'effect': prior.effect, 'dagger_effect': posterior.effect}
             generator = cart_closed.Box(prior.name, noise_space, space, prior,
