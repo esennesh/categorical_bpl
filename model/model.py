@@ -263,13 +263,14 @@ class GlimpseCategoryModel(CategoryModel):
         glimpse_side = data_side // 2
         glimpse_dim = glimpse_side ** 2
 
+        generators = []
+
         # Build up a bunch of torch.Sizes for the powers of two between
         # hidden_dim and glimpse_dim.
         dims = list(util.powers_of(2, hidden_dim, glimpse_dim // 4)) +\
                [glimpse_dim]
         dims.sort()
 
-        generators = []
         for dim_a, dim_b in itertools.combinations(dims, 2):
             lower, higher = sorted([dim_a, dim_b])
             # Construct the decoder and encoder
@@ -292,7 +293,6 @@ class GlimpseCategoryModel(CategoryModel):
             dim, latent_name='X^{%d}' % dim
         )
 
-        generators = []
         for lower, higher in zip(dims, dims[1:]):
             # Construct the VLAE decoder and encoder
             if higher == self._data_dim:
