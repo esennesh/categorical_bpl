@@ -483,6 +483,7 @@ class LadderEncoder(TypedModel):
             )
             hiddens = self.ladder_linear(hiddens)
         else:
+            ladder_input = ladder_input.view(-1, self._in_dim)
             noise = self.noise_dense(ladder_input)
             hiddens = self.ladder_dense(ladder_input)
 
