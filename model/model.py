@@ -1,6 +1,6 @@
 import collections
 from discopy.biclosed import Ty
-from discopy import wiring
+from discopy import cat, wiring
 from discopyro import cart_closed, freecat, unification
 import itertools
 import math
@@ -35,7 +35,7 @@ def latent_effect_falgebra(f):
 
 class CategoryModel(BaseModel):
     def __init__(self, generators, global_elements=[], data_space=(784,),
-                 guide_hidden_dim=256, no_prior_dims=[], dagger_generators=[]):
+                 guide_hidden_dim=256, no_prior_dims=[]):
         super().__init__()
         if isinstance(data_space, int):
             data_space = (data_space,)
@@ -47,7 +47,7 @@ class CategoryModel(BaseModel):
             self._observation_name = '$X^{%s}$' % str(self._data_space)
 
         obs = set()
-        for generator in generators + dagger_generators:
+        for generator in generators:
             ty = generator.dom >> generator.cod
             obs = obs | unification.base_elements(ty)
         for element in global_elements:
@@ -69,8 +69,6 @@ class CategoryModel(BaseModel):
             global_elements.append(global_element)
 
         self._category = freecat.FreeCategory(generators, global_elements)
-        self._dagger_category = freecat.FreeCategory(dagger_generators,
-                                                     global_elements)
 
         self.guide_temperatures = nn.Sequential(
             nn.Linear(self._data_dim, guide_hidden_dim),
@@ -86,6 +84,30 @@ class CategoryModel(BaseModel):
         )
 
         self._random_variable_names = collections.defaultdict(int)
+
+        self.encoders = nn.ModuleDict()
+        self.encoder_functor = wiring.Functor(
+            lambda ty: util.double_latent(ty, self.data_space),
+            lambda ar: self._encoder(ar.name), ob_factory=Ty,
+            ar_factory=cart_closed.Box
+        )
+
+        for arrow in self._category.ars:
+            effect = [eff for eff in arrow.data['effect'] if 'X^' not in eff]
+
+            cod_dims = util.double_latents([types.type_size(ob.name) for ob in
+                                            arrow.cod], self._data_dim)
+            dom_dims = util.double_latents([types.type_size(ob.name) for ob in
+                                            arrow.dom], self._data_dim)
+            self.encoders[arrow.name + '†'] = build_encoder(cod_dims, dom_dims,
+                                                            effect)
+
+    def _encoder(self, name):
+        encoder = self.encoders[name]
+        return cart_closed.Box(
+            name, encoder.type.left, encoder.type.right, encoder,
+            data={'effect': encoder.effect}
+        )
 
     @property
     def data_space(self):
@@ -151,11 +173,8 @@ class CategoryModel(BaseModel):
                                   temperature=temperature,
                                   arrow_weights=arrow_weights)
 
-        wires = EffectDaggerFunctor()(morphism).dagger()
-        dagger = self._dagger_category(wires, min_depth=0,
-                                       temperature=temperature,
-                                       arrow_weights=arrow_weights,
-                                       infer={'is_auxiliary': True})
+        wires = WIRING_FUNCTOR(morphism.dagger())
+        dagger = self.encoder_functor(wires)
         with pyro.plate('data', len(data)):
             with name_push(name_stack=self._random_variable_names):
                 dagger(data)
