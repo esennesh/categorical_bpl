@@ -1,5 +1,6 @@
 from abc import abstractproperty
 from discopy.biclosed import Ty
+import functools
 import numpy as np
 import pyro
 import pyro.distributions as dist
@@ -954,3 +955,66 @@ class MolecularDecoder(TypedModel):
 
         logits_categorical = dist.OneHotCategorical(probs=probs).to_event(1)
         return pyro.sample('$%s$' % self._smiles_name, logits_categorical)
+
+class RecurrentEncoder(TypedModel):
+    def __init__(self, in_dims, out_dims, effects, hidden_dim=128):
+        super().__init__()
+        self._effects = effects
+        self._eff_dims = [types.type_size(eff) for eff in self._effects]
+        self._in_dims = in_dims
+        self._out_dims = out_dims
+
+        max_dim = max(*self._eff_dims, sum(self._in_dims), sum(self._out_dims),
+                      hidden_dim) * 2
+
+        self.recurrent = nn.GRUCell(sum(self._in_dims), max_dim)
+        if sum(self._out_dims):
+            self.next_encoder = nn.Sequential(
+                nn.Linear(max_dim, max_dim),
+                nn.PReLU(),
+                nn.Linear(max_dim, sum(self._out_dims)),
+            )
+
+    @property
+    def type(self):
+        in_tys = [types.tensor_type(torch.float, in_dim) for in_dim
+                  in self._in_dims]
+        in_space = functools.reduce(lambda t, u: t @ u, in_tys, Ty())
+        out_tys = [types.tensor_type(torch.float, out_dim) for out_dim
+                   in self._out_dims]
+        out_space = functools.reduce(lambda t, u: t @ u, out_tys, Ty())
+        return in_space >> out_space
+
+    @property
+    def effect(self):
+        return self._effects
+
+    @property
+    def name(self):
+        data_name = 'X^{%d}' % self._in_dim
+        name = 'p(%s \\mid %s)' % (self._effects.join(','), data_name)
+        return '$%s$' % name
+
+    def forward(self, *args):
+        xs = torch.cat(args, dim=-1)
+
+        hs = self.recurrent(xs)
+        for i, effect in enumerate(self._effects):
+            eff_dim = self._eff_dims[i]
+            hs = self.recurrent(xs, hs)
+
+            loc, scale = hs[:, :eff_dim], F.softplus(hs[:, eff_dim:eff_dim*2])
+            normal = dist.Normal(loc, scale).to_event(1)
+            zs = pyro.sample('$%s$' % effect, normal)
+            hs = torch.cat((zs, hs[:, eff_dim:]), dim=-1)
+
+        result = ()
+        if self._out_dims:
+            hs = self.next_encoder(hs)
+
+            d = 0
+            for dim in self._out_dims:
+                result = result + (hs[:, d:d+dim],)
+                d += dim
+
+        return result
