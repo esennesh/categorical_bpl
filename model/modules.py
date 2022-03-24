@@ -1137,3 +1137,8 @@ class MlpEncoder(Encoder):
             zs = self.distribution(loc, precision)
 
         return self.outcode(zs, xs)
+
+def build_encoder(in_dims, out_dims, effects):
+    if len(effects) > 1:
+        return RecurrentEncoder(in_dims, out_dims, effects)
+    return MlpEncoder(in_dims, out_dims, effects[0] if effects else None)
