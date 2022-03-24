@@ -956,6 +956,74 @@ class MolecularDecoder(TypedModel):
         logits_categorical = dist.OneHotCategorical(probs=probs).to_event(1)
         return pyro.sample('$%s$' % self._smiles_name, logits_categorical)
 
+class Encoder(TypedModel):
+    def __init__(self, in_dims, out_dims, latents, hidden_dim, incoder_cls,
+                 normalizer_layer=nn.LayerNorm):
+        super().__init__()
+        self._in_dims = in_dims
+        self._out_dims = out_dims
+        self._z_dims = [types.type_size(latent) for latent in latents]
+        self._effects = latents
+        self._hidden_dim = hidden_dim
+
+        self._incode = self._effects and sum(self._in_dims) != self._hidden_dim
+
+        if self._incode:
+            self.incoder = incoder_cls(sum(self._in_dims), self._hidden_dim,
+                                       normalizer_layer)
+        outcoder_dom = sum(self._in_dims) + sum(self._z_dims)
+
+        outcoder_cod = sum(self._out_dims)
+        if outcoder_cod:
+            self.outcoder = nn.Sequential(
+                normalizer_layer(outcoder_dom), nn.PReLU(),
+                nn.Linear(outcoder_dom, outcoder_dom),
+                normalizer_layer(outcoder_dom), nn.PReLU(),
+                nn.Linear(outcoder_dom, outcoder_cod),
+            )
+
+    @property
+    def type(self):
+        in_tys = [types.tensor_type(torch.float, in_dim) for in_dim
+                  in self._in_dims]
+        in_space = functools.reduce(lambda t, u: t @ u, in_tys, Ty())
+        out_tys = [types.tensor_type(torch.float, out_dim) for out_dim
+                   in self._out_dims]
+        out_space = functools.reduce(lambda t, u: t @ u, out_tys, Ty())
+        return in_space >> out_space
+
+    @property
+    def effect(self):
+        return self._effects
+
+    @property
+    def name(self):
+        if len(self._in_dims) > 1:
+            in_names = ['Z^{%d}' % dim for dim in self._in_dims]
+        else:
+            in_names = 'X^{%d}' % self._in_dims[0]
+
+        name = 'p(%s \\mid %s)' % (','.join(self.effect), ','.join(in_names))
+        return '$%s$' % name
+
+    def incode(self, xs):
+        if self._incode:
+            return self.incoder(xs)
+        return xs
+
+    def outcode(self, os, ins):
+        result = ()
+        if sum(self._z_dims):
+            os = torch.cat((os, ins), dim=-1)
+
+        if sum(self._out_dims):
+            os = self.outcoder(os)
+            d = 0
+            for dim in self._out_dims:
+                result = result + (os[:, d:d+dim],)
+                d += dim
+        return result
+
 class RecurrentEncoder(TypedModel):
     def __init__(self, in_dims, out_dims, effects, hidden_dim=128):
         super().__init__()
