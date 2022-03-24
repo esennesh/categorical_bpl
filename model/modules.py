@@ -1024,24 +1024,17 @@ class Encoder(TypedModel):
                 d += dim
         return result
 
-class RecurrentEncoder(TypedModel):
-    def __init__(self, in_dims, out_dims, effects, hidden_dim=128):
-        super().__init__()
-        self._effects = effects
-        self._eff_dims = [types.type_size(eff) for eff in self._effects]
-        self._in_dims = in_dims
-        self._out_dims = out_dims
+class RecurrentEncoder(Encoder):
+    def __init__(self, in_dims, out_dims, effects):
+        z_dims = [types.type_size(effect) for effect in effects]
+        if len(in_dims) == 1:
+            incoder_cls = ConvIncoder
+        else:
+            incoder_cls = DenseIncoder
+        super().__init__(in_dims, out_dims, effects, max(z_dims) * 2,
+                         incoder_cls)
 
-        max_dim = max(*self._eff_dims, sum(self._in_dims), sum(self._out_dims),
-                      hidden_dim) * 2
-
-        self.recurrent = nn.GRUCell(sum(self._in_dims), max_dim)
-        if sum(self._out_dims):
-            self.next_encoder = nn.Sequential(
-                nn.Linear(max_dim, max_dim),
-                nn.PReLU(),
-                nn.Linear(max_dim, sum(self._out_dims)),
-            )
+        self.recurrent = nn.GRUCell(sum(self._z_dims), self._hidden_dim)
 
     @property
     def type(self):
@@ -1059,33 +1052,31 @@ class RecurrentEncoder(TypedModel):
 
     @property
     def name(self):
-        data_name = 'X^{%d}' % self._in_dim
+        data_name = 'X^{%d}' % self._in_dims
         name = 'p(%s \\mid %s)' % (self._effects.join(','), data_name)
         return '$%s$' % name
 
     def forward(self, *args):
         xs = torch.cat(args, dim=-1)
+        hs = self.incode(xs)
 
-        hs = self.recurrent(xs)
+        accumulated_zs = torch.zeros(hs.shape[0], sum(self._z_dims)).to(hs)
+        d = 0
         for i, effect in enumerate(self._effects):
-            eff_dim = self._eff_dims[i]
-            hs = self.recurrent(xs, hs)
+            z_dim = self._z_dims[i]
+            hs = self.recurrent(accumulated_zs, hs)
 
-            loc, scale = hs[:, :eff_dim], F.softplus(hs[:, eff_dim:eff_dim*2])
+            loc = hs[:, :z_dim]
+            scale = F.softplus(hs[:, z_dim:z_dim*2])
             normal = dist.Normal(loc, scale).to_event(1)
             zs = pyro.sample('$%s$' % effect, normal)
-            hs = torch.cat((zs, hs[:, eff_dim:]), dim=-1)
+            zs = torch.cat((accumulated_zs[:, :d], zs,
+                            accumulated_zs[:, d+z_dim:]), dim=-1)
+            d += z_dim
+        if not self._effects:
+            accumulated_zs = hs
 
-        result = ()
-        if self._out_dims:
-            hs = self.next_encoder(hs)
-
-            d = 0
-            for dim in self._out_dims:
-                result = result + (hs[:, d:d+dim],)
-                d += dim
-
-        return result
+        return self.outcode(accumulated_zs, xs)
 
 class DenseIncoder(nn.Module):
     def __init__(self, in_features, out_features, normalizer_cls=nn.LayerNorm):
