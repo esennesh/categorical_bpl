@@ -1112,3 +1112,28 @@ class ConvIncoder(nn.Module):
         hs = self.conv_layers(features)
         hs = hs.view(-1, self._in_side * 2 * self._multiplier)
         return self.dense_layers(hs)
+
+class MlpEncoder(Encoder):
+    def __init__(self, in_dims, out_dims, latent=None,
+                 normalizer_layer=nn.LayerNorm):
+        hidden_dim = types.type_size(latent) * 2 if latent else sum(out_dims)
+        if len(in_dims) == 1:
+            incoder_cls = ConvIncoder
+        else:
+            incoder_cls = DenseIncoder
+        super().__init__(in_dims, out_dims, [latent] if latent else [],
+                         hidden_dim, incoder_cls,
+                         normalizer_layer=normalizer_layer)
+        if latent:
+            self.distribution = DiagonalGaussian(self._hidden_dim,
+                                                 latent_name=latent)
+
+    def forward(self, *args):
+        xs = torch.cat(args, dim=-1)
+        zs = self.incode(xs)
+        if self._effects:
+            zs = zs.view(-1, 2, self._z_dims[0])
+            loc, precision = zs[:, 0], F.softplus(zs[:, 1])
+            zs = self.distribution(loc, precision)
+
+        return self.outcode(zs, xs)
