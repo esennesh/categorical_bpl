@@ -1086,3 +1086,38 @@ class RecurrentEncoder(TypedModel):
                 d += dim
 
         return result
+
+class DenseIncoder(nn.Module):
+    def __init__(self, in_features, out_features, normalizer_cls=nn.LayerNorm):
+        super().__init__()
+        self.dense = nn.Sequential(
+            nn.Linear(in_features, out_features),
+            normalizer_cls(out_features), nn.PReLU(),
+            nn.Linear(out_features, out_features),
+        )
+
+    def forward(self, features):
+        return self.dense(features)
+
+class ConvIncoder(nn.Module):
+    def __init__(self, in_features, out_features, normalizer_cls=nn.LayerNorm):
+        super().__init__()
+        self._in_side = int(np.sqrt(in_features))
+        self._multiplier = max(self._in_side // 4, 1) ** 2
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(1, self._in_side, 4, 2, 1),
+            nn.InstanceNorm2d(self._in_side), nn.PReLU(),
+            nn.Conv2d(self._in_side, self._in_side * 2, 4, 2, 1),
+            nn.InstanceNorm2d(self._in_side * 2), nn.PReLU(),
+        )
+        self.dense_layers = nn.Sequential(
+            nn.Linear(self._in_side * 2 * self._multiplier, out_features),
+            normalizer_cls(out_features), nn.PReLU(),
+            nn.Linear(out_features, out_features)
+        )
+
+    def forward(self, features):
+        features = features.reshape(-1, 1, self._in_side, self._in_side)
+        hs = self.conv_layers(features)
+        hs = hs.view(-1, self._in_side * 2 * self._multiplier)
+        return self.dense_layers(hs)
