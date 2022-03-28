@@ -276,19 +276,11 @@ class GlimpseCategoryModel(CategoryModel):
             if higher == glimpse_dim:
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian,
                                          convolve=True)
-                encoder = DensityEncoder(higher, lower, DiagonalGaussian,
-                                         convolve=True)
             else:
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
-                encoder = DensityEncoder(higher, lower, DiagonalGaussian)
-            data = {'effect': decoder.effect, 'dagger_effect': encoder.effect}
+            data = {'effect': decoder.effect}
             generator = cart_closed.Box(decoder.density_name, decoder.type.left,
                                         decoder.type.right, decoder, data=data)
-            generators.append(generator)
-
-            data = {'effect': encoder.effect, 'dagger_effect': decoder.effect}
-            generator = cart_closed.Box(encoder.density_name, encoder.type.left,
-                                        encoder.type.right, encoder, data=data)
             generators.append(generator)
 
         # Build up a bunch of torch.Sizes for the powers of two between
@@ -306,54 +298,31 @@ class GlimpseCategoryModel(CategoryModel):
             if higher == self._data_dim:
                 decoder = LadderDecoder(lower, higher, noise_dim=2, conv=True,
                                         out_dist=gaussian_likelihood)
-                encoder = LadderEncoder(higher, lower, DiagonalGaussian,
-                                        DiagonalGaussian, noise_dim=2,
-                                        conv=True)
             else:
                 decoder = LadderDecoder(lower, higher, noise_dim=2, conv=False,
                                         out_dist=DiagonalGaussian)
-                encoder = LadderEncoder(higher, lower, DiagonalGaussian,
-                                        DiagonalGaussian, noise_dim=2,
-                                        conv=False)
-            data = {'effect': decoder.effect, 'dagger_effect': encoder.effect}
+            data = {'effect': decoder.effect}
             generator = cart_closed.Box(decoder.name, decoder.type.left,
                                         decoder.type.right, decoder, data=data)
-            generators.append(generator)
-
-            data = {'effect': encoder.effect, 'dagger_effect': decoder.effect}
-            generator = cart_closed.Box(encoder.name, encoder.type.left,
-                                        encoder.type.right, encoder, data=data)
             generators.append(generator)
 
         # For each dimensionality, construct a prior/posterior ladder pair
         for dim in set(dims) - {glimpse_dim, data_dim}:
             space = types.tensor_type(torch.float, dim)
             prior = LadderPrior(dim, DiagonalGaussian)
-            posterior = LadderPosterior(dim, DiagonalGaussian)
 
-            data = {'effect': prior.effect, 'dagger_effect': posterior.effect}
+            data = {'effect': prior.effect}
             generator = cart_closed.Box(prior.name, Ty(), space, prior,
                                         data=data)
-            generators.append(generator)
-
-            data = {'effect': posterior.effect, 'dagger_effect': prior.effect}
-            generator = cart_closed.Box(posterior.name, space, Ty(),
-                                        posterior, data=data)
             generators.append(generator)
 
         # Construct writer/reader pair for spatial attention
         writer = SpatialTransformerWriter(data_side, glimpse_side)
         writer_l, writer_r = writer.type.left, writer.type.right
-        reader = SpatialTransformerReader(data_side, glimpse_side)
 
-        data = {'effect': writer.effect, 'dagger_effect': reader.effect}
+        data = {'effect': writer.effect}
         generator = cart_closed.Box(writer.name, writer_l, writer_r, writer,
                                     data=data)
-        generators.append(generator)
-
-        data = {'effect': reader.effect, 'dagger_effect': writer.effect}
-        generator = cart_closed.Box(reader.name, reader.type.left,
-                                    reader.type.right, reader, data=data)
         generators.append(generator)
 
         super().__init__(generators, [], data_dim, guide_hidden_dim,
