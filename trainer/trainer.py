@@ -99,7 +99,7 @@ class Trainer(BaseTrainer):
         current = 0
         for batch_idx, (data, target) in enumerate(self.data_loader):
             data, target = data.to(self.device), target.to(self.device)
-            loss = svi.step(observations=data)
+            loss = svi.step(observations=data) / data.shape[0]
 
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
             self.train_metrics.update('loss', loss)
@@ -142,7 +142,7 @@ class Trainer(BaseTrainer):
         with torch.no_grad():
             for batch_idx, (data, target) in enumerate(self.valid_data_loader):
                 data, target = data.to(self.device), target.to(self.device)
-                loss = svi.evaluate_loss(observations=data)
+                loss = svi.evaluate_loss(observations=data) / data.shape[0]
 
                 self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
                 self.valid_metrics.update('loss', loss)
