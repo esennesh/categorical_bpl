@@ -1,5 +1,6 @@
 from abc import abstractproperty
 from discopy.biclosed import Ty
+import functools
 import numpy as np
 import pyro
 import pyro.distributions as dist
@@ -954,3 +955,190 @@ class MolecularDecoder(TypedModel):
 
         logits_categorical = dist.OneHotCategorical(probs=probs).to_event(1)
         return pyro.sample('$%s$' % self._smiles_name, logits_categorical)
+
+class Encoder(TypedModel):
+    def __init__(self, in_dims, out_dims, latents, hidden_dim, incoder_cls,
+                 normalizer_layer=nn.LayerNorm):
+        super().__init__()
+        self._in_dims = in_dims
+        self._out_dims = out_dims
+        self._z_dims = [types.type_size(latent) for latent in latents]
+        self._effects = latents
+        self._hidden_dim = hidden_dim
+
+        self._incode = self._effects and sum(self._in_dims) != self._hidden_dim
+
+        if self._incode:
+            self.incoder = incoder_cls(sum(self._in_dims), self._hidden_dim,
+                                       normalizer_layer)
+        outcoder_dom = sum(self._in_dims) + sum(self._z_dims)
+
+        outcoder_cod = sum(self._out_dims)
+        if outcoder_cod:
+            self.outcoder = nn.Sequential(
+                normalizer_layer(outcoder_dom), nn.PReLU(),
+                nn.Linear(outcoder_dom, outcoder_dom),
+                normalizer_layer(outcoder_dom), nn.PReLU(),
+                nn.Linear(outcoder_dom, outcoder_cod),
+            )
+
+    @property
+    def type(self):
+        in_tys = [types.tensor_type(torch.float, in_dim) for in_dim
+                  in self._in_dims]
+        in_space = functools.reduce(lambda t, u: t @ u, in_tys, Ty())
+        out_tys = [types.tensor_type(torch.float, out_dim) for out_dim
+                   in self._out_dims]
+        out_space = functools.reduce(lambda t, u: t @ u, out_tys, Ty())
+        return in_space >> out_space
+
+    @property
+    def effect(self):
+        return self._effects
+
+    @property
+    def name(self):
+        if len(self._in_dims) > 1:
+            in_names = ['Z^{%d}' % dim for dim in self._in_dims]
+        else:
+            in_names = 'X^{%d}' % self._in_dims[0]
+
+        name = 'p(%s \\mid %s)' % (','.join(self.effect), ','.join(in_names))
+        return '$%s$' % name
+
+    def incode(self, xs):
+        if self._incode:
+            return self.incoder(xs)
+        return xs
+
+    def outcode(self, os, ins):
+        result = ()
+        if sum(self._z_dims):
+            os = torch.cat((os, ins), dim=-1)
+
+        if sum(self._out_dims):
+            os = self.outcoder(os)
+            d = 0
+            for dim in self._out_dims:
+                result = result + (os[:, d:d+dim],)
+                d += dim
+        return result
+
+class RecurrentEncoder(Encoder):
+    def __init__(self, in_dims, out_dims, effects):
+        z_dims = [types.type_size(effect) for effect in effects]
+        if len(in_dims) == 1:
+            incoder_cls = ConvIncoder
+        else:
+            incoder_cls = DenseIncoder
+        super().__init__(in_dims, out_dims, effects, max(z_dims) * 2,
+                         incoder_cls)
+
+        self.recurrent = nn.GRUCell(sum(self._z_dims), self._hidden_dim)
+
+    @property
+    def type(self):
+        in_tys = [types.tensor_type(torch.float, in_dim) for in_dim
+                  in self._in_dims]
+        in_space = functools.reduce(lambda t, u: t @ u, in_tys, Ty())
+        out_tys = [types.tensor_type(torch.float, out_dim) for out_dim
+                   in self._out_dims]
+        out_space = functools.reduce(lambda t, u: t @ u, out_tys, Ty())
+        return in_space >> out_space
+
+    @property
+    def effect(self):
+        return self._effects
+
+    @property
+    def name(self):
+        data_name = 'X^{%d}' % self._in_dims
+        name = 'p(%s \\mid %s)' % (self._effects.join(','), data_name)
+        return '$%s$' % name
+
+    def forward(self, *args):
+        xs = torch.cat(args, dim=-1)
+        hs = self.incode(xs)
+
+        accumulated_zs = torch.zeros(hs.shape[0], sum(self._z_dims)).to(hs)
+        d = 0
+        for i, effect in enumerate(self._effects):
+            z_dim = self._z_dims[i]
+            hs = self.recurrent(accumulated_zs, hs)
+
+            loc = hs[:, :z_dim]
+            scale = F.softplus(hs[:, z_dim:z_dim*2])
+            normal = dist.Normal(loc, scale).to_event(1)
+            zs = pyro.sample('$%s$' % effect, normal)
+            zs = torch.cat((accumulated_zs[:, :d], zs,
+                            accumulated_zs[:, d+z_dim:]), dim=-1)
+            d += z_dim
+        if not self._effects:
+            accumulated_zs = hs
+
+        return self.outcode(accumulated_zs, xs)
+
+class DenseIncoder(nn.Module):
+    def __init__(self, in_features, out_features, normalizer_cls=nn.LayerNorm):
+        super().__init__()
+        self.dense = nn.Sequential(
+            nn.Linear(in_features, out_features),
+            normalizer_cls(out_features), nn.PReLU(),
+            nn.Linear(out_features, out_features),
+        )
+
+    def forward(self, features):
+        return self.dense(features)
+
+class ConvIncoder(nn.Module):
+    def __init__(self, in_features, out_features, normalizer_cls=nn.LayerNorm):
+        super().__init__()
+        self._in_side = int(np.sqrt(in_features))
+        self._multiplier = max(self._in_side // 4, 1) ** 2
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(1, self._in_side, 4, 2, 1),
+            nn.InstanceNorm2d(self._in_side), nn.PReLU(),
+            nn.Conv2d(self._in_side, self._in_side * 2, 4, 2, 1),
+            nn.InstanceNorm2d(self._in_side * 2), nn.PReLU(),
+        )
+        self.dense_layers = nn.Sequential(
+            nn.Linear(self._in_side * 2 * self._multiplier, out_features),
+            normalizer_cls(out_features), nn.PReLU(),
+            nn.Linear(out_features, out_features)
+        )
+
+    def forward(self, features):
+        features = features.reshape(-1, 1, self._in_side, self._in_side)
+        hs = self.conv_layers(features)
+        hs = hs.view(-1, self._in_side * 2 * self._multiplier)
+        return self.dense_layers(hs)
+
+class MlpEncoder(Encoder):
+    def __init__(self, in_dims, out_dims, latent=None,
+                 normalizer_layer=nn.LayerNorm):
+        hidden_dim = types.type_size(latent) * 2 if latent else sum(out_dims)
+        if len(in_dims) == 1:
+            incoder_cls = ConvIncoder
+        else:
+            incoder_cls = DenseIncoder
+        super().__init__(in_dims, out_dims, [latent] if latent else [],
+                         hidden_dim, incoder_cls,
+                         normalizer_layer=normalizer_layer)
+        if latent:
+            self.distribution = DiagonalGaussian(self._hidden_dim,
+                                                 latent_name=latent)
+
+    def forward(self, *args):
+        xs = torch.cat(args, dim=-1)
+        zs = self.incode(xs)
+        if self._effects:
+            zs = zs.view(-1, 2, self._z_dims[0])
+            loc, precision = zs[:, 0], F.softplus(zs[:, 1])
+            zs = self.distribution(loc, precision)
+
+        return self.outcode(zs, xs)
+
+def build_encoder(in_dims, out_dims, effects):
+    if len(effects) > 1:
+        return RecurrentEncoder(in_dims, out_dims, effects)
+    return MlpEncoder(in_dims, out_dims, effects[0] if effects else None)

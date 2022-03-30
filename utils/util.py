@@ -3,9 +3,18 @@ import math
 import matplotlib.pyplot as plt
 import pandas as pd
 from pathlib import Path
-from itertools import repeat
+from itertools import chain, repeat
 from collections import OrderedDict
 import torch
+
+def double_latent(ty, data_space):
+    return ty if ty == data_space else ty @ ty
+
+def double_latents(dims, data_dim):
+    latents = []
+    for dim in dims:
+        latents.append((dim,) if dim == data_dim else (dim, dim))
+    return list(chain(*latents))
 
 def show_tensor(imgs, i=0, channels=1, shape=None):
     if shape is not None:
