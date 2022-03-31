@@ -135,7 +135,8 @@ class CategoryModel(BaseModel):
             if isinstance(module, BaseModel):
                 module.set_batching(data)
 
-        morphism = self._category(self.wiring_diagram, min_depth=VAE_MIN_DEPTH)
+        min_depth = VAE_MIN_DEPTH if len(list(self.wiring_diagram)) == 1 else 0
+        morphism = self._category(self.wiring_diagram, min_depth=min_depth)
 
         if observations is not None and train:
             score_morphism = pyro.condition(morphism, data=observations)
@@ -171,7 +172,8 @@ class CategoryModel(BaseModel):
                        data_arrow_weights[:, 1]).to_event(1)
         )
 
-        morphism = self._category(self.wiring_diagram, min_depth=VAE_MIN_DEPTH,
+        min_depth = VAE_MIN_DEPTH if len(list(self.wiring_diagram)) == 1 else 0
+        morphism = self._category(self.wiring_diagram, min_depth=min_depth,
                                   temperature=temperature,
                                   arrow_weights=arrow_weights)
 
