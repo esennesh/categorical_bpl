@@ -113,6 +113,11 @@ class CategoryModel(BaseModel):
     def data_space(self):
         return types.tensor_type(torch.float, self._data_space)
 
+    @property
+    def wiring_diagram(self):
+        return wiring.Box('', Ty(), self.data_space,
+                          data={'effect': lambda e: True})
+
     @pnn.pyro_method
     def model(self, observations=None, train=True):
         if isinstance(observations, dict):
@@ -130,9 +135,8 @@ class CategoryModel(BaseModel):
             if isinstance(module, BaseModel):
                 module.set_batching(data)
 
-        morphism = self._category(wiring.Box('', Ty(), self.data_space,
-                                             data={'effect': lambda e: True}),
-                                  min_depth=VAE_MIN_DEPTH)
+        morphism = self._category(self.wiring_diagram, min_depth=VAE_MIN_DEPTH)
+
         if observations is not None and train:
             score_morphism = pyro.condition(morphism, data=observations)
         else:
@@ -167,9 +171,7 @@ class CategoryModel(BaseModel):
                        data_arrow_weights[:, 1]).to_event(1)
         )
 
-        morphism = self._category(wiring.Box('', Ty(), self.data_space,
-                                             data={'effect': lambda e: True}),
-                                  min_depth=VAE_MIN_DEPTH,
+        morphism = self._category(self.wiring_diagram, min_depth=VAE_MIN_DEPTH,
                                   temperature=temperature,
                                   arrow_weights=arrow_weights)
 
