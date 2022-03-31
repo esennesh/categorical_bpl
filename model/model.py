@@ -336,6 +336,14 @@ class GlimpseCategoryModel(CategoryModel):
         super().__init__(generators, [], data_dim, guide_hidden_dim,
                          no_prior_dims=[glimpse_dim, data_dim])
 
+    @property
+    def wiring_diagram(self):
+        latent = super().wiring_diagram
+        observation_effect = 'X^{%d}' % self._data_dim
+        likelihood = wiring.Box('', self.data_space, self.data_space,
+                                data={'effect': [observation_effect]})
+        return latent >> likelihood
+
 class MolecularVaeCategoryModel(CategoryModel):
     def __init__(self, max_len=120, guide_hidden_dim=256, charset_len=34):
         hidden_dims = [196, 292, 435]
