@@ -293,15 +293,11 @@ class GlimpseCategoryModel(CategoryModel):
         dims = dims + [data_dim]
         dims.sort()
 
-        gaussian_likelihood = lambda dim: DiagonalGaussian(
-            dim, latent_name='X^{%d}' % dim
-        )
-
         for lower, higher in zip(dims, dims[1:]):
             # Construct the VLAE decoder and encoder
             if higher == self._data_dim:
                 decoder = LadderDecoder(lower, higher, noise_dim=2, conv=True,
-                                        out_dist=gaussian_likelihood)
+                                        out_dist=DiagonalGaussian)
             else:
                 decoder = LadderDecoder(lower, higher, noise_dim=2, conv=False,
                                         out_dist=DiagonalGaussian)
