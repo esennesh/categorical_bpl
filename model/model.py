@@ -113,6 +113,11 @@ class CategoryModel(BaseModel):
     def data_space(self):
         return types.tensor_type(torch.float, self._data_space)
 
+    @property
+    def wiring_diagram(self):
+        return wiring.Box('', Ty(), self.data_space,
+                          data={'effect': lambda e: True})
+
     @pnn.pyro_method
     def model(self, observations=None, train=True):
         if isinstance(observations, dict):
@@ -130,9 +135,9 @@ class CategoryModel(BaseModel):
             if isinstance(module, BaseModel):
                 module.set_batching(data)
 
-        morphism = self._category(wiring.Box('', Ty(), self.data_space,
-                                             data={'effect': lambda e: True}),
-                                  min_depth=VAE_MIN_DEPTH)
+        min_depth = VAE_MIN_DEPTH if len(list(self.wiring_diagram)) == 1 else 0
+        morphism = self._category(self.wiring_diagram, min_depth=min_depth)
+
         if observations is not None and train:
             score_morphism = pyro.condition(morphism, data=observations)
         else:
@@ -167,9 +172,8 @@ class CategoryModel(BaseModel):
                        data_arrow_weights[:, 1]).to_event(1)
         )
 
-        morphism = self._category(wiring.Box('', Ty(), self.data_space,
-                                             data={'effect': lambda e: True}),
-                                  min_depth=VAE_MIN_DEPTH,
+        min_depth = VAE_MIN_DEPTH if len(list(self.wiring_diagram)) == 1 else 0
+        morphism = self._category(self.wiring_diagram, min_depth=min_depth,
                                   temperature=temperature,
                                   arrow_weights=arrow_weights)
 
@@ -289,15 +293,11 @@ class GlimpseCategoryModel(CategoryModel):
         dims = dims + [data_dim]
         dims.sort()
 
-        gaussian_likelihood = lambda dim: DiagonalGaussian(
-            dim, latent_name='X^{%d}' % dim
-        )
-
         for lower, higher in zip(dims, dims[1:]):
             # Construct the VLAE decoder and encoder
             if higher == self._data_dim:
                 decoder = LadderDecoder(lower, higher, noise_dim=2, conv=True,
-                                        out_dist=gaussian_likelihood)
+                                        out_dist=DiagonalGaussian)
             else:
                 decoder = LadderDecoder(lower, higher, noise_dim=2, conv=False,
                                         out_dist=DiagonalGaussian)
@@ -325,8 +325,24 @@ class GlimpseCategoryModel(CategoryModel):
                                     data=data)
         generators.append(generator)
 
+        # Construct the likelihood
+        likelihood = GaussianLikelihood(data_dim, 'X^{%d}' % data_dim)
+        data = {'effect': likelihood.effect}
+        generator = cart_closed.Box(likelihood.name, likelihood.type.left,
+                                    likelihood.type.right, likelihood,
+                                    data=data)
+        generators.append(generator)
+
         super().__init__(generators, [], data_dim, guide_hidden_dim,
-                         [glimpse_dim])
+                         no_prior_dims=[glimpse_dim, data_dim])
+
+    @property
+    def wiring_diagram(self):
+        latent = super().wiring_diagram
+        observation_effect = 'X^{%d}' % self._data_dim
+        likelihood = wiring.Box('', self.data_space, self.data_space,
+                                data={'effect': [observation_effect]})
+        return latent >> likelihood
 
 class MolecularVaeCategoryModel(CategoryModel):
     def __init__(self, max_len=120, guide_hidden_dim=256, charset_len=34):

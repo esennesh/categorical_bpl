@@ -66,27 +66,26 @@ class StandardNormal(TypedModel):
         return pyro.sample('$%s$' % self._latent_name, normal)
 
 class NullPrior(TypedModel):
-    def __init__(self, dim, random_var_name=None):
+    def __init__(self, dim):
         super().__init__()
         self._dim = dim
-        if not random_var_name:
-            random_var_name = 'X^{%d}' % self._dim[0]
-        self._random_var_name = random_var_name
 
     @property
     def effect(self):
-        return [self._random_var_name]
+        return []
 
     @property
     def type(self):
         return Ty() >> types.tensor_type(torch.float, self._dim)
 
+    @property
+    def name(self):
+        name = '0: \\mathbb{R}^{%d}' % self._dim
+        return '$%s$' % name
+
     def forward(self):
         size = torch.Size((self._batch.shape[0], self._dim))
-        probs = self._batch.new_zeros(size)
-        temps = self._batch.new_ones(size)
-        bernoulli = dist.RelaxedBernoulli(temps, probs=probs).to_event(1)
-        return pyro.sample('$%s$' % self._random_var_name, bernoulli)
+        return self._batch.new_zeros(size)
 
 class ContinuousBernoulliModel(TypedModel):
     def __init__(self, dim, random_var_name=None, likelihood=True):
@@ -119,6 +118,26 @@ class ContinuousBernoulliModel(TypedModel):
         if self._likelihood:
             return xs
         return sample
+
+class GaussianLikelihood(DiagonalGaussian):
+    def __init__(self, dim, random_var_name=None):
+        super().__init__(dim, random_var_name, likelihood=True)
+        self.precision = pnn.PyroParam(torch.ones(self._dim),
+                                       constraint=constraints.positive)
+
+    @property
+    def type(self):
+        dim_space = types.tensor_type(torch.float, self._dim)
+        return dim_space >> dim_space
+
+    @property
+    def name(self):
+        name = 'p(%s \\mid \\mathbb{R}^{%d})'
+        name = name % (self._latent_name, self._dim[0])
+        return '$%s$' % name
+
+    def forward(self, loc):
+        return super().forward(loc, self.precision)
 
 class DensityNet(TypedModel):
     def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel,
