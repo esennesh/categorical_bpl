@@ -119,6 +119,26 @@ class ContinuousBernoulliModel(TypedModel):
             return xs
         return sample
 
+class GaussianLikelihood(DiagonalGaussian):
+    def __init__(self, dim, random_var_name=None):
+        super().__init__(dim, random_var_name, likelihood=True)
+        self.precision = pnn.PyroParam(torch.ones(self._dim),
+                                       constraint=constraints.positive)
+
+    @property
+    def type(self):
+        dim_space = types.tensor_type(torch.float, self._dim)
+        return dim_space >> dim_space
+
+    @property
+    def name(self):
+        name = 'p(%s \\mid \\mathbb{R}^{%d})'
+        name = name % (self._latent_name, self._dim[0])
+        return '$%s$' % name
+
+    def forward(self, loc):
+        return super().forward(loc, self.precision)
+
 class DensityNet(TypedModel):
     def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel,
                  normalizer_layer=nn.LayerNorm, convolve=False):
