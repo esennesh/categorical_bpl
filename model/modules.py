@@ -1086,12 +1086,8 @@ class ConvIncoder(nn.Module):
         return self.dense_layers(hs)
 
 class RecurrentEncoder(Encoder):
-    def __init__(self, in_dims, out_dims, effects):
+    def __init__(self, in_dims, out_dims, effects, incoder_cls=DenseIncoder):
         z_dims = [types.type_size(effect) for effect in effects]
-        if len(in_dims) == 1:
-            incoder_cls = ConvIncoder
-        else:
-            incoder_cls = DenseIncoder
         super().__init__(in_dims, out_dims, effects, max(z_dims) * 2,
                          incoder_cls)
 
