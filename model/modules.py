@@ -1136,13 +1136,9 @@ class RecurrentEncoder(Encoder):
         return self.outcode(accumulated_zs, xs)
 
 class MlpEncoder(Encoder):
-    def __init__(self, in_dims, out_dims, latent=None,
+    def __init__(self, in_dims, out_dims, latent=None, incoder_cls=DenseIncoder,
                  normalizer_layer=nn.LayerNorm):
         hidden_dim = types.type_size(latent) * 2 if latent else sum(out_dims)
-        if len(in_dims) == 1:
-            incoder_cls = ConvIncoder
-        else:
-            incoder_cls = DenseIncoder
         super().__init__(in_dims, out_dims, [latent] if latent else [],
                          hidden_dim, incoder_cls,
                          normalizer_layer=normalizer_layer)
