@@ -93,7 +93,7 @@ class CategoryModel(BaseModel):
         )
 
         for arrow in self._category.ars:
-            effect = [eff for eff in arrow.data['effect'] if 'X^' not in eff]
+            effect = arrow.data['effect']
 
             cod_dims = util.double_latents([types.type_size(ob.name) for ob in
                                             arrow.cod], self._data_dim)
