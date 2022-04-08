@@ -1157,6 +1157,13 @@ class MlpEncoder(Encoder):
         return self.outcode(zs, xs)
 
 def build_encoder(in_dims, out_dims, effects):
-    if len(effects) > 1:
-        return RecurrentEncoder(in_dims, out_dims, effects)
-    return MlpEncoder(in_dims, out_dims, effects[0] if effects else None)
+    latents = [eff for eff in effects if 'X^' not in eff]
+    if len(in_dims) == 1 and (set(effects) - set(latents)):
+        incoder_cls = ConvIncoder
+    else:
+        incoder_cls = DenseIncoder
+
+    if len(latents) > 1:
+        return RecurrentEncoder(in_dims, out_dims, latents, incoder_cls)
+    return MlpEncoder(in_dims, out_dims, latents[0] if latents else None,
+                      incoder_cls)
