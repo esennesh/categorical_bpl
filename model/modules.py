@@ -1050,13 +1050,44 @@ class Encoder(TypedModel):
                 d += dim
         return result
 
+class DenseIncoder(nn.Module):
+    def __init__(self, in_features, out_features, normalizer_cls=nn.LayerNorm):
+        super().__init__()
+        self.dense = nn.Sequential(
+            nn.Linear(in_features, out_features),
+            normalizer_cls(out_features), nn.PReLU(),
+            nn.Linear(out_features, out_features),
+        )
+
+    def forward(self, features):
+        return self.dense(features)
+
+class ConvIncoder(nn.Module):
+    def __init__(self, in_features, out_features, normalizer_cls=nn.LayerNorm):
+        super().__init__()
+        self._in_side = int(np.sqrt(in_features))
+        self._multiplier = max(self._in_side // 4, 1) ** 2
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(1, self._in_side, 4, 2, 1),
+            nn.InstanceNorm2d(self._in_side), nn.PReLU(),
+            nn.Conv2d(self._in_side, self._in_side * 2, 4, 2, 1),
+            nn.InstanceNorm2d(self._in_side * 2), nn.PReLU(),
+        )
+        self.dense_layers = nn.Sequential(
+            nn.Linear(self._in_side * 2 * self._multiplier, out_features),
+            normalizer_cls(out_features), nn.PReLU(),
+            nn.Linear(out_features, out_features)
+        )
+
+    def forward(self, features):
+        features = features.reshape(-1, 1, self._in_side, self._in_side)
+        hs = self.conv_layers(features)
+        hs = hs.view(-1, self._in_side * 2 * self._multiplier)
+        return self.dense_layers(hs)
+
 class RecurrentEncoder(Encoder):
-    def __init__(self, in_dims, out_dims, effects):
+    def __init__(self, in_dims, out_dims, effects, incoder_cls=DenseIncoder):
         z_dims = [types.type_size(effect) for effect in effects]
-        if len(in_dims) == 1:
-            incoder_cls = ConvIncoder
-        else:
-            incoder_cls = DenseIncoder
         super().__init__(in_dims, out_dims, effects, max(z_dims) * 2,
                          incoder_cls)
 
@@ -1104,49 +1135,10 @@ class RecurrentEncoder(Encoder):
 
         return self.outcode(accumulated_zs, xs)
 
-class DenseIncoder(nn.Module):
-    def __init__(self, in_features, out_features, normalizer_cls=nn.LayerNorm):
-        super().__init__()
-        self.dense = nn.Sequential(
-            nn.Linear(in_features, out_features),
-            normalizer_cls(out_features), nn.PReLU(),
-            nn.Linear(out_features, out_features),
-        )
-
-    def forward(self, features):
-        return self.dense(features)
-
-class ConvIncoder(nn.Module):
-    def __init__(self, in_features, out_features, normalizer_cls=nn.LayerNorm):
-        super().__init__()
-        self._in_side = int(np.sqrt(in_features))
-        self._multiplier = max(self._in_side // 4, 1) ** 2
-        self.conv_layers = nn.Sequential(
-            nn.Conv2d(1, self._in_side, 4, 2, 1),
-            nn.InstanceNorm2d(self._in_side), nn.PReLU(),
-            nn.Conv2d(self._in_side, self._in_side * 2, 4, 2, 1),
-            nn.InstanceNorm2d(self._in_side * 2), nn.PReLU(),
-        )
-        self.dense_layers = nn.Sequential(
-            nn.Linear(self._in_side * 2 * self._multiplier, out_features),
-            normalizer_cls(out_features), nn.PReLU(),
-            nn.Linear(out_features, out_features)
-        )
-
-    def forward(self, features):
-        features = features.reshape(-1, 1, self._in_side, self._in_side)
-        hs = self.conv_layers(features)
-        hs = hs.view(-1, self._in_side * 2 * self._multiplier)
-        return self.dense_layers(hs)
-
 class MlpEncoder(Encoder):
-    def __init__(self, in_dims, out_dims, latent=None,
+    def __init__(self, in_dims, out_dims, latent=None, incoder_cls=DenseIncoder,
                  normalizer_layer=nn.LayerNorm):
         hidden_dim = types.type_size(latent) * 2 if latent else sum(out_dims)
-        if len(in_dims) == 1:
-            incoder_cls = ConvIncoder
-        else:
-            incoder_cls = DenseIncoder
         super().__init__(in_dims, out_dims, [latent] if latent else [],
                          hidden_dim, incoder_cls,
                          normalizer_layer=normalizer_layer)
@@ -1165,6 +1157,13 @@ class MlpEncoder(Encoder):
         return self.outcode(zs, xs)
 
 def build_encoder(in_dims, out_dims, effects):
-    if len(effects) > 1:
-        return RecurrentEncoder(in_dims, out_dims, effects)
-    return MlpEncoder(in_dims, out_dims, effects[0] if effects else None)
+    latents = [eff for eff in effects if 'X^' not in eff]
+    if len(in_dims) == 1 and (set(effects) - set(latents)):
+        incoder_cls = ConvIncoder
+    else:
+        incoder_cls = DenseIncoder
+
+    if len(latents) > 1:
+        return RecurrentEncoder(in_dims, out_dims, latents, incoder_cls)
+    return MlpEncoder(in_dims, out_dims, latents[0] if latents else None,
+                      incoder_cls)
