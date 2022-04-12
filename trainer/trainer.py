@@ -106,7 +106,8 @@ class Trainer(BaseTrainer):
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
             self.train_metrics.update('loss', loss)
             for met in self.metric_ftns:
-                self.train_metrics.update(met.__name__, met(output, target))
+                metric_val = met(self.model.model, self.model.guide, data, target, 4)
+                self.train_metrics.update(met.__name__, metric_val)
 
             current += len(target)
             if batch_idx % self.log_step == 0:
@@ -155,6 +156,10 @@ class Trainer(BaseTrainer):
                 self.valid_metrics.update('loss', loss)
                 self.valid_metrics.update('log_likelihood', log_likelihood)
                 self.valid_metrics.update('log_marginal', log_marginal)
+
+                for met in self.metric_ftns:
+                    metric_val = met(self.model.model, self.model.guide, data, target, 4)
+                    self.valid_metrics.update(met.__name__, metric_val)
 
                 if self.log_images:
                     self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
