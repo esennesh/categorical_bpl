@@ -4,7 +4,7 @@ from pyro.optim import Adam, PyroOptim
 import torch
 from torchvision.utils import make_grid
 from base import BaseTrainer
-from utils import inf_loop, MetricTracker
+from utils import ImportanceSampler, inf_loop, MetricTracker
 
 class EmCounter:
     def __init__(self, estep_params, mstep_params, epochs=10, even_estep=True):
@@ -82,7 +82,9 @@ class Trainer(BaseTrainer):
         self.log_images = log_images
 
         self.train_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
-        self.valid_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
+        self.valid_metrics = MetricTracker('loss', 'log_likelihood', 'log_marginal',
+                                           *[m.__name__ for m in self.metric_ftns],
+                                           writer=self.writer)
 
     def _train_epoch(self, epoch):
         """
@@ -136,6 +138,8 @@ class Trainer(BaseTrainer):
         """
         elbo = TraceGraph_ELBO(vectorize_particles=False, num_particles=4)
         svi = SVI(self.model.model, self.model.guide, self.optimizer, loss=elbo)
+        imps = ImportanceSampler(self.model.model, self.model.guide,
+                                 num_samples=4)
 
         self.model.eval()
         self.valid_metrics.reset()
@@ -143,11 +147,15 @@ class Trainer(BaseTrainer):
             for batch_idx, (data, target) in enumerate(self.valid_data_loader):
                 data, target = data.to(self.device), target.to(self.device)
                 loss = svi.evaluate_loss(observations=data) / data.shape[0]
+                imps.sample(observations=data)
+                log_likelihood = imps.get_log_likelihood().item() / data.shape[0]
+                log_marginal = imps.get_log_normalizer().item() / data.shape[0]
 
                 self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
                 self.valid_metrics.update('loss', loss)
-                for met in self.metric_ftns:
-                    self.valid_metrics.update(met.__name__, met(output, target))
+                self.valid_metrics.update('log_likelihood', log_likelihood)
+                self.valid_metrics.update('log_marginal', log_marginal)
+
                 if self.log_images:
                     self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
 
