@@ -119,7 +119,7 @@ class CategoryModel(BaseModel):
                           data={'effect': lambda e: True})
 
     @pnn.pyro_method
-    def model(self, observations=None, train=True):
+    def model(self, observations=None):
         if isinstance(observations, dict):
             data = observations[self._observation_name]
         elif observations is not None:
@@ -138,7 +138,7 @@ class CategoryModel(BaseModel):
         min_depth = VAE_MIN_DEPTH if len(list(self.wiring_diagram)) == 1 else 0
         morphism = self._category(self.wiring_diagram, min_depth=min_depth)
 
-        if observations is not None and train:
+        if observations is not None:
             score_morphism = pyro.condition(morphism, data=observations)
         else:
             score_morphism = morphism
@@ -185,13 +185,13 @@ class CategoryModel(BaseModel):
 
         return morphism
 
-    def forward(self, observations=None, train=True):
+    def forward(self, observations=None):
         if observations is not None:
             trace = pyro.poutine.trace(self.guide).get_trace(
                 observations=observations
             )
             return pyro.poutine.replay(self.model, trace=trace)(
-                observations=observations, train=train
+                observations=observations
             )
         return self.model(observations=None)
 
