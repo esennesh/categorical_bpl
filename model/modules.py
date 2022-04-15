@@ -697,61 +697,6 @@ class SpatialTransformerWriter(TypedModel):
         glimpse = glimpse.flatten(1)
         return canvas + glimpse
 
-class CanvasEncoder(TypedModel):
-    def __init__(self, canvas_side=28, glimpse_side=7):
-        super().__init__()
-        self._canvas_side = canvas_side
-        self._glimpse_side = glimpse_side
-
-        glimpse_name = 'Z^{%d}' % glimpse_side ** 2
-        self.glimpse_dist = DiagonalGaussian(self._glimpse_side ** 2,
-                                             latent_name=glimpse_name)
-        self.glimpse_precision = nn.Sequential(
-            nn.Linear(self._canvas_side ** 2, self._glimpse_side ** 2),
-            nn.Softplus(),
-        )
-
-    @property
-    def type(self):
-        canvas_type = types.tensor_type(torch.float, self._canvas_side ** 2)
-        glimpse_type = types.tensor_type(torch.float, self._glimpse_side ** 2)
-
-        return canvas_type >> glimpse_type
-
-    @property
-    def effect(self):
-        return self.glimpse_dist.effect
-
-    @property
-    def name(self):
-        canvas_name = 'X^{%d}' % self._canvas_side ** 2
-        glimpse_name = 'Z^{%d}' % self._glimpse_side ** 2
-        name = 'q(%s \\mid %s)' % (glimpse_name, canvas_name)
-        return '$%s$' % name
-
-    def canvas_shape(self, imgs):
-        return torch.Size([imgs.shape[0], 1, self._canvas_side,
-                           self._canvas_side])
-
-    def glimpse_shape(self, imgs):
-        return torch.Size([imgs.shape[0], 1, self._glimpse_side,
-                           self._glimpse_side])
-
-    def forward(self, canvas):
-        glimpse_precision = self.glimpse_precision(canvas)
-        canvas = canvas.view(*self.canvas_shape(canvas))
-
-        coords = torch.tensor([1., 0., 0.]).to(canvas).expand(canvas.shape[0],
-                                                              3)
-        transforms = glimpse_transform(inverse_glimpse(coords))
-        grid = F.affine_grid(transforms, self.glimpse_shape(canvas),
-                             align_corners=True)
-        glimpse = F.grid_sample(canvas, grid, align_corners=True)
-        flat_glimpse = glimpse.view(-1, self._glimpse_side ** 2)
-
-        glimpse = self.glimpse_dist(flat_glimpse, glimpse_precision)
-        return glimpse
-
 class MolecularDecoder(TypedModel):
     def __init__(self, hidden_dim=196, recurrent_dim=488, charset_len=34,
                  max_len=120):
