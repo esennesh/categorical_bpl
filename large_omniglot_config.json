@@ -1,0 +1,52 @@
+{
+    "name": "Omniglot_GlimpseCategory",
+    "n_gpu": 1,
+
+    "arch": {
+        "type": "GlimpseCategoryModel",
+        "args": {
+          "data_dim": 11025,
+          "hidden_dim": 64
+        }
+    },
+    "data_loader": {
+        "type": "OmniglotTargetBatchDataLoader",
+        "args":{
+            "data_dir": "data/",
+            "batch_size": 32,
+            "shuffle": true,
+            "validation_split": 0.1,
+            "num_workers": 2,
+            "downsample": false
+        }
+    },
+    "optimizer": {
+        "type": "Adam",
+        "args":{
+            "optim_args": {
+              "lr": 1e-3,
+              "weight_decay": 0,
+              "amsgrad": true
+            }
+        }
+    },
+    "lr_scheduler": {
+        "type": "ReduceLROnPlateau",
+        "args": {
+            "patience": 50,
+            "factor": 0.1
+        }
+    },
+    "trainer": {
+        "epochs": 1200,
+
+        "save_dir": "saved/",
+        "save_period": 10,
+        "verbosity": 2,
+
+        "monitor": "min val_loss",
+        "early_stop": 200,
+
+        "tensorboard": true
+    }
+}
