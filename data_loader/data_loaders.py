@@ -27,7 +27,8 @@ class MnistTargetBatchDataLoader(BaseTargetBatchDataLoader):
 
 flip = lambda x : 1 - x
 resizing = lambda x: x.resize((28,28))
-omni_transforms = transforms.Compose([resizing, transforms.ToTensor(), flip])
+omni_large_transforms = transforms.Compose([transforms.ToTensor(), flip])
+omni_small_transforms = transforms.Compose([resizing, transforms.ToTensor(), flip])
 
 class OmniglotTargetTransform:
     def __init__(self, data_dir, background=True):
@@ -55,12 +56,13 @@ class OmniglotTargetBatchDataLoader(BaseTargetBatchDataLoader):
     """
     Omniglot data loading batched by label using BaseTargetBatchDataLoader
     """
-    def __init__(self, data_dir, batch_size, shuffle=True, validation_split=0.0, num_workers=1):
+    def __init__(self, data_dir, batch_size, downsample=True, shuffle=True, validation_split=0.0, num_workers=1):
         self.data_dir = data_dir
         dataset = datasets.Omniglot(self.data_dir, download=True, background=True)
         eval_dataset = datasets.Omniglot(self.data_dir, download=True, background=False)
         target_transform = OmniglotTargetTransform(self.data_dir, background=True)
         eval_target_transform = OmniglotTargetTransform(self.data_dir, background=False)
+        omni_transforms = omni_small_transforms if downsample else omni_large_transforms
 
         self.dataset = datasets.Omniglot(self.data_dir, background=True, download=True, transform=omni_transforms, target_transform=target_transform)
         self.eval_dataset = datasets.Omniglot(self.data_dir, background=False, download=True, transform=omni_transforms, target_transform=eval_target_transform)
