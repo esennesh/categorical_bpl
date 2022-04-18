@@ -189,6 +189,7 @@ class DensityNet(TypedModel):
             if out_dim > in_dim:
                 out_side = int(np.sqrt(self._out_dim))
                 conv_side = max(out_side // 4, 1)
+                out_pad = out_side % 4
                 multiplier = conv_side ** 2
                 self.dense_layers = nn.Sequential(
                     nn.Linear(self._in_dim, multiplier * 2 * out_side),
@@ -199,7 +200,8 @@ class DensityNet(TypedModel):
                 self.conv_layers = nn.Sequential(
                     nn.ConvTranspose2d(2 * out_side, out_side, 4, 2, 1),
                     nn.InstanceNorm2d(out_side), nn.PReLU(),
-                    nn.ConvTranspose2d(out_side, self._channels, 4, 2, 1),
+                    nn.ConvTranspose2d(out_side, self._channels, 4, 2, 1,
+                                       out_pad),
                     nn.ReflectionPad2d((out_side - conv_side * 4) // 2)
                 )
             else:
