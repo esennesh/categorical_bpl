@@ -264,10 +264,10 @@ class LadderDecoder(TypedModel):
         if self._convolve:
             out_side = int(np.sqrt(self._out_dim))
             self._multiplier = max(out_side // 4, 1) ** 2
-            channels = self._num_channels
+            out_pad = out_side % 4
             if self.has_distribution and\
                isinstance(self.distribution, DiagonalGaussian):
-                channels *= 2
+                self._num_channels *= 2
             self.dense_layers = nn.Sequential(
                 nn.Linear(self._in_dim * 2, self._multiplier * 2 * out_side),
                 nn.LayerNorm(self._multiplier * 2 * out_side), nn.PReLU(),
@@ -275,7 +275,8 @@ class LadderDecoder(TypedModel):
             self.conv_layers = nn.Sequential(
                 nn.ConvTranspose2d(2 * out_side, out_side, 4, 2, 1),
                 nn.InstanceNorm2d(out_side), nn.PReLU(),
-                nn.ConvTranspose2d(out_side, channels, 4, 2, 1),
+                nn.ConvTranspose2d(out_side, self._num_channels, 4, 2, 1,
+                                   out_pad),
             )
         else:
             self.neural_layers = nn.Sequential(
