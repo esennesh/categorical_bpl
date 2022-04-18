@@ -321,14 +321,14 @@ class LadderDecoder(TypedModel):
             hiddens = self.dense_layers(hiddens).reshape(-1, out_side * 2,
                                                          multiplier,
                                                          multiplier)
-            hiddens = self.conv_layers(hiddens).reshape(-1, out_side,
-                                                        out_side)
+            hiddens = self.conv_layers(hiddens).reshape(-1, self._num_channels,
+                                                        out_side, out_side)
         else:
             hiddens = self.neural_layers(hiddens)
 
         if self.has_distribution:
             if isinstance(self.distribution, ContinuousBernoulliModel):
-                hiddens = self.distribution(hiddens)
+                hiddens = self.distribution(hiddens.squeeze(dim=1))
             else:
                 hiddens = hiddens.view(-1, 2, self._out_dim)
                 hiddens = self.distribution(hiddens[:, 0], hiddens[:, 1])
