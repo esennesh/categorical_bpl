@@ -279,6 +279,7 @@ class GlimpseCategoryModel(CategoryModel):
             lower, higher = sorted([dim_a, dim_b])
             # Construct the decoder and encoder
             if higher == glimpse_dim:
+                higher *= 2
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian,
                                          convolve=True)
             else:
@@ -294,8 +295,11 @@ class GlimpseCategoryModel(CategoryModel):
         dims.sort()
 
         for lower, higher in zip(dims, dims[1:]):
+            if lower == glimpse_dim:
+                lower *= 2
             # Construct the VLAE decoder and encoder
             if higher == self._data_dim:
+                higher *= 2
                 decoder = LadderDecoder(lower, higher, noise_dim=2, conv=True,
                                         out_dist=DiagonalGaussian)
             else:
@@ -326,7 +330,7 @@ class GlimpseCategoryModel(CategoryModel):
         generators.append(generator)
 
         # Construct the likelihood
-        likelihood = GaussianLikelihood(data_dim, 'X^{%d}' % data_dim)
+        likelihood = SalienceMapLikelihood(data_dim, 'X^{%d}' % data_dim)
         data = {'effect': likelihood.effect}
         generator = cart_closed.Box(likelihood.name, likelihood.type.left,
                                     likelihood.type.right, likelihood,
@@ -338,9 +342,12 @@ class GlimpseCategoryModel(CategoryModel):
 
     @property
     def wiring_diagram(self):
-        latent = super().wiring_diagram
+        salience_map_space = types.tensor_type(torch.float,
+                                               self._data_dim * 2)
+        latent = wiring.Box('', Ty(), salience_map_space,
+                            data={'effect': lambda e: True})
         observation_effect = 'X^{%d}' % self._data_dim
-        likelihood = wiring.Box('', self.data_space, self.data_space,
+        likelihood = wiring.Box('', salience_map_space, self.data_space,
                                 data={'effect': [observation_effect]})
         return latent >> likelihood
 
