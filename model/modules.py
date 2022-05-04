@@ -501,8 +501,8 @@ class SpatialTransformerWriter(TypedModel):
 
     @property
     def type(self):
-        canvas_type = types.tensor_type(torch.float, self._canvas_side ** 2)
-        glimpse_type = types.tensor_type(torch.float, self._glimpse_side ** 2)
+        canvas_type = types.tensor_type(torch.float, self._canvas_side ** 2 * 2)
+        glimpse_type = types.tensor_type(torch.float, self._glimpse_side ** 2 * 2)
 
         return (canvas_type @ glimpse_type) >> canvas_type
 
@@ -512,8 +512,8 @@ class SpatialTransformerWriter(TypedModel):
 
     @property
     def name(self):
-        canvas_name = 'Z^{%d}' % self._canvas_side ** 2
-        glimpse_name = 'Z^{%d}' % self._glimpse_side ** 2
+        canvas_name = 'Z^{%d}' % self._canvas_side ** 2 * 2
+        glimpse_name = 'Z^{%d}' % self._glimpse_side ** 2 * 2
         inputs_tuple = ' \\times '.join([canvas_name, glimpse_name])
         name = 'p(%s \\mid %s)' % (self.coordinates_dist.effect[0], inputs_tuple)
         return '$%s$' % name
