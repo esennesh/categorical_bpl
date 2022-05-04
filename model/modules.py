@@ -139,6 +139,27 @@ class GaussianLikelihood(DiagonalGaussian):
     def forward(self, loc):
         return super().forward(loc, self.precision.expand(*loc.shape))
 
+class SalienceMapLikelihood(DiagonalGaussian):
+    def __init__(self, dim, random_var_name=None):
+        super().__init__(dim, random_var_name, likelihood=True)
+
+    @property
+    def type(self):
+        double_dim = torch.Size([self._dim[0] * 2])
+        double_space = types.tensor_type(torch.float, double_dim)
+        dim_space = types.tensor_type(torch.float, self._dim)
+        return double_space >> dim_space
+
+    @property
+    def name(self):
+        name = 'p(%s \\mid \\mathbb{R}^{%d})'
+        name = name % (self._latent_name, self._dim[0] * 2)
+        return '$%s$' % name
+
+    def forward(self, features):
+        loc, log_precision = features.view(-1, *self._dim, 2).unbind(dim=-1)
+        return super().forward(loc, log_precision.exp())
+
 class DensityNet(TypedModel):
     def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel,
                  normalizer_layer=nn.LayerNorm, convolve=False):
