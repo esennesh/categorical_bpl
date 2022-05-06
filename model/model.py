@@ -79,8 +79,7 @@ class CategoryModel(BaseModel):
             nn.Linear(self._data_dim, guide_hidden_dim),
             nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
             nn.Linear(guide_hidden_dim,
-                      self._category.arrow_weight_alphas.shape[0] * 2),
-            nn.Softplus()
+                      self._category.arrow_weight_loc.shape[0] * 2),
         )
 
         self._random_variable_names = collections.defaultdict(int)
@@ -168,8 +167,8 @@ class CategoryModel(BaseModel):
         data_arrow_weights = data_arrow_weights.mean(dim=0).view(-1, 2)
         arrow_weights = pyro.sample(
             'arrow_weights',
-            dist.Gamma(data_arrow_weights[:, 0],
-                       data_arrow_weights[:, 1]).to_event(1)
+            dist.Normal(data_arrow_weights[:, 0],
+                        data_arrow_weights[:, 1].exp()).to_event(1)
         )
 
         min_depth = VAE_MIN_DEPTH if len(list(self.wiring_diagram)) == 1 else 0
