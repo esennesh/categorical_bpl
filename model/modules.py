@@ -710,7 +710,7 @@ class RecurrentEncoder(Encoder):
 
     @property
     def name(self):
-        data_name = 'X^{%d}' % self._in_dims
+        data_name = '\\mathbb{R}^{%d}' % self._in_dims
         name = 'p(%s \\mid %s)' % (self._effects.join(','), data_name)
         return '$%s$' % name
 
