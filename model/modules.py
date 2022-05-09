@@ -372,8 +372,7 @@ class LadderPrior(TypedModel):
 
     @property
     def name(self):
-        name = 'p(%s \\mid \\mathbb{R}^{%d})'
-        name = name % (self.effects, self._noise_dim)
+        name = 'p(%s)' % self.effects
         return '$%s$' % name
 
     def set_batching(self, batch):
