@@ -628,10 +628,7 @@ class Encoder(TypedModel):
 
     @property
     def name(self):
-        if len(self._in_dims) > 1:
-            in_names = ['Z^{%d}' % dim for dim in self._in_dims]
-        else:
-            in_names = 'X^{%d}' % self._in_dims[0]
+        in_names = ['\mathbb{R}^{%d}' % dim for dim in self._in_dims]
 
         name = 'p(%s \\mid %s)' % (','.join(self.effect), ','.join(in_names))
         return '$%s$' % name
