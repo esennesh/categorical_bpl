@@ -208,10 +208,6 @@ class DensityNet(TypedModel):
     def effect(self):
         return self.distribution.effect
 
-    @abstractproperty
-    def density_name(self):
-        raise NotImplementedError()
-
 class DensityDecoder(DensityNet):
     def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel,
                  convolve=False):
