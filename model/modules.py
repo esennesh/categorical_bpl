@@ -297,9 +297,12 @@ class LadderDecoder(TypedModel):
 
     @property
     def name(self):
-        args_name = '(\\mathbb{R}^{%d} \\times \\mathbb{R}^{%d})'
+        args_name = '\\mathbb{R}^{%d} \\times \\mathbb{R}^{%d}'
         args_name = args_name % (self._in_dim, self._noise_dim)
-        name = 'p(%s \\mid %s)' % (self.effects, args_name)
+        name = ''
+        if self.effects:
+            name = 'p(%s \\mid %s):' % (self.effects, args_name)
+        name = name + '%s -> \\mathbb{R}^{%d}' % (args_name, self._out_dim)
         return '$%s$' % name
 
     @property
