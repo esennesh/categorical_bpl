@@ -214,8 +214,8 @@ class DensityDecoder(DensityNet):
         super().__init__(in_dim, out_dim, dist_layer, convolve=convolve)
 
     @property
-    def density_name(self):
-        condition_name = 'Z^{%d}' % self._in_dim
+    def name(self):
+        condition_name = '\\mathbb{R}^{%d}' % self._in_dim
         return '$p(%s | %s)$' % (self.effects, condition_name)
 
     def forward(self, inputs):
