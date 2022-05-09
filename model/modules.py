@@ -487,8 +487,8 @@ class SpatialTransformerWriter(TypedModel):
 
     @property
     def name(self):
-        canvas_name = 'Z^{%d}' % self._canvas_side ** 2
-        glimpse_name = 'Z^{%d}' % self._glimpse_side ** 2
+        canvas_name = '\\mathbb{R}^{%d}' % self._canvas_side ** 2
+        glimpse_name = '\\mathbb{R}^{%d}' % self._glimpse_side ** 2
         inputs_tuple = ' \\times '.join([canvas_name, glimpse_name])
         name = 'p(%s \\mid %s)' % (self.coordinates_dist.effect[0], inputs_tuple)
         return '$%s$' % name
