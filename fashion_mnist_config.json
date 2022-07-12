@@ -1,13 +1,13 @@
 {
-    "name": "FashionMnist_VlaeCategory",
+    "name": "FashionMnist_GlimpseCategory",
     "n_gpu": 1,
 
     "arch": {
-        "type": "VlaeCategoryModel",
+        "type": "GlimpseCategoryModel",
         "args": {
           "data_dim": 784,
           "hidden_dim": 16,
-          "guide_hidden_dim": 512
+          "guide_hidden_dim": 128
         }
     },
     "data_loader": {
@@ -38,14 +38,14 @@
         }
     },
     "trainer": {
-        "epochs": 500,
+        "epochs": 1000,
 
         "save_dir": "saved/",
-        "save_period": 50,
+        "save_period": 20,
         "verbosity": 2,
 
         "monitor": "min val_loss",
-        "early_stop": 75,
+        "early_stop": 200,
 
         "tensorboard": true
     }
