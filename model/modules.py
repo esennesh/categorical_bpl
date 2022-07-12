@@ -208,18 +208,14 @@ class DensityNet(TypedModel):
     def effect(self):
         return self.distribution.effect
 
-    @abstractproperty
-    def density_name(self):
-        raise NotImplementedError()
-
 class DensityDecoder(DensityNet):
     def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel,
                  convolve=False):
         super().__init__(in_dim, out_dim, dist_layer, convolve=convolve)
 
     @property
-    def density_name(self):
-        condition_name = 'Z^{%d}' % self._in_dim
+    def name(self):
+        condition_name = '\\mathbb{R}^{%d}' % self._in_dim
         return '$p(%s | %s)$' % (self.effects, condition_name)
 
     def forward(self, inputs):
@@ -301,9 +297,12 @@ class LadderDecoder(TypedModel):
 
     @property
     def name(self):
-        args_name = '(\\mathbb{R}^{%d} \\times \\mathbb{R}^{%d})'
+        args_name = '\\mathbb{R}^{%d} \\times \\mathbb{R}^{%d}'
         args_name = args_name % (self._in_dim, self._noise_dim)
-        name = 'p(%s \\mid %s)' % (self.effects, args_name)
+        name = ''
+        if self.effects:
+            name = 'p(%s \\mid %s):' % (self.effects, args_name)
+        name = name + '%s -> \\mathbb{R}^{%d}' % (args_name, self._out_dim)
         return '$%s$' % name
 
     @property
@@ -376,8 +375,7 @@ class LadderPrior(TypedModel):
 
     @property
     def name(self):
-        name = 'p(%s \\mid \\mathbb{R}^{%d})'
-        name = name % (self.effects, self._noise_dim)
+        name = 'p(%s): Ty() -> \\mathbb{R}^{%d}' % (self.effects, self._out_dim)
         return '$%s$' % name
 
     def set_batching(self, batch):
@@ -491,8 +489,8 @@ class SpatialTransformerWriter(TypedModel):
 
     @property
     def name(self):
-        canvas_name = 'Z^{%d}' % self._canvas_side ** 2
-        glimpse_name = 'Z^{%d}' % self._glimpse_side ** 2
+        canvas_name = '\\mathbb{R}^{%d}' % self._canvas_side ** 2
+        glimpse_name = '\\mathbb{R}^{%d}' % self._glimpse_side ** 2
         inputs_tuple = ' \\times '.join([canvas_name, glimpse_name])
         name = 'p(%s \\mid %s)' % (self.coordinates_dist.effect[0], inputs_tuple)
         return '$%s$' % name
@@ -632,10 +630,7 @@ class Encoder(TypedModel):
 
     @property
     def name(self):
-        if len(self._in_dims) > 1:
-            in_names = ['Z^{%d}' % dim for dim in self._in_dims]
-        else:
-            in_names = 'X^{%d}' % self._in_dims[0]
+        in_names = ['\mathbb{R}^{%d}' % dim for dim in self._in_dims]
 
         name = 'p(%s \\mid %s)' % (','.join(self.effect), ','.join(in_names))
         return '$%s$' % name
@@ -717,7 +712,7 @@ class RecurrentEncoder(Encoder):
 
     @property
     def name(self):
-        data_name = 'X^{%d}' % self._in_dims
+        data_name = '\\mathbb{R}^{%d}' % self._in_dims
         name = 'p(%s \\mid %s)' % (self._effects.join(','), data_name)
         return '$%s$' % name
 

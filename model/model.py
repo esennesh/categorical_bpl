@@ -214,7 +214,7 @@ class VaeCategoryModel(CategoryModel):
             else:
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
             data = {'effect': decoder.effect}
-            generator = cart_closed.Box(decoder.density_name, decoder.type.left,
+            generator = cart_closed.Box(decoder.name, decoder.type.left,
                                         decoder.type.right, decoder, data=data)
             generators.append(generator)
 
@@ -283,7 +283,7 @@ class GlimpseCategoryModel(CategoryModel):
             else:
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
             data = {'effect': decoder.effect}
-            generator = cart_closed.Box(decoder.density_name, decoder.type.left,
+            generator = cart_closed.Box(decoder.name, decoder.type.left,
                                         decoder.type.right, decoder, data=data)
             generators.append(generator)
 
