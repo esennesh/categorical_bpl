@@ -3,9 +3,43 @@ import math
 import matplotlib.pyplot as plt
 import pandas as pd
 from pathlib import Path
-from itertools import repeat
+from pyro.infer import Importance
+from itertools import chain, repeat
 from collections import OrderedDict
 import torch
+import warnings
+
+class ImportanceSampler(Importance):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.log_likelihoods = None
+
+    def sample(self, *args, **kwargs):
+        self.log_likelihoods = []
+        self.log_weights = []
+
+        for trace, lw in self._traces(*args, **kwargs):
+            self.log_likelihoods.append(trace.log_prob_sum(lambda name, site: site['is_observed']))
+            self.log_weights.append(lw.detach())
+
+    def get_log_likelihood(self):
+        if self.log_likelihoods:
+            log_l = torch.tensor(self.log_likelihoods)
+            log_num_samples = torch.log(torch.tensor(self.num_samples * 1.0))
+            return torch.logsumexp(log_l - log_num_samples, 0)
+        else:
+            warnings.warn(
+                "The log_likelihoods list is empty, can not compute log likelihood estimate."
+            )
+
+def double_latent(ty, data_space):
+    return ty if ty == data_space else ty @ ty
+
+def double_latents(dims, data_dim):
+    latents = []
+    for dim in dims:
+        latents.append((dim,) if dim == data_dim else (dim, dim))
+    return list(chain(*latents))
 
 def show_tensor(imgs, i=0, channels=1, shape=None):
     if shape is not None:

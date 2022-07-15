@@ -1,0 +1,51 @@
+{
+    "name": "Molecular_VaeCategory",
+    "n_gpu": 1,
+
+    "arch": {
+        "type": "MolecularVaeCategoryModel",
+        "args": {
+          "max_len": 120,
+          "charset_len": 34
+        }
+    },
+    "data_loader": {
+        "type": "ZincMolecularDataLoader",
+        "args":{
+            "csv": "data/ZINC/zinc15_250K_2D.csv",
+            "batch_size": 256,
+            "shuffle": true,
+            "validation_split": 0.1,
+            "num_workers": 2
+        }
+    },
+    "optimizer": {
+        "type": "Adam",
+        "args":{
+            "optim_args": {
+              "lr": 1e-3,
+              "weight_decay": 0,
+              "amsgrad": true
+            }
+        }
+    },
+    "lr_scheduler": {
+        "type": "ReduceLROnPlateau",
+        "args": {
+            "patience": 10,
+            "factor": 0.1
+        }
+    },
+    "trainer": {
+        "epochs": 500,
+
+        "save_dir": "saved/",
+        "save_period": 50,
+        "verbosity": 2,
+
+        "monitor": "min val_loss",
+        "early_stop": 75,
+
+        "tensorboard": true
+    }
+}

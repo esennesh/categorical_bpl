@@ -1,7 +1,9 @@
 import numpy as np
 import os.path as path
+import torch.utils.data
 from torchvision import datasets, transforms
 from base import BaseDataLoader, BaseTargetBatchDataLoader
+from utils import mol_utils
 
 class MnistDataLoader(BaseDataLoader):
     """
@@ -92,3 +94,11 @@ class FashionMnistTargetBatchDataLoader(BaseTargetBatchDataLoader):
                                              download=True, transform=trsfm)
         super().__init__(self.dataset, batch_size, shuffle, validation_split,
                          num_workers, self.dataset.targets)
+
+class ZincMolecularDataLoader(BaseDataLoader):
+    """
+    ZINC data loading using BaseDataLoader
+    """
+    def __init__(self, csv, batch_size, max_length=120, shuffle=True, validation_split=0.0, num_workers=1, training=True):
+        dataset = mol_utils.Zinc15Dataset(csv, max_len=max_length)
+        super().__init__(dataset, batch_size, shuffle, validation_split, num_workers)

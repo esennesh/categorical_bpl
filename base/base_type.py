@@ -1,4 +1,3 @@
-from adt import adt, Case
 from discopy.biclosed import Ty
 import re
 import torch
@@ -19,4 +18,8 @@ def type_size(label):
     return int(match[0])
 
 def tensor_type(dtype, size):
+    if isinstance(size, tuple):
+        if len(size) > 1:
+            return Ty('$%s^{%s}$' % (_label_dtype(dtype), str(size)))
+        size = size[0]
     return Ty('$%s^{%d}$' % (_label_dtype(dtype), size))
