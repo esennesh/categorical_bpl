@@ -772,3 +772,72 @@ def build_encoder(in_dims, out_dims, effects):
         return RecurrentEncoder(in_dims, out_dims, latents, incoder_cls)
     return MlpEncoder(in_dims, out_dims, latents[0] if latents else None,
                       incoder_cls)
+
+class BplPartType(TypedModel):
+    def __init__(self, lib):
+        self._is_uniform = lib.isunif
+        self._num_ctrl_pts = lib.ncpt
+        self._substroke_count_dist = lib.pmat_nsub
+        self._substroke_id_logits = lib.logStart
+        self._transition_probs = lib.pT
+        self.shapes_loc = lib.shape['mu']
+        self.shapes_cov = lib.shape['Sigma']
+
+        scales_theta = lib.scale['theta']
+        self.scales_concentration = scales_theta[:, 0]
+        self.scales_rate = 1. / scales_theta[:, 1]
+
+    @property
+    def type(self):
+        return Ty() >> Ty('PartType')
+
+    @property
+    def effect(self):
+        return ['$n_substroke$', '$substroke_id$', '$CtrlPoints$',
+                '$InvScales$']
+
+    @property
+    def name(self):
+        name = 'p(%s)' % 'PartType'
+        return '$%s$' % name
+
+    def substroke_count(self, k):
+        pvec = self._substroke_count_dist[k-1]
+        assert len(pvec.shape) == 1
+        categorical = dists.Categorical(probs=pvec).to_event(1)
+        return pyro.sample('$%s$' % 'n_substroke', categorical) + 1
+
+    def substroke_ids(self, nsubs):
+        assert nsub.shape == torch.Size([])
+        transitions = self._substroke_id_logits.exp()
+        subids = []
+        for _ in range(nsubs):
+            substroke_dist = dist.Categorical(probs=transitions).to_event(1)
+            substroke = pyro.sample('$substroke_id$', substroke_dist)
+            subids.append(substroke)
+            transitions = self._transition_probs(substroke)
+        return torch.stack(subids, dim=-1)
+
+    def control_points(self, subids):
+        nsubs = subids.shape[-1]
+        normal = dist.MultivariateNormal(self.shapes_loc[subids],
+                                         self.shapes_cov[subids])
+        ctrl_pts = pyro.sample('$%s$' % 'CtrlPoints', normal)
+        return ctrl_pts.transpose(1, 2).view(subids.shape[0],
+                                             self._num_ctrl_pts, 2, nsubs)
+
+    def substroke_precisions(self, subids):
+        if self._is_uniform:
+            raise NotImplementedError()
+
+        gamma = dist.Gamma(self.scales_concentration[subids],
+                           self.scales_rate[subids])
+        return pyro.sample('$%s$' % 'InvScales', gamma)
+
+    def forward(self, k):
+        nsubs = self.substroke_count(k)
+        subids = self.substroke_ids(nsubs)
+        ctrl_pts = self.control_points(subids)
+        precisions = self.substroke_precisions(subids)
+        return pybpl.objects.part.StrokeType(nsubs, subids, ctrl_pts,
+                                             precisions)
