@@ -12,6 +12,8 @@ import torch.distributions.constraints as constraints
 import torch.nn as nn
 import torch.nn.functional as F
 
+import pybpl
+
 from base import TypedModel
 import base.base_type as types
 
