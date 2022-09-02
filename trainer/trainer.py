@@ -1,5 +1,5 @@
 import numpy as np
-from pyro.infer import SVI, TraceGraph_ELBO
+from pyro.infer import SVI, ReweightedWakeSleep
 from pyro.optim import Adam, PyroOptim
 import torch
 from torchvision.utils import make_grid
@@ -93,18 +93,20 @@ class Trainer(BaseTrainer):
         :param epoch: Integer, current training epoch.
         :return: A log that contains average loss and metric in this epoch.
         """
-        elbo = TraceGraph_ELBO(vectorize_particles=False, num_particles=4)
-        svi = SVI(self.model.model, self.model.guide, self.optimizer, loss=elbo)
+        rws = ReweightedWakeSleep(vectorize_particles=False, num_particles=4)
+        svi = SVI(self.model.model, self.model.guide, self.optimizer, loss=rws)
 
         self.model.train()
         self.train_metrics.reset()
         current = 0
         for batch_idx, (data, target) in enumerate(self.data_loader):
             data, target = data.to(self.device), target.to(self.device)
-            loss = svi.step(observations=data) / data.shape[0]
+            (model_loss, guide_loss) = svi.step(observations=data)
+            model_loss /= data.shape[0]
+            guide_loss /= data.shape[0]
 
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
-            self.train_metrics.update('loss', loss)
+            self.train_metrics.update('loss', model_loss)
             for met in self.metric_ftns:
                 metric_val = met(self.model.model, self.model.guide, data, target, 4)
                 self.train_metrics.update(met.__name__, metric_val)
@@ -114,7 +116,7 @@ class Trainer(BaseTrainer):
                 self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
                     epoch,
                     self._progress(batch_idx, current=current),
-                    loss))
+                    model_loss))
                 if self.log_images:
                     self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
 
@@ -137,8 +139,8 @@ class Trainer(BaseTrainer):
         :param epoch: Integer, current training epoch.
         :return: A log that contains information about validation
         """
-        elbo = TraceGraph_ELBO(vectorize_particles=False, num_particles=4)
-        svi = SVI(self.model.model, self.model.guide, self.optimizer, loss=elbo)
+        rws = ReweightedWakeSleep(vectorize_particles=False, num_particles=4)
+        svi = SVI(self.model.model, self.model.guide, self.optimizer, loss=rws)
         imps = ImportanceSampler(self.model.model, self.model.guide,
                                  num_samples=4)
 
@@ -147,13 +149,15 @@ class Trainer(BaseTrainer):
         with torch.no_grad():
             for batch_idx, (data, target) in enumerate(self.valid_data_loader):
                 data, target = data.to(self.device), target.to(self.device)
-                loss = svi.evaluate_loss(observations=data) / data.shape[0]
+                (model_loss, guide_loss) = svi.evaluate_loss(observations=data)
+                model_loss /= data.shape[0]
+                guide_loss /= data.shape[0]
                 imps.sample(observations=data)
                 log_likelihood = imps.get_log_likelihood().item() / data.shape[0]
                 log_marginal = imps.get_log_normalizer().item() / data.shape[0]
 
                 self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
-                self.valid_metrics.update('loss', loss)
+                self.valid_metrics.update('loss', model_loss)
                 self.valid_metrics.update('log_likelihood', log_likelihood)
                 self.valid_metrics.update('log_marginal', log_marginal)
 
