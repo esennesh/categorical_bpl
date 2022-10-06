@@ -1,9 +1,9 @@
 {
-    "name": "Mnist_VaeCategory",
+    "name": "Mnist_VaeOperad",
     "n_gpu": 1,
 
     "arch": {
-        "type": "VaeCategoryModel",
+        "type": "VaeOperadicModel",
         "args": {
           "data_dim": 784,
           "hidden_dim": 8

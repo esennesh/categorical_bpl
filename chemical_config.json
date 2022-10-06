@@ -1,9 +1,9 @@
 {
-    "name": "Molecular_VaeCategory",
+    "name": "Molecular_VaeOperad",
     "n_gpu": 1,
 
     "arch": {
-        "type": "MolecularVaeCategoryModel",
+        "type": "MolecularVaeOperadicModel",
         "args": {
           "max_len": 120,
           "charset_len": 34
