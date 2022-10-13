@@ -1,9 +1,9 @@
 {
-    "name": "Omniglot_GlimpseCategory",
+    "name": "Omniglot_GlimpseOperad",
     "n_gpu": 1,
 
     "arch": {
-        "type": "GlimpseCategoryModel",
+        "type": "GlimpseOperadicModel",
         "args": {
           "data_dim": 784,
           "hidden_dim": 4

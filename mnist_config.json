@@ -1,9 +1,9 @@
 {
-    "name": "Mnist_VaeCategory",
+    "name": "Mnist_VaeOperad",
     "n_gpu": 1,
 
     "arch": {
-        "type": "VaeCategoryModel",
+        "type": "VaeOperadicModel",
         "args": {
           "data_dim": 784,
           "hidden_dim": 8
@@ -23,7 +23,7 @@
         "type": "Adam",
         "args":{
             "optim_args": {
-              "lr": 1e-3,
+              "lr": 5e-4,
               "weight_decay": 0,
               "amsgrad": true
             }
@@ -37,7 +37,7 @@
         }
     },
     "trainer": {
-        "epochs": 500,
+        "epochs": 1000,
 
         "save_dir": "saved/",
         "save_period": 50,

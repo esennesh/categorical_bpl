@@ -1,7 +1,7 @@
 import collections
 from discopy.biclosed import Ty
 from discopy import cat, wiring
-from discopyro import cart_closed, freecat, unification
+from discopyro import cart_closed, free_operad, unification
 import itertools
 import math
 import matplotlib.pyplot as plt
@@ -33,7 +33,7 @@ def latent_effect_falgebra(f):
         return list(itertools.chain(*f.arrows))
     raise TypeError('Expected wiring diagram', f)
 
-class CategoryModel(BaseModel):
+class OperadicModel(BaseModel):
     def __init__(self, generators, global_elements=[], data_space=(784,),
                  guide_hidden_dim=256, no_prior_dims=[]):
         super().__init__()
@@ -68,7 +68,7 @@ class CategoryModel(BaseModel):
                                              data=effect)
             global_elements.append(global_element)
 
-        self._category = freecat.FreeCategory(generators, global_elements)
+        self._category = free_operad.FreeOperad(generators, global_elements)
 
         self.guide_temperatures = nn.Sequential(
             nn.Linear(self._data_dim, guide_hidden_dim),
@@ -194,7 +194,7 @@ class CategoryModel(BaseModel):
             )
         return self.model(observations=None)
 
-class VaeCategoryModel(CategoryModel):
+class VaeOperadicModel(OperadicModel):
     def __init__(self, data_dim=28*28, hidden_dim=8, guide_hidden_dim=256):
         self._data_dim = data_dim
 
@@ -220,7 +220,7 @@ class VaeCategoryModel(CategoryModel):
 
         super().__init__(generators, [], data_dim, guide_hidden_dim)
 
-class VlaeCategoryModel(CategoryModel):
+class VlaeOperadicModel(OperadicModel):
     def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=256):
         self._data_dim = data_dim
 
@@ -259,7 +259,7 @@ class VlaeCategoryModel(CategoryModel):
         super().__init__(generators, [], data_dim, guide_hidden_dim,
                          list(set(dims) - {data_dim}))
 
-class GlimpseCategoryModel(CategoryModel):
+class GlimpseOperadicModel(OperadicModel):
     def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=256):
         self._data_dim = data_dim
         data_side = int(math.sqrt(self._data_dim))
@@ -343,7 +343,7 @@ class GlimpseCategoryModel(CategoryModel):
                                 data={'effect': [observation_effect]})
         return latent >> likelihood
 
-class MolecularVaeCategoryModel(CategoryModel):
+class MolecularVaeOperadicModel(OperadicModel):
     def __init__(self, max_len=120, guide_hidden_dim=256, charset_len=34):
         hidden_dims = [196, 292, 435]
         recurrent_dims = [64, 128, 256]

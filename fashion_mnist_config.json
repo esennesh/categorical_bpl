@@ -1,13 +1,13 @@
 {
-    "name": "FashionMnist_GlimpseCategory",
+    "name": "FashionMnist_GlimpseOperad",
     "n_gpu": 1,
 
     "arch": {
-        "type": "GlimpseCategoryModel",
+        "type": "GlimpseOperadicModel",
         "args": {
           "data_dim": 784,
           "hidden_dim": 16,
-          "guide_hidden_dim": 128
+          "guide_hidden_dim": 32
         }
     },
     "data_loader": {
