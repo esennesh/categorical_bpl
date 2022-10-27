@@ -363,6 +363,55 @@ class GlimpseOperadicModel(DaggerOperadicModel):
                                 data={'effect': [observation_effect]})
         return latent >> likelihood
 
+class AutoencodingOperadicModel(OperadicModel):
+    def __init__(self, generators, latent_space=(64,), global_elements=[],
+                 data_space=(784,), guide_hidden_dim=256):
+        space = types.tensor_type(torch.float, latent_space)
+        prior = StandardNormal(math.prod(latent_space))
+        global_elements.append(cart_closed.Box('$p(%s)$' % prior.effects, Ty(),
+                                               space, prior,
+                                               data={'effect': prior.effect}))
+
+        super().__init__(generators, global_elements, data_space,
+                         guide_hidden_dim)
+        if isinstance(latent_space, int):
+            latent_space = (latent_space,)
+        self._latent_space = latent_space
+        self._latent_dim = math.prod(latent_space)
+        if len(self._latent_space) == 1:
+            self._latent_name = 'Z^{%d}' % self._latent_dim
+        else:
+            self._latent_name = 'Z^{%s}' % str(self._latent_space)
+
+    @property
+    def latent_space(self):
+        return types.tensor_type(torch.float, self._latent_space)
+
+    @property
+    def wiring_diagram(self):
+        prior = wiring.Box('', Ty(), self.latent_space,
+                           data={'effect': lambda e: True})
+        decoder = wiring.Box('', self.latent_space, self.data_space,
+                             data={'effect': lambda e: True})
+        return prior >> decoder
+
+    @pnn.pyro_method
+    def guide(self, observations=None):
+        if isinstance(observations, dict):
+            data = observations['$X^{%d}$' % self._data_dim]
+        else:
+            data = observations
+        data = data.view(data.shape[0], *self._data_space)
+
+        morphism = super().guide(observations)
+
+        with pyro.plate('data', len(data)):
+            latent_code = self.encoder(data)
+            with name_push(name_stack=self._random_variable_names):
+                morphism()
+
+        return morphism, latent_code
+
 class MolecularVaeOperadicModel(DaggerOperadicModel):
     def __init__(self, max_len=120, guide_hidden_dim=256, charset_len=34):
         hidden_dims = [196, 292, 435]
