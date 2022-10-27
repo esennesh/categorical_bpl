@@ -81,32 +81,7 @@ class OperadicModel(BaseModel):
             nn.Linear(guide_hidden_dim,
                       self._operad.arrow_weight_loc.shape[0] * 2),
         )
-
         self._random_variable_names = collections.defaultdict(int)
-
-        self.encoders = nn.ModuleDict()
-        self.encoder_functor = wiring.Functor(
-            lambda ty: util.double_latent(ty, self.data_space),
-            lambda ar: self._encoder(ar.name), ob_factory=Ty,
-            ar_factory=cart_closed.Box
-        )
-
-        for arrow in self._operad.ars:
-            effect = arrow.data['effect']
-
-            cod_dims = util.double_latents([types.type_size(ob.name) for ob in
-                                            arrow.cod], self._data_dim)
-            dom_dims = util.double_latents([types.type_size(ob.name) for ob in
-                                            arrow.dom], self._data_dim)
-            self.encoders[arrow.name + '†'] = build_encoder(cod_dims, dom_dims,
-                                                            effect)
-
-    def _encoder(self, name):
-        encoder = self.encoders[name]
-        return cart_closed.Box(
-            name, encoder.type.left, encoder.type.right, encoder,
-            data={'effect': encoder.effect}
-        )
 
     @property
     def data_space(self):
@@ -176,12 +151,6 @@ class OperadicModel(BaseModel):
                                   temperature=temperature,
                                   arrow_weights=arrow_weights)
 
-        wires = WIRING_FUNCTOR(morphism.dagger())
-        dagger = self.encoder_functor(wires)
-        with pyro.plate('data', len(data)):
-            with name_push(name_stack=self._random_variable_names):
-                dagger(data)
-
         return morphism
 
     def forward(self, observations=None):
@@ -194,7 +163,77 @@ class OperadicModel(BaseModel):
             )
         return self.model(observations=None)
 
-class VaeOperadicModel(OperadicModel):
+class DaggerOperadicModel(OperadicModel):
+    def __init__(self, generators, global_elements=[], data_space=(784,),
+                 guide_hidden_dim=256, no_prior_dims=[]):
+        obs = set()
+        for generator in generators:
+            ty = generator.dom >> generator.cod
+            obs = obs | unification.base_elements(ty)
+        for element in global_elements:
+            ty = element.dom >> element.cod
+            obs = obs - unification.base_elements(ty)
+
+        no_prior_dims = no_prior_dims + [self._data_dim]
+        for ob in obs:
+            dim = types.type_size(str(ob))
+            if dim in no_prior_dims:
+                continue
+
+            space = types.tensor_type(torch.float, dim)
+            prior = StandardNormal(dim)
+            name = '$p(%s)$' % prior.effects
+            effect = {'effect': prior.effect, 'dagger_effect': []}
+            global_element = cart_closed.Box(name, Ty(), space, prior,
+                                             data=effect)
+            global_elements.append(global_element)
+
+        super().__init__(generators, global_elements, data_space,
+                         guide_hidden_dim, no_prior_dims)
+
+        self.encoders = nn.ModuleDict()
+        self.encoder_functor = wiring.Functor(
+            lambda ty: util.double_latent(ty, self.data_space),
+            lambda ar: self._encoder(ar.name), ob_factory=Ty,
+            ar_factory=cart_closed.Box
+        )
+
+        for arrow in self._operad.ars:
+            effect = arrow.data['effect']
+
+            cod_dims = util.double_latents([types.type_size(ob.name) for ob in
+                                            arrow.cod], self._data_dim)
+            dom_dims = util.double_latents([types.type_size(ob.name) for ob in
+                                            arrow.dom], self._data_dim)
+            self.encoders[arrow.name + '†'] = build_encoder(cod_dims, dom_dims,
+                                                            effect)
+
+    def _encoder(self, name):
+        encoder = self.encoders[name]
+        return cart_closed.Box(
+            name, encoder.type.left, encoder.type.right, encoder,
+            data={'effect': encoder.effect}
+        )
+
+    @pnn.pyro_method
+    def guide(self, observations=None):
+        if isinstance(observations, dict):
+            data = observations['$X^{%d}$' % self._data_dim]
+        else:
+            data = observations
+        data = data.view(data.shape[0], *self._data_space)
+
+        morphism = super().guide(observations)
+
+        wires = WIRING_FUNCTOR(morphism.dagger())
+        dagger = self.encoder_functor(wires)
+        with pyro.plate('data', len(data)):
+            with name_push(name_stack=self._random_variable_names):
+                dagger(data)
+
+        return morphism
+
+class VaeOperadicModel(DaggerOperadicModel):
     def __init__(self, data_dim=28*28, hidden_dim=8, guide_hidden_dim=256):
         self._data_dim = data_dim
 
@@ -220,7 +259,7 @@ class VaeOperadicModel(OperadicModel):
 
         super().__init__(generators, [], data_dim, guide_hidden_dim)
 
-class VlaeOperadicModel(OperadicModel):
+class VlaeOperadicModel(DaggerOperadicModel):
     def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=256):
         self._data_dim = data_dim
 
@@ -259,7 +298,7 @@ class VlaeOperadicModel(OperadicModel):
         super().__init__(generators, [], data_dim, guide_hidden_dim,
                          list(set(dims) - {data_dim}))
 
-class GlimpseOperadicModel(OperadicModel):
+class GlimpseOperadicModel(DaggerOperadicModel):
     def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=256):
         self._data_dim = data_dim
         data_side = int(math.sqrt(self._data_dim))
@@ -343,7 +382,7 @@ class GlimpseOperadicModel(OperadicModel):
                                 data={'effect': [observation_effect]})
         return latent >> likelihood
 
-class MolecularVaeOperadicModel(OperadicModel):
+class MolecularVaeOperadicModel(DaggerOperadicModel):
     def __init__(self, max_len=120, guide_hidden_dim=256, charset_len=34):
         hidden_dims = [196, 292, 435]
         recurrent_dims = [64, 128, 256]
