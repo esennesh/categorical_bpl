@@ -3,8 +3,10 @@ from discopy import monoidal, wiring
 from discopy.monoidal import Ty
 from discopyro import free_operad, unification
 import itertools
+import json
 import math
 import matplotlib.pyplot as plt
+import nltk
 import pyro
 from pyro.contrib.autoname import name_count, scope
 from pyro.poutine import block
@@ -17,7 +19,8 @@ from base import BaseModel
 import base.base_type as types
 from model.asvi import *
 from model.modules import *
-import model.modules as modules
+import utils.mol_utils as mol_utils
+import utils.util as util
 from utils.name_stack import name_push, name_pop
 import utils.util as util
 
@@ -616,6 +619,17 @@ class GrammarAutoencodingModel(AutoencodingOperadicModel):
         likelihood = wiring.Box('', Ty(self._root_symbol), self.data_space,
                                 data={'effect': [observation_effect]})
         return decoder >> likelihood
+
+class ZincGrammarAutoencodingModel(GrammarAutoencodingModel):
+    def __init__(self, charset_file='', latent_space=(64,), max_len=120,
+                 guide_hidden_dim=256):
+        with open(charset_file, 'rb') as charset_json:
+            charset = json.load(charset_json)
+        char_indices = {c: charset.index(c) for c in charset}
+
+        grammar = nltk.CFG.fromstring(mol_utils.GRAMMAR)
+        super().__init__(grammar, char_indices, latent_space, max_len,
+                         guide_hidden_dim)
 
 class MolecularVaeOperadicModel(DaggerOperadicModel):
     def __init__(self, max_len=120, guide_hidden_dim=256, charset_len=34):
