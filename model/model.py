@@ -552,6 +552,73 @@ class DeepGenerativeOperadicModel(AsviOperadicModel):
         super().__init__(generators, global_elements, data_dim,
                          guide_hidden_dim, **kwargs)
 
+class GrammarAutoencodingModel(AutoencodingOperadicModel):
+    def __init__(self, grammar, char_indices, latent_space=(64,), max_len=120,
+                 guide_hidden_dim=256):
+        self._root_symbol = grammar.productions()[0].lhs().symbol()
+        latent_space = tuple(latent_space)
+        data_space = (max_len, len(char_indices))
+        generators = []
+        global_elements = []
+
+        mappings = collections.defaultdict(list)
+        for prod in grammar.productions():
+            mappings[prod.lhs().symbol()].append(prod.rhs())
+        optypes = {}
+        for nonterminal, productions in mappings.items():
+            for production in productions:
+                if all(isinstance(token, str) for token in production):
+                    prior = StringDecoder(nonterminal, [production],
+                                          char_indices, latent_space)
+                    prior = monoidal.Box(prior.name, prior.type[0],
+                                         prior.type[1], data={
+                                            'effect': prior.effect,
+                                            'function': prior
+                                         })
+                    generators.append(prior)
+                else:
+                    prodgen = ProductionDecoder(nonterminal, production,
+                                                char_indices)
+                    generator = monoidal.Box(prodgen.name, prodgen.type[0],
+                                             prodgen.type[1], data={
+                                                'effect': prodgen.effect,
+                                                'function': prodgen
+                                             })
+                    generators.append(generator)
+
+        likelihood = RelaxedOneHotLikelihood(self._root_symbol,
+                                             len(char_indices), max_len)
+        generator = monoidal.Box(likelihood.name, likelihood.type[0],
+                                 likelihood.type[1], data={
+                                    'effect': likelihood.effect,
+                                    'function': likelihood
+                                 })
+        generators.append(generator)
+
+        latent_type = types.tensor_type(torch.float, latent_space)
+        copy = monoidal.Box('copy', latent_type, latent_type @ latent_type,
+                            data={'effect': [],
+                                  'function': lambda zs: (zs, zs)})
+        generators.append(copy)
+
+        super().__init__(generators, latent_space,
+                         data_space=(max_len, len(char_indices)))
+
+        self.encoder = StringEncoder(self._latent_name, data_space,
+                                     self._latent_dim)
+        self._observation_name = '$XC^{%s}$' % str(data_space)
+
+    @property
+    def wiring_diagram(self):
+        prior = wiring.Box('', Ty(), self.latent_space,
+                           data={'effect': lambda e: True})
+        decoder = wiring.Box('', self.latent_space, Ty(self._root_symbol),
+                             data={'effect': lambda e: True})
+        observation_effect = 'XC^{(%d, %d)}' % self._data_space
+        likelihood = wiring.Box('', Ty(self._root_symbol), self.data_space,
+                                data={'effect': [observation_effect]})
+        return prior >> decoder >> likelihood
+
 class MolecularVaeOperadicModel(DaggerOperadicModel):
     def __init__(self, max_len=120, guide_hidden_dim=256, charset_len=34):
         hidden_dims = [196, 292, 435]
