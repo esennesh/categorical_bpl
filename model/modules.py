@@ -1,6 +1,7 @@
 from abc import abstractproperty
 from discopy.monoidal import Ty
 import functools
+import math
 import numpy as np
 import pyro
 import pyro.distributions as dist
@@ -524,6 +525,55 @@ class SpatialTransformerWriter(TypedModel):
         glimpse = glimpse.flatten(1)
         return canvas + glimpse
 
+class StringDecoder(TypedModel):
+    def __init__(self, cod_nonterminal, const_productions, char_indices,
+                 latent_space):
+        super().__init__()
+        self._char_indices = char_indices
+        self._cod = Ty(cod_nonterminal)
+        self._latent_space = latent_space
+        self._productions = const_productions
+
+        self.decoder = nn.Sequential(
+            nn.Linear(math.prod(self._latent_space),
+                      len(self._productions) * 2),
+            nn.ReLU(),
+            nn.Linear(len(self._productions) * 2, len(self._productions)),
+            nn.Softplus(),
+        )
+
+    @property
+    def type(self):
+        return (types.tensor_type(torch.float, self._latent_space), self._cod)
+
+    @property
+    def _string_name(self):
+        return 'C^{(%d, %s)}' % (len(self._char_indices), self._cod.name)
+
+    @property
+    def effect(self):
+        return [self._string_name]
+
+    @property
+    def name(self):
+        name = 'p(%s)' % self._string_name
+        return '$%s$' % name
+
+    def forward(self, zs):
+        probs = self.decoder(zs)
+        categorical = dist.Categorical(probs=probs)
+        selection = pyro.sample('$%s$' % self._string_name, categorical)
+
+        strings = []
+        for choice in selection.unbind(dim=0):
+            for token in self._productions[choice.item()]:
+                chars = torch.LongTensor([self._char_indices[char] for char in
+                                          token])
+                chars = F.one_hot(chars.to(choice.device),
+                                  len(self._char_indices))
+                strings.append(chars)
+        return torch.stack(strings, dim=0)
+
 class MolecularDecoder(TypedModel):
     def __init__(self, hidden_dim=196, recurrent_dim=488, charset_len=34,
                  max_len=120):
@@ -779,6 +829,60 @@ class MlpEncoder(Encoder):
             zs = self.distribution(loc, precision)
 
         return self.outcode(zs, xs)
+
+class StringEncoder(TypedModel):
+    def __init__(self, effect, in_dims=(12,), out_features=20,
+                 string_type='chars'):
+        super().__init__()
+        self._effect = effect
+        self._in_dims = in_dims
+        self._out_dim = out_features
+
+        in_features = in_dims[0]
+        if string_type == 'chars':
+            self.conv_layers = nn.Sequential(
+                nn.Conv1d(in_features, 9, kernel_size=9),
+                nn.ReLU(),
+                nn.Conv1d(9, 9, kernel_size=9),
+                nn.ReLU(),
+                nn.Conv1d(9, 10, kernel_size=11),
+                nn.ReLU(),
+            )
+            self.dense = nn.Sequential(
+                nn.Linear(80, 435), nn.ReLU(),
+                nn.Linear(435, out_features * 2),
+            )
+        else:
+            self.conv_layers = nn.Sequential(
+                nn.Conv1d(in_features, 24, kernel_size=2),
+                nn.ReLU(),
+                nn.Conv1d(24, 12, kernel_size=3),
+                nn.ReLU(),
+                nn.Conv1d(12, 12, kernel_size=4),
+                nn.ReLU(),
+            )
+            self.dense = nn.Sequential(nn.Linear(108, out_features), nn.ReLU())
+
+        self.distribution = DiagonalGaussian(self._out_dim,
+                                             latent_name=self._effect)
+
+    @property
+    def type(self):
+        in_space = types.tensor_type(torch.float, self._in_dims)
+        out_space = types.tensor_type(torch.float, self._out_dim)
+        return in_space >> out_space
+
+    @property
+    def name(self):
+        name = 'p(%s \\mid \\mathbb{R}^{%s})' % (','.join(self._effect),
+                                                 ','.join(self._in_dims))
+        return '$%s$' % name
+
+    def forward(self, features):
+        hs = self.conv_layers(features).view(features.shape[0], -1)
+        hs = self.dense(hs).view(features.shape[0], 2, self._out_dim)
+        return self.distribution(hs[:, 0], hs[:, 1].exp())
+
 
 def build_encoder(in_dims, out_dims, effects):
     latents = [eff for eff in effects if 'X^' not in eff]
