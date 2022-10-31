@@ -15,6 +15,7 @@ import torch.nn.functional as F
 
 from base import TypedModel
 import base.base_type as types
+import utils.util as util
 
 class DiagonalGaussian(TypedModel):
     def __init__(self, dim, latent_name=None, likelihood=False):
@@ -573,6 +574,46 @@ class StringDecoder(TypedModel):
                                   len(self._char_indices))
                 strings.append(chars)
         return torch.stack(strings, dim=0)
+
+
+class ProductionDecoder(TypedModel):
+    def __init__(self, cod_nonterminal, production, char_indices, max_len=120):
+        super().__init__()
+        self._production = production
+        self._char_indices = char_indices
+        self._cod = Ty(cod_nonterminal)
+        self._dom = Ty(*[util.desymbolize(token) for token in production])
+
+    @property
+    def type(self):
+        return (self._dom, self._cod)
+
+    @property
+    def _string_name(self):
+        return 'C^{(%d, %s)}' % (len(self._char_indices), self._cod.name)
+
+    @property
+    def effect(self):
+        return [self._string_name]
+
+    @property
+    def name(self):
+        name = 'p(%s \\mid %s)' % (self._string_name, str(self._production))
+        return '$%s$' % name
+
+    def forward(self, *args):
+        symbols = []
+        i = 0
+        for symbol in self._production:
+            if isinstance(symbol, str):
+                char = torch.LongTensor([self._char_indices[symbol]])
+                char = F.one_hot(char.to(self._batch.device),
+                                 len(self._char_indices))
+                symbols.append(char.expand(self._batch.shape[0], *char.shape))
+            else:
+                symbols.append(args[i])
+                i += 1
+        return torch.cat(symbols, dim=1)
 
 class MolecularDecoder(TypedModel):
     def __init__(self, hidden_dim=196, recurrent_dim=488, charset_len=34,
