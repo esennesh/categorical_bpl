@@ -141,6 +141,50 @@ class GaussianLikelihood(DiagonalGaussian):
     def forward(self, loc):
         return super().forward(loc, self.precision.expand(*loc.shape))
 
+class RelaxedOneHotLikelihood(TypedModel):
+    def __init__(self, symbol, charset_len, max_len, likelihood=True):
+        super().__init__()
+        self._cod = types.tensor_type(torch.float, (max_len, charset_len))
+        self._likelihood = likelihood
+        self._max_len = max_len
+        self._name = 'XC^{(%d, %d)}' % (max_len, charset_len)
+        self._symbol = symbol
+        self.temperature = pnn.PyroParam(torch.tensor([2.2]),
+                                         constraint=constraints.positive)
+
+    @property
+    def type(self):
+        return (Ty(self._symbol), self._cod)
+
+    @property
+    def effect(self):
+        return [self._name]
+
+    @property
+    def name(self):
+        name = 'p(%s \\mid %s)' % (self._name, 'Z' + self._name[1:])
+        return '$%s$' % name
+
+    def null_terminator(self, string):
+        remainder = self._max_len - string.shape[1]
+        charset_len = string.shape[-1]
+        nil = torch.LongTensor([charset_len - 1])
+        nil = F.one_hot(nil.to(device=string.device), charset_len)
+        return nil.unsqueeze(dim=0).expand(string.shape[0], remainder,
+                                           charset_len)
+
+    def forward(self, string):
+        # Zero-pad the incoming string
+        if string.shape[1] < self._max_len:
+            nil = self.null_terminator(string)
+            string = torch.cat((string, nil), dim=1)
+        onehot_cat = dist.RelaxedOneHotCategorical(self.temperature,
+                                                   probs=string)
+        sample = pyro.sample('$%s$' % self._name, onehot_cat.to_event(1))
+        if self._likelihood:
+            return string
+        return sample
+
 class DensityNet(TypedModel):
     def __init__(self, in_dim, out_dim, dist_layer=ContinuousBernoulliModel,
                  normalizer_layer=nn.LayerNorm, convolve=False):
