@@ -1,19 +1,20 @@
 {
-    "name": "Molecular_VaeOperad",
+    "name": "Molecular_GrammerAutoencodingOperad",
     "n_gpu": 1,
 
     "arch": {
-        "type": "MolecularVaeOperadicModel",
+        "type": "ZincGrammarAutoencodingModel",
         "args": {
           "max_len": 120,
-          "charset_len": 34
+          "charset_file": "data/ZINC/char_list.json",
+          "latent_space": [128]
         }
     },
     "data_loader": {
         "type": "ZincMolecularDataLoader",
         "args":{
             "csv": "data/ZINC/zinc15_250K_2D.csv",
-            "batch_size": 256,
+            "batch_size": 1,
             "shuffle": true,
             "validation_split": 0.1,
             "num_workers": 2
@@ -40,7 +41,7 @@
         "epochs": 500,
 
         "save_dir": "saved/",
-        "save_period": 50,
+        "save_period": 10,
         "verbosity": 2,
 
         "monitor": "min val_loss",
