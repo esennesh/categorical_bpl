@@ -9,6 +9,11 @@ from collections import OrderedDict
 import torch
 import warnings
 
+def desymbolize(token):
+    if isinstance(token, str):
+        return token
+    return token.symbol()
+
 class ImportanceSampler(Importance):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
