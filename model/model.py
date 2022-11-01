@@ -35,7 +35,7 @@ def latent_effect_falgebra(f):
 
 class OperadicModel(BaseModel):
     def __init__(self, generators, global_elements=[], data_space=(784,),
-                 guide_hidden_dim=256, no_prior_dims=[]):
+                 guide_hidden_dim=256):
         super().__init__()
         if isinstance(data_space, int):
             data_space = (data_space,)
@@ -45,28 +45,6 @@ class OperadicModel(BaseModel):
             self._observation_name = '$X^{%d}$' % self._data_dim
         else:
             self._observation_name = '$X^{%s}$' % str(self._data_space)
-
-        obs = set()
-        for generator in generators:
-            ty = generator.dom >> generator.cod
-            obs = obs | unification.base_elements(ty)
-        for element in global_elements:
-            ty = element.dom >> element.cod
-            obs = obs - unification.base_elements(ty)
-
-        no_prior_dims = no_prior_dims + [self._data_dim]
-        for ob in obs:
-            dim = types.type_size(str(ob))
-            if dim in no_prior_dims:
-                continue
-
-            space = types.tensor_type(torch.float, dim)
-            prior = StandardNormal(dim)
-            name = '$p(%s)$' % prior.effects
-            effect = {'effect': prior.effect, 'dagger_effect': []}
-            global_element = cart_closed.Box(name, Ty(), space, prior,
-                                             data=effect)
-            global_elements.append(global_element)
 
         self._operad = free_operad.FreeOperad(generators, global_elements)
 
