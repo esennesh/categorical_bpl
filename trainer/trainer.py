@@ -63,7 +63,7 @@ class Trainer(BaseTrainer):
     """
     def __init__(self, model, metric_ftns, optimizer, config, data_loader,
                  valid_data_loader=None, lr_scheduler=None, len_epoch=None,
-                 jit=False, log_images=True):
+                 jit=False, log_images=True, log_step=None):
         super().__init__(model, metric_ftns, optimizer, config)
         self.config = config
         self.data_loader = data_loader
@@ -77,7 +77,7 @@ class Trainer(BaseTrainer):
         self.valid_data_loader = valid_data_loader
         self.do_validation = self.valid_data_loader is not None
         self.lr_scheduler = lr_scheduler
-        self.log_step = int(np.sqrt(data_loader.batch_length))
+        self.log_step = log_step if log_step else int(np.sqrt(data_loader.batch_length))
         self.jit = jit
         self.log_images = log_images
 
