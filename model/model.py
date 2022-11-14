@@ -366,14 +366,6 @@ class GlimpseOperadicModel(DaggerOperadicModel):
 class AutoencodingOperadicModel(OperadicModel):
     def __init__(self, generators, latent_space=(64,), global_elements=[],
                  data_space=(784,), guide_hidden_dim=256):
-        space = types.tensor_type(torch.float, latent_space)
-        prior = StandardNormal(math.prod(latent_space))
-        global_elements.append(cart_closed.Box('$p(%s)$' % prior.effects, Ty(),
-                                               space, prior,
-                                               data={'effect': prior.effect}))
-
-        super().__init__(generators, global_elements, data_space,
-                         guide_hidden_dim)
         if isinstance(latent_space, int):
             latent_space = (latent_space,)
         self._latent_space = latent_space
@@ -383,17 +375,36 @@ class AutoencodingOperadicModel(OperadicModel):
         else:
             self._latent_name = 'Z^{%s}' % str(self._latent_space)
 
+        super().__init__(generators, global_elements, data_space,
+                         guide_in_dim=self._latent_dim,
+                         guide_hidden_dim=guide_hidden_dim)
+
+        space = types.tensor_type(torch.float, latent_space)
+        self.latent_prior = StandardNormal(math.prod(latent_space),
+                                           self._latent_name)
+
     @property
     def latent_space(self):
         return types.tensor_type(torch.float, self._latent_space)
 
     @property
     def wiring_diagram(self):
-        prior = wiring.Box('', Ty(), self.latent_space,
-                           data={'effect': lambda e: True})
-        decoder = wiring.Box('', self.latent_space, self.data_space,
-                             data={'effect': lambda e: True})
-        return prior >> decoder
+        return wiring.Box('', self.latent_space, self.data_space,
+                          data={'effect': lambda e: True})
+
+    @pnn.pyro_method
+    def model(self, observations=None):
+        morphism, observations, data = super().model(observations)
+        latent_code = self.latent_prior()
+
+        if observations is not None:
+            score_morphism = pyro.condition(morphism, data=observations)
+        else:
+            score_morphism = morphism
+        with pyro.plate('data', len(data)):
+            with name_pop(name_stack=self._random_variable_names):
+                output = score_morphism(latent_code)
+        return morphism, output
 
     @pnn.pyro_method
     def guide(self, observations=None):
@@ -402,13 +413,12 @@ class AutoencodingOperadicModel(OperadicModel):
         else:
             data = observations
         data = data.view(data.shape[0], *self._data_space)
-
-        morphism = super().guide(observations)
+        latent_code = self.encoder(data)
+        morphism, data = super().guide(observations, latent_code)
 
         with pyro.plate('data', len(data)):
-            latent_code = self.encoder(data)
             with name_push(name_stack=self._random_variable_names):
-                morphism()
+                morphism(latent_code)
 
         return morphism, latent_code
 
