@@ -68,7 +68,7 @@ class OperadicModel(BaseModel):
                                              data=effect)
             global_elements.append(global_element)
 
-        self._category = free_operad.FreeOperad(generators, global_elements)
+        self._operad = free_operad.FreeOperad(generators, global_elements)
 
         self.guide_temperatures = nn.Sequential(
             nn.Linear(self._data_dim, guide_hidden_dim),
@@ -79,7 +79,7 @@ class OperadicModel(BaseModel):
             nn.Linear(self._data_dim, guide_hidden_dim),
             nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
             nn.Linear(guide_hidden_dim,
-                      self._category.arrow_weight_loc.shape[0] * 2),
+                      self._operad.arrow_weight_loc.shape[0] * 2),
         )
 
         self._random_variable_names = collections.defaultdict(int)
@@ -91,7 +91,7 @@ class OperadicModel(BaseModel):
             ar_factory=cart_closed.Box
         )
 
-        for arrow in self._category.ars:
+        for arrow in self._operad.ars:
             effect = arrow.data['effect']
 
             cod_dims = util.double_latents([types.type_size(ob.name) for ob in
@@ -130,12 +130,12 @@ class OperadicModel(BaseModel):
             data = torch.zeros(1, *self._data_space)
             observations = {}
         data = data.view(data.shape[0], *self._data_space)
-        for module in self._category.children():
+        for module in self._operad.children():
             if isinstance(module, BaseModel):
                 module.set_batching(data)
 
         min_depth = VAE_MIN_DEPTH if len(list(self.wiring_diagram)) == 1 else 0
-        morphism = self._category(self.wiring_diagram, min_depth=min_depth)
+        morphism = self._operad(self.wiring_diagram, min_depth=min_depth)
 
         if observations is not None:
             score_morphism = pyro.condition(morphism, data=observations)
@@ -154,7 +154,7 @@ class OperadicModel(BaseModel):
             data = observations
         data = data.view(data.shape[0], *self._data_space)
         flat_data = data.view(data.shape[0], self._data_dim)
-        for module in self._category.children():
+        for module in self._operad.children():
             if isinstance(module, BaseModel):
                 module.set_batching(data)
 
@@ -172,7 +172,7 @@ class OperadicModel(BaseModel):
         )
 
         min_depth = VAE_MIN_DEPTH if len(list(self.wiring_diagram)) == 1 else 0
-        morphism = self._category(self.wiring_diagram, min_depth=min_depth,
+        morphism = self._operad(self.wiring_diagram, min_depth=min_depth,
                                   temperature=temperature,
                                   arrow_weights=arrow_weights)
 
