@@ -610,14 +610,12 @@ class GrammarAutoencodingModel(AutoencodingOperadicModel):
 
     @property
     def wiring_diagram(self):
-        prior = wiring.Box('', Ty(), self.latent_space,
-                           data={'effect': lambda e: True})
         decoder = wiring.Box('', self.latent_space, Ty(self._root_symbol),
                              data={'effect': lambda e: True})
         observation_effect = 'XC^{(%d, %d)}' % self._data_space
         likelihood = wiring.Box('', Ty(self._root_symbol), self.data_space,
                                 data={'effect': [observation_effect]})
-        return prior >> decoder >> likelihood
+        return decoder >> likelihood
 
 class MolecularVaeOperadicModel(DaggerOperadicModel):
     def __init__(self, max_len=120, guide_hidden_dim=256, charset_len=34):
