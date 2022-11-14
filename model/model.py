@@ -189,7 +189,7 @@ class DaggerOperadicModel(OperadicModel):
             global_elements.append(global_element)
 
         super().__init__(generators, global_elements, data_space,
-                         guide_hidden_dim, no_prior_dims)
+                         guide_hidden_dim=guide_hidden_dim)
 
         self.encoders = nn.ModuleDict()
         self.encoder_functor = wiring.Functor(
@@ -216,14 +216,21 @@ class DaggerOperadicModel(OperadicModel):
         )
 
     @pnn.pyro_method
-    def guide(self, observations=None):
-        if isinstance(observations, dict):
-            data = observations['$X^{%d}$' % self._data_dim]
-        else:
-            data = observations
-        data = data.view(data.shape[0], *self._data_space)
+    def model(self, observations=None):
+        morphism, observations, data = super().model(observations)
 
-        morphism = super().guide(observations)
+        if observations is not None:
+            score_morphism = pyro.condition(morphism, data=observations)
+        else:
+            score_morphism = morphism
+        with pyro.plate('data', len(data)):
+            with name_pop(name_stack=self._random_variable_names):
+                output = score_morphism()
+        return morphism, output
+
+    @pnn.pyro_method
+    def guide(self, observations=None):
+        morphism, data = super().guide(observations)
 
         wires = WIRING_FUNCTOR(morphism.dagger())
         dagger = self.encoder_functor(wires)
