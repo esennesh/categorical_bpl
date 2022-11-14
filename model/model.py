@@ -35,12 +35,14 @@ def latent_effect_falgebra(f):
 
 class OperadicModel(BaseModel):
     def __init__(self, generators, global_elements=[], data_space=(784,),
-                 guide_hidden_dim=256):
+                 guide_in_dim=None, guide_hidden_dim=256):
         super().__init__()
         if isinstance(data_space, int):
             data_space = (data_space,)
         self._data_space = data_space
         self._data_dim = math.prod(data_space)
+        if not guide_in_dim:
+            guide_in_dim = self._data_dim
         if len(self._data_space) == 1:
             self._observation_name = '$X^{%d}$' % self._data_dim
         else:
@@ -49,12 +51,12 @@ class OperadicModel(BaseModel):
         self._operad = free_operad.FreeOperad(generators, global_elements)
 
         self.guide_temperatures = nn.Sequential(
-            nn.Linear(self._data_dim, guide_hidden_dim),
+            nn.Linear(guide_in_dim, guide_hidden_dim),
             nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
             nn.Linear(guide_hidden_dim, 1 * 2), nn.Softplus(),
         )
         self.guide_arrow_weights = nn.Sequential(
-            nn.Linear(self._data_dim, guide_hidden_dim),
+            nn.Linear(guide_in_dim, guide_hidden_dim),
             nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
             nn.Linear(guide_hidden_dim,
                       self._operad.arrow_weight_loc.shape[0] * 2),
@@ -90,33 +92,27 @@ class OperadicModel(BaseModel):
         min_depth = VAE_MIN_DEPTH if len(list(self.wiring_diagram)) == 1 else 0
         morphism = self._operad(self.wiring_diagram, min_depth=min_depth)
 
-        if observations is not None:
-            score_morphism = pyro.condition(morphism, data=observations)
-        else:
-            score_morphism = morphism
-        with pyro.plate('data', len(data)):
-            with name_pop(name_stack=self._random_variable_names):
-                output = score_morphism()
-        return morphism, output
+        return morphism, observations, data
 
     @pnn.pyro_method
-    def guide(self, observations=None):
+    def guide(self, observations=None, summary=None):
         if isinstance(observations, dict):
             data = observations['$X^{%d}$' % self._data_dim]
         else:
             data = observations
         data = data.view(data.shape[0], *self._data_space)
-        flat_data = data.view(data.shape[0], self._data_dim)
+        if summary is None:
+            summary = data.view(data.shape[0], self._data_dim)
         for module in self._operad.children():
             if isinstance(module, BaseModel):
                 module.set_batching(data)
 
-        temperatures = self.guide_temperatures(flat_data).mean(dim=0).view(1, 2)
+        temperatures = self.guide_temperatures(summary).mean(dim=0).view(1, 2)
         temperature_gamma = dist.Gamma(temperatures[0, 0],
                                        temperatures[0, 1]).to_event(0)
         temperature = pyro.sample('weights_temperature', temperature_gamma)
 
-        data_arrow_weights = self.guide_arrow_weights(flat_data)
+        data_arrow_weights = self.guide_arrow_weights(summary)
         data_arrow_weights = data_arrow_weights.mean(dim=0).view(-1, 2)
         arrow_weights = pyro.sample(
             'arrow_weights',
@@ -129,7 +125,7 @@ class OperadicModel(BaseModel):
                                   temperature=temperature,
                                   arrow_weights=arrow_weights)
 
-        return morphism
+        return morphism, data
 
     def forward(self, observations=None):
         if observations is not None:
