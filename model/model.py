@@ -35,17 +35,111 @@ def latent_effect_falgebra(f):
 
 class OperadicModel(BaseModel):
     def __init__(self, generators, global_elements=[], data_space=(784,),
-                 guide_hidden_dim=256, no_prior_dims=[]):
+                 guide_in_dim=None, guide_hidden_dim=256):
         super().__init__()
         if isinstance(data_space, int):
             data_space = (data_space,)
         self._data_space = data_space
         self._data_dim = math.prod(data_space)
+        if not guide_in_dim:
+            guide_in_dim = self._data_dim
         if len(self._data_space) == 1:
             self._observation_name = '$X^{%d}$' % self._data_dim
         else:
             self._observation_name = '$X^{%s}$' % str(self._data_space)
 
+        self._operad = free_operad.FreeOperad(generators, global_elements)
+
+        self.guide_temperatures = nn.Sequential(
+            nn.Linear(guide_in_dim, guide_hidden_dim),
+            nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
+            nn.Linear(guide_hidden_dim, 1 * 2), nn.Softplus(),
+        )
+        self.guide_arrow_weights = nn.Sequential(
+            nn.Linear(guide_in_dim, guide_hidden_dim),
+            nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
+            nn.Linear(guide_hidden_dim,
+                      self._operad.arrow_weight_loc.shape[0] * 2),
+        )
+        self._random_variable_names = collections.defaultdict(int)
+
+    @property
+    def data_space(self):
+        return types.tensor_type(torch.float, self._data_space)
+
+    @property
+    def wiring_diagram(self):
+        return wiring.Box('', Ty(), self.data_space,
+                          data={'effect': lambda e: True})
+
+    @pnn.pyro_method
+    def model(self, observations=None):
+        if isinstance(observations, dict):
+            data = observations[self._observation_name]
+        elif observations is not None:
+            data = observations
+            observations = {
+                self._observation_name: observations.view(-1, *self._data_space)
+            }
+        else:
+            data = torch.zeros(1, *self._data_space)
+            observations = {}
+        data = data.view(data.shape[0], *self._data_space)
+        for module in self.children():
+            if isinstance(module, BaseModel):
+                module.set_batching(data)
+
+        min_depth = VAE_MIN_DEPTH if len(list(self.wiring_diagram)) == 1 else 0
+        morphism = self._operad(self.wiring_diagram, min_depth=min_depth)
+
+        return morphism, observations, data
+
+    @pnn.pyro_method
+    def guide(self, observations=None, summary=None):
+        if isinstance(observations, dict):
+            data = observations['$X^{%d}$' % self._data_dim]
+        else:
+            data = observations
+        data = data.view(data.shape[0], *self._data_space)
+        if summary is None:
+            summary = data.view(data.shape[0], self._data_dim)
+        for module in self._operad.children():
+            if isinstance(module, BaseModel):
+                module.set_batching(data)
+
+        temperatures = self.guide_temperatures(summary).mean(dim=0).view(1, 2)
+        temperature_gamma = dist.Gamma(temperatures[0, 0],
+                                       temperatures[0, 1]).to_event(0)
+        temperature = pyro.sample('weights_temperature', temperature_gamma)
+
+        data_arrow_weights = self.guide_arrow_weights(summary)
+        data_arrow_weights = data_arrow_weights.mean(dim=0).view(-1, 2)
+        arrow_weights = pyro.sample(
+            'arrow_weights',
+            dist.Normal(data_arrow_weights[:, 0],
+                        data_arrow_weights[:, 1].exp()).to_event(1)
+        )
+
+        min_depth = VAE_MIN_DEPTH if len(list(self.wiring_diagram)) == 1 else 0
+        morphism = self._operad(self.wiring_diagram, min_depth=min_depth,
+                                  temperature=temperature,
+                                  arrow_weights=arrow_weights)
+
+        return morphism, data
+
+    def forward(self, observations=None):
+        if observations is not None:
+            trace = pyro.poutine.trace(self.guide).get_trace(
+                observations=observations
+            )
+            return pyro.poutine.replay(self.model, trace=trace)(
+                observations=observations
+            )
+        return self.model(observations=None)
+
+class DaggerOperadicModel(OperadicModel):
+    def __init__(self, generators, global_elements=[], data_space=(784,),
+                 guide_hidden_dim=256, no_prior_dims=[]):
         obs = set()
         for generator in generators:
             ty = generator.dom >> generator.cod
@@ -68,21 +162,8 @@ class OperadicModel(BaseModel):
                                              data=effect)
             global_elements.append(global_element)
 
-        self._operad = free_operad.FreeOperad(generators, global_elements)
-
-        self.guide_temperatures = nn.Sequential(
-            nn.Linear(self._data_dim, guide_hidden_dim),
-            nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
-            nn.Linear(guide_hidden_dim, 1 * 2), nn.Softplus(),
-        )
-        self.guide_arrow_weights = nn.Sequential(
-            nn.Linear(self._data_dim, guide_hidden_dim),
-            nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
-            nn.Linear(guide_hidden_dim,
-                      self._operad.arrow_weight_loc.shape[0] * 2),
-        )
-
-        self._random_variable_names = collections.defaultdict(int)
+        super().__init__(generators, global_elements, data_space,
+                         guide_hidden_dim=guide_hidden_dim)
 
         self.encoders = nn.ModuleDict()
         self.encoder_functor = wiring.Functor(
@@ -108,34 +189,9 @@ class OperadicModel(BaseModel):
             data={'effect': encoder.effect}
         )
 
-    @property
-    def data_space(self):
-        return types.tensor_type(torch.float, self._data_space)
-
-    @property
-    def wiring_diagram(self):
-        return wiring.Box('', Ty(), self.data_space,
-                          data={'effect': lambda e: True})
-
     @pnn.pyro_method
     def model(self, observations=None):
-        if isinstance(observations, dict):
-            data = observations[self._observation_name]
-        elif observations is not None:
-            data = observations
-            observations = {
-                self._observation_name: observations.view(-1, *self._data_space)
-            }
-        else:
-            data = torch.zeros(1, *self._data_space)
-            observations = {}
-        data = data.view(data.shape[0], *self._data_space)
-        for module in self._operad.children():
-            if isinstance(module, BaseModel):
-                module.set_batching(data)
-
-        min_depth = VAE_MIN_DEPTH if len(list(self.wiring_diagram)) == 1 else 0
-        morphism = self._operad(self.wiring_diagram, min_depth=min_depth)
+        morphism, observations, data = super().model(observations)
 
         if observations is not None:
             score_morphism = pyro.condition(morphism, data=observations)
@@ -148,33 +204,7 @@ class OperadicModel(BaseModel):
 
     @pnn.pyro_method
     def guide(self, observations=None):
-        if isinstance(observations, dict):
-            data = observations['$X^{%d}$' % self._data_dim]
-        else:
-            data = observations
-        data = data.view(data.shape[0], *self._data_space)
-        flat_data = data.view(data.shape[0], self._data_dim)
-        for module in self._operad.children():
-            if isinstance(module, BaseModel):
-                module.set_batching(data)
-
-        temperatures = self.guide_temperatures(flat_data).mean(dim=0).view(1, 2)
-        temperature_gamma = dist.Gamma(temperatures[0, 0],
-                                       temperatures[0, 1]).to_event(0)
-        temperature = pyro.sample('weights_temperature', temperature_gamma)
-
-        data_arrow_weights = self.guide_arrow_weights(flat_data)
-        data_arrow_weights = data_arrow_weights.mean(dim=0).view(-1, 2)
-        arrow_weights = pyro.sample(
-            'arrow_weights',
-            dist.Normal(data_arrow_weights[:, 0],
-                        data_arrow_weights[:, 1].exp()).to_event(1)
-        )
-
-        min_depth = VAE_MIN_DEPTH if len(list(self.wiring_diagram)) == 1 else 0
-        morphism = self._operad(self.wiring_diagram, min_depth=min_depth,
-                                  temperature=temperature,
-                                  arrow_weights=arrow_weights)
+        morphism, data = super().guide(observations)
 
         wires = WIRING_FUNCTOR(morphism.dagger())
         dagger = self.encoder_functor(wires)
@@ -184,17 +214,7 @@ class OperadicModel(BaseModel):
 
         return morphism
 
-    def forward(self, observations=None):
-        if observations is not None:
-            trace = pyro.poutine.trace(self.guide).get_trace(
-                observations=observations
-            )
-            return pyro.poutine.replay(self.model, trace=trace)(
-                observations=observations
-            )
-        return self.model(observations=None)
-
-class VaeOperadicModel(OperadicModel):
+class VaeOperadicModel(DaggerOperadicModel):
     def __init__(self, data_dim=28*28, hidden_dim=8, guide_hidden_dim=256):
         self._data_dim = data_dim
 
@@ -220,7 +240,7 @@ class VaeOperadicModel(OperadicModel):
 
         super().__init__(generators, [], data_dim, guide_hidden_dim)
 
-class VlaeOperadicModel(OperadicModel):
+class VlaeOperadicModel(DaggerOperadicModel):
     def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=256):
         self._data_dim = data_dim
 
@@ -259,7 +279,7 @@ class VlaeOperadicModel(OperadicModel):
         super().__init__(generators, [], data_dim, guide_hidden_dim,
                          list(set(dims) - {data_dim}))
 
-class GlimpseOperadicModel(OperadicModel):
+class GlimpseOperadicModel(DaggerOperadicModel):
     def __init__(self, data_dim=28*28, hidden_dim=64, guide_hidden_dim=256):
         self._data_dim = data_dim
         data_side = int(math.sqrt(self._data_dim))
@@ -343,7 +363,66 @@ class GlimpseOperadicModel(OperadicModel):
                                 data={'effect': [observation_effect]})
         return latent >> likelihood
 
-class MolecularVaeOperadicModel(OperadicModel):
+class AutoencodingOperadicModel(OperadicModel):
+    def __init__(self, generators, latent_space=(64,), global_elements=[],
+                 data_space=(784,), guide_hidden_dim=256):
+        if isinstance(latent_space, int):
+            latent_space = (latent_space,)
+        self._latent_space = latent_space
+        self._latent_dim = math.prod(latent_space)
+        if len(self._latent_space) == 1:
+            self._latent_name = 'Z^{%d}' % self._latent_dim
+        else:
+            self._latent_name = 'Z^{%s}' % str(self._latent_space)
+
+        super().__init__(generators, global_elements, data_space,
+                         guide_in_dim=self._latent_dim,
+                         guide_hidden_dim=guide_hidden_dim)
+
+        space = types.tensor_type(torch.float, latent_space)
+        self.latent_prior = StandardNormal(math.prod(latent_space),
+                                           self._latent_name)
+
+    @property
+    def latent_space(self):
+        return types.tensor_type(torch.float, self._latent_space)
+
+    @property
+    def wiring_diagram(self):
+        return wiring.Box('', self.latent_space, self.data_space,
+                          data={'effect': lambda e: True})
+
+    @pnn.pyro_method
+    def model(self, observations=None):
+        morphism, observations, data = super().model(observations)
+        latent_code = self.latent_prior()
+
+        if observations is not None:
+            score_morphism = pyro.condition(morphism, data=observations)
+        else:
+            score_morphism = morphism
+        with pyro.plate('data', len(data)):
+            with name_pop(name_stack=self._random_variable_names):
+                output = score_morphism(latent_code)
+        return morphism, output
+
+    @pnn.pyro_method
+    def guide(self, observations=None):
+        if isinstance(observations, dict):
+            data = observations['$X^{%d}$' % self._data_dim]
+        else:
+            data = observations
+        data = data.view(data.shape[0], *self._data_space)
+        latent_code = self.encoder(data)
+        morphism, data = super().guide(observations, latent_code)
+
+        with pyro.plate('data', len(data)):
+            with name_push(name_stack=self._random_variable_names):
+                morphism(latent_code)
+
+        return morphism, latent_code
+
+class MolecularVaeOperadicModel(DaggerOperadicModel):
     def __init__(self, max_len=120, guide_hidden_dim=256, charset_len=34):
         hidden_dims = [196, 292, 435]
         recurrent_dims = [64, 128, 256]
