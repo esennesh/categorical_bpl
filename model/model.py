@@ -85,7 +85,7 @@ class OperadicModel(BaseModel):
             data = torch.zeros(1, *self._data_space)
             observations = {}
         data = data.view(data.shape[0], *self._data_space)
-        for module in self.children():
+        for module in self.modules():
             if isinstance(module, BaseModel):
                 module.set_batching(data)
 
