@@ -775,8 +775,8 @@ class NtfaWeights(TypedModel):
     @property
     def type(self):
         dom = Ty('Bl', 'Ti') @ types.tensor_type(torch.float,
-                                                 self._subject_embed_dim) @
-              types.tensor_type(torch.float, self._task_embed_dim)
+                                                 self._subject_embed_dim)
+        dom = dom @ types.tensor_type(torch.float, self._task_embed_dim)
 
         cod = types.tensor_type(torch.float, (self._num_factors, 1))
         return dom >> cod
@@ -788,7 +788,7 @@ class NtfaWeights(TypedModel):
     @property
     def name(self):
         embedding = 'Z^{p}_{%d}, Z^{s}_{%d}'
-        embedding = embed_name % (self._subject_embed_dim, self._task_embed_dim)
+        embedding = embedding % (self._subject_embed_dim, self._task_embed_dim)
         name = 'p(W \\mid %s)' % embedding
         return '$%s$' % name
 
