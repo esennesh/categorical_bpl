@@ -2,9 +2,8 @@
 """Utilities for topographic factor analysis"""
 
 __author__ = 'Eli Sennesh'
-__email__ = 'e.sennesh@northeastern.edu'
+__email__ = 'sennesh.e@northeastern.edu'
 
-import flatdict
 import glob
 import logging
 from ordered_set import OrderedSet
