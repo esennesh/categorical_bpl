@@ -73,7 +73,7 @@ class OperadicModel(BaseModel):
                           data={'effect': lambda e: True})
 
     @pnn.pyro_method
-    def model(self, observations=None):
+    def model(self, observations=None, **kwargs):
         if isinstance(observations, dict):
             data = observations[self._observation_name]
         elif observations is not None:
@@ -95,7 +95,7 @@ class OperadicModel(BaseModel):
         return morphism, observations, data
 
     @pnn.pyro_method
-    def guide(self, observations=None, summary=None):
+    def guide(self, observations=None, summary=None, **kwargs):
         if isinstance(observations, dict):
             data = observations['$X^{%d}$' % self._data_dim]
         else:
