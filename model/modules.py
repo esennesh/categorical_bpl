@@ -120,9 +120,9 @@ class ContinuousBernoulliModel(TypedModel):
         return sample
 
 class GaussianLikelihood(DiagonalGaussian):
-    def __init__(self, dim, random_var_name=None):
+    def __init__(self, dim, random_var_name=None, precision=1):
         super().__init__(dim, random_var_name, likelihood=True)
-        self.precision = pnn.PyroParam(torch.ones(1),
+        self.precision = pnn.PyroParam(torch.ones(1) * precision,
                                        constraint=constraints.positive)
 
     @property
