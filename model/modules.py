@@ -589,6 +589,33 @@ class MolecularDecoder(TypedModel):
         logits_categorical = dist.OneHotCategorical(probs=probs).to_event(1)
         return pyro.sample('$%s$' % self._smiles_name, logits_categorical)
 
+class NtfaSubjectEmbedding(TypedModel):
+    def __init__(self, subject_embed_dim=2):
+        super().__init__()
+        self._dim = self._subject_embed_dim
+
+    @property
+    def type(self):
+        return Ty('Su') >> types.tensor_type(torch.float, self._dim)
+
+    @property
+    def effect(self):
+        return ['Z^{p}_{%d}' % self._dim]
+
+    @property
+    def name(self):
+        return '$p(Z^{p}_{%d}; \\mathrm{Su})$' % self._dim
+
+    def forward(self, subjects):
+        z_loc = self._batch.new_zeros(torch.Size((self._batch.shape[0],
+                                                  self._dim)))
+        z_scale = self._batch.new_ones(torch.Size((self._batch.shape[0],
+                                                   self._dim)))
+        normal = dist.Normal(z_loc, z_scale).to_event(1)
+        embed_name = '$Z^{p}_{(%d, %s)}$' % (self._dim, [subject.item() for
+                                                         subject in subjects])
+        return pyro.sample(embed_name, normal)
+
 class NtfaFactors(TypedModel):
     def __init__(self, num_factors, voxel_locs, subject_embed_dim=2,
                  task_embed_dim=2, volume=False):
