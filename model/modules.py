@@ -677,7 +677,7 @@ class NtfaWeights(TypedModel):
 
     @property
     def type(self):
-        dom = Ty('Su', 'Ti') @ types.tensor_type(torch.float,
+        dom = Ty('Bl', 'Ti') @ types.tensor_type(torch.float,
                                                  self._subject_embed_dim) @
               types.tensor_type(torch.float, self._task_embed_dim)
 
