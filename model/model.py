@@ -18,6 +18,7 @@ import base.base_type as types
 from model.asvi import *
 from model.modules import *
 import model.modules as modules
+import utils.fmri_utils as fmri_utils
 from utils.name_stack import name_push, name_pop
 import utils.util as util
 
@@ -572,6 +573,34 @@ class DeepGenerativeOperadicModel(AsviOperadicModel):
 
         super().__init__(generators, global_elements, data_dim,
                          guide_hidden_dim, **kwargs)
+
+class NtfaOperadicModel(AsviOperadicModel):
+    def __init__(self, num_factors, voxel_locs, query_name=None):
+        self._num_factors = num_factors
+
+        generators = []
+        generators.append(cart_closed.Box('copy_Bl', Ty('Bl'), Ty('Bl', 'Bl'),
+                                          lambda zs: (zs, zs)))
+        generators.append(cart_closed.Box('copy_Su', Ty('Su'), Ty('Su', 'Su'),
+                                          lambda zs: (zs, zs)))
+        generators.append(cart_closed.Box('copy_Ta', Ty('Ta'), Ty('Ta', 'Ta'),
+                                          lambda zs: (zs, zs)))
+        generators.append(cart_closed.Box('copy_Ti', Ty('Ti'), Ty('Ti', 'Ti'),
+                                          lambda zs: (zs, zs)))
+
+        embed_dims = list(utils.powers_of(2, 2, 16))
+        for subject_dim, task_dim in itertools.combinations(embed_dims, 2):
+            factors = NtfaFactors(num_factors, voxel_locs, subject_dim,
+                                  task_dim, volume=True)
+            generators.append(cart_closed.Box(factors.name, factors.type.left,
+                                              factors.type.right, factors))
+
+            weights = NtfaWeights(num_factors, subject_dim, task_dim)
+            generators.append(cart_closed.Box(weights.name, weights.type.left,
+                                              weights.type.right, weights))
+        tfa = TfaLikelihood(voxel_locs)
+        generators.append(cart_closed.Box(tfa.name, tfa.type.left,
+                                          tfa.type.right, tfa))
 
 class MolecularVaeOperadicModel(DaggerOperadicModel):
     def __init__(self, max_len=120, guide_hidden_dim=256, charset_len=34):
