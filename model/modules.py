@@ -804,17 +804,19 @@ class NtfaWeights(TypedModel):
                            weights_dist.to_event(1))
 
 class TfaLikelihood(TypedModel):
-    def __init__(self, voxel_locs, voxel_noise=0.1):
+    def __init__(self, num_factors, voxel_locs, voxel_noise=0.1):
         super().__init__()
+        self._num_factors = num_factors
         self.register_buffer('voxel_locations', voxel_locs)
-        self.likelihood = GaussianLikelihood(precision=1./(voxel_noise ** 2))
+        self.likelihood = GaussianLikelihood(voxel_locs.shape[0],
+                                             precision=1./(voxel_noise ** 2))
 
     @property
     def type(self):
         metadata = Ty('Bl', 'Ti')
-        params = types.tensor_type(torch.float, (self._num_factors, 3)) @
-                 types.tensor_type(torch.float, (self._num_factors, 1)) @
-                 types.tensor_type(torch.float, (self._num_factors, 1))
+        params = types.tensor_type(torch.float, (self._num_factors, 3))
+        params = params @ types.tensor_type(torch.float, (self._num_factors, 1))
+        params = params @ types.tensor_type(torch.float, (self._num_factors, 1))
         cod = types.tensor_type(torch.float, (self.voxel_locations.shape[0], 1))
         return metadata @ params >> cod
 
