@@ -39,6 +39,20 @@ PAGE_WIDTH = 8.5
 PAGE_HEIGHT = 11
 FIGSIZE = (COLUMN_WIDTH, 0.25 * PAGE_HEIGHT)
 
+def radial_basis(locations, centers, log_widths):
+    """The radial basis function used as the shape for the factors"""
+    # V x 3 -> 1 x V x 3
+    locations = locations.unsqueeze(0)
+    if len(centers.shape) > 3:
+        # 1 x V x 3 -> 1 x 1 x V x 3
+        locations = locations.unsqueeze(0)
+    # S x K x 3 -> S x K x 1 x 3
+    centers = centers.unsqueeze(len(centers.shape) - 1)
+    # S x K x V x 3
+    delta2s = ((locations - centers)**2).sum(len(centers.shape) - 1)
+    # S x K  -> S x K x 1
+    log_widths = log_widths.unsqueeze(len(log_widths.shape))
+    return torch.exp(-torch.exp(torch.log(delta2s) - log_widths))
 
 class FMriActivationBlock(object):
     def __init__(self, zscore=True, zscore_by_rest=False, smooth=None):
