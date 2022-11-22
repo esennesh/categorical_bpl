@@ -592,7 +592,7 @@ class MolecularDecoder(TypedModel):
 class NtfaSubjectEmbedding(TypedModel):
     def __init__(self, subject_embed_dim=2):
         super().__init__()
-        self._dim = self._subject_embed_dim
+        self._dim = subject_embed_dim
 
     @property
     def type(self):
