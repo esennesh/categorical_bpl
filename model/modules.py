@@ -7,6 +7,7 @@ import pyro.distributions as dist
 import pyro.nn as pnn
 from pyro.poutine.condition_messenger import ConditionMessenger
 import pyro.poutine.runtime as runtime
+import scipy
 import torch.distributions
 import torch.distributions.constraints as constraints
 import torch.nn as nn
