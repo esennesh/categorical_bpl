@@ -712,6 +712,24 @@ class TfaLikelihood(TypedModel):
         self.register_buffer('voxel_locations', voxel_locs)
         self.likelihood = GaussianLikelihood(precision=1./(voxel_noise ** 2))
 
+    @property
+    def type(self):
+        metadata = Ty('Bl', 'Ti')
+        params = types.tensor_type(torch.float, (self._num_factors, 3)) @
+                 types.tensor_type(torch.float, (self._num_factors, 1)) @
+                 types.tensor_type(torch.float, (self._num_factors, 1))
+        cod = types.tensor_type(torch.float, (self.voxel_locations.shape[0], 1))
+        return metadata @ params >> cod
+
+    @property
+    def effect(self):
+        return self.likelihood.effect
+
+    @property
+    def name(self):
+        name = 'p(%s \\mid \\mu, \\rho, W)' % self.likelihood.effect[0]
+        return '$%s$' % name
+
     def forward(self, blocks, times, centers, log_widths, weights):
         times = torch.arange(times.shape[0], device=self.voxel_locations.device)
         blocks = blocks.unique(return_inverse=True)
