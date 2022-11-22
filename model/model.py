@@ -190,7 +190,7 @@ class DaggerOperadicModel(OperadicModel):
         )
 
     @pnn.pyro_method
-    def model(self, observations=None):
+    def model(self, observations=None, **kwargs):
         morphism, observations, data = super().model(observations)
 
         if observations is not None:
@@ -203,7 +203,7 @@ class DaggerOperadicModel(OperadicModel):
         return morphism, output
 
     @pnn.pyro_method
-    def guide(self, observations=None):
+    def guide(self, observations=None, **kwargs):
         morphism, data = super().guide(observations)
 
         wires = WIRING_FUNCTOR(morphism.dagger())
