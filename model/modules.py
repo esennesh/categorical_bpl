@@ -660,6 +660,51 @@ class NtfaFactors(TypedModel):
 
         return centers, log_widths
 
+class NtfaWeights(TypedModel):
+    def __init__(self, num_factors, subject_embed_dim=2, task_embed_dim=2):
+        super().__init__()
+        self._num_factors = num_factors
+        self._subject_embed_dim = subject_embed_dim
+        self._task_embed_dim = task_embed_dim
+
+        embed_dim = self._subject_embed_dim + self._task_embed_dim
+        self.weights_embedding = nn.Sequential(
+            nn.Linear(embed_dim, embed_dim * 2), nn.PReLU(),
+            nn.Linear(embed_dim * 2, embed_dim * 4), nn.PReLU(),
+            nn.Linear(embed_dim * 4, self._num_factors * 2),
+        )
+
+    @property
+    def type(self):
+        dom = Ty('Su', 'Ti') @ types.tensor_type(torch.float,
+                                                 self._subject_embed_dim) @
+              types.tensor_type(torch.float, self._task_embed_dim)
+
+        cod = types.tensor_type(torch.float, (self._num_factors, 1))
+        return dom >> cod
+
+    @property
+    def effect(self):
+        return ['$W$']
+
+    @property
+    def name(self):
+        embedding = 'Z^{p}_{%d}, Z^{s}_{%d}'
+        embedding = embed_name % (self._subject_embed_dim, self._task_embed_dim)
+        name = 'p(W \\mid %s)' % embedding
+        return '$%s$' % name
+
+    def forward(self, blocks, times, subject_embed, task_embed):
+        joint_embed = torch.cat((subject_embed, task_embed), dim=-1)
+        weights = self.weights_embedding(joint_embed).unsqueeze(dim=2).expand(
+            -1, joint_embed.shape[1], len(times), self._num_factors, 2
+        )
+        weights_loc, weights_log_scale = weights.unbind(dim=-1)
+
+        weights_dist = dist.Normal(weights_loc, weights_log_scale.exp())
+        return pyro.sample('$W_{%s,%s}$' % (blocks, [t.item() for t in times]),
+                           weights_dist.to_event(1))
+
 class Encoder(TypedModel):
     def __init__(self, in_dims, out_dims, latents, hidden_dim, incoder_cls,
                  normalizer_layer=nn.LayerNorm):
