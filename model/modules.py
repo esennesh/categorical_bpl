@@ -712,7 +712,7 @@ class NtfaFactors(TypedModel):
             dim=-1
         )
         factor_log_scale = torch.cat(
-            (torch.log(center_sigma / coefficient).expand(
+            (torch.log(center_scale / coefficient).expand(
                 self._num_factors, 3
             ), torch.zeros(self._num_factors, 1)),
             dim=-1
@@ -726,8 +726,8 @@ class NtfaFactors(TypedModel):
     @property
     def type(self):
         dom = Ty('Su') @ types.tensor_type(torch.float, self._subject_embed_dim)
-        cod = types.tensor_type(torch.float, (self._num_factors, 3)) @
-              types.tensor_type(torch.float, (self._num_factors, 1))
+        cod = types.tensor_type(torch.float, (self._num_factors, 3))
+        cod = cod @ types.tensor_type(torch.float, (self._num_factors, 1))
         return dom >> cod
 
     @property
