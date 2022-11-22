@@ -3,7 +3,7 @@ import os.path as path
 import torch.utils.data
 from torchvision import datasets, transforms
 from base import BaseDataLoader, BaseTargetBatchDataLoader
-from utils import mol_utils
+from utils import fmri_utils, mol_utils, tardb
 
 class IndexedMnist(datasets.MNIST):
     def __getitem__(self, index):
@@ -109,3 +109,11 @@ class ZincMolecularDataLoader(BaseDataLoader):
     def __init__(self, csv, batch_size, max_length=120, shuffle=True, validation_split=0.0, num_workers=1, training=True):
         dataset = mol_utils.Zinc15Dataset(csv, max_len=max_length)
         super().__init__(dataset, batch_size, shuffle, validation_split, num_workers)
+
+class MiniPiemanDataLoader(BaseDataLoader):
+    def __init__(self, data_tar, batch_size, shuffle=None, validation_split=0.0, num_workers=1, training=True):
+        self.data_tar = data_tar
+        self.dataset = tardb.FmriTarDataset(data_tar)
+        self.voxel_locations = self.dataset.voxel_locations
+        super().__init__(self.dataset.data(), batch_size, shuffle,
+                         validation_split, num_workers)
