@@ -616,6 +616,27 @@ class NtfaSubjectEmbedding(TypedModel):
                                                          subject in subjects])
         return pyro.sample(embed_name, normal)
 
+class NtfaSubjectNull(TypedModel):
+    def __init__(self, subject_embed_dim=2):
+        super().__init__()
+        self._dim = self._subject_embed_dim
+
+    @property
+    def type(self):
+        return Ty('Su') >> types.tensor_type(torch.float, self._dim)
+
+    @property
+    def effect(self):
+        return []
+
+    @property
+    def name(self):
+        return '$Z^{p}_{%d}$' % self._dim
+
+    def forward(self, subjects):
+        return self._batch.new_zeros(torch.Size((self._batch.shape[0],
+                                                 self._dim)))
+
 class NtfaFactors(TypedModel):
     def __init__(self, num_factors, voxel_locs, subject_embed_dim=2,
                  task_embed_dim=2, volume=False):
