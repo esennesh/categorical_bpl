@@ -637,6 +637,33 @@ class NtfaSubjectNull(TypedModel):
         return self._batch.new_zeros(torch.Size((self._batch.shape[0],
                                                  self._dim)))
 
+class NtfaTaskEmbedding(TypedModel):
+    def __init__(self, task_embed_dim=2):
+        super().__init__()
+        self._dim = task_embed_dim
+
+    @property
+    def type(self):
+        return Ty('Ta') >> types.tensor_type(torch.float, self._dim)
+
+    @property
+    def effect(self):
+        return ['Z^{s}_{%d}' % self._dim]
+
+    @property
+    def name(self):
+        return '$p(Z^{s}_{%d}; \\mathrm{Ta})$' % self._dim
+
+    def forward(self, tasks):
+        z_loc = self._batch.new_zeros(torch.Size((self._batch.shape[0],
+                                                  self._dim)))
+        z_scale = self._batch.new_ones(torch.Size((self._batch.shape[0],
+                                                   self._dim)))
+        normal = dist.Normal(z_loc, z_scale).to_event(1)
+        embed_name = '$Z^{s}_{(%d, %s)}$' % (self._dim, [task.item() for
+                                                         task in tasks])
+        return pyro.sample(embed_name, normal)
+
 class NtfaFactors(TypedModel):
     def __init__(self, num_factors, voxel_locs, subject_embed_dim=2,
                  task_embed_dim=2, volume=False):
