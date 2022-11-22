@@ -705,6 +705,20 @@ class NtfaWeights(TypedModel):
         return pyro.sample('$W_{%s,%s}$' % (blocks, [t.item() for t in times]),
                            weights_dist.to_event(1))
 
+class TfaLikelihood(TypedModel):
+    def __init__(self, voxel_locs, voxel_noise=0.1):
+        super().__init__()
+        self.register_buffer('voxel_locations', voxel_locs)
+        self.likelihood = GaussianLikelihood(precision=1./(voxel_noise ** 2))
+
+    def forward(self, blocks, times, centers, log_widths, weights):
+        times = torch.arange(times.shape[0], device=self.voxel_locations.device)
+        blocks = blocks.unique(return_inverse=True)
+
+        factors = fmri_utils.radial_basis(locations, centers, log_widths)
+        means = (weights @ factors)[:, blocks, times]
+        return self.likelihood(means)
+
 class Encoder(TypedModel):
     def __init__(self, in_dims, out_dims, latents, hidden_dim, incoder_cls,
                  normalizer_layer=nn.LayerNorm):
