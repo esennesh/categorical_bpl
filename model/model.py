@@ -590,6 +590,20 @@ class NtfaOperadicModel(AsviOperadicModel):
 
         embed_dims = list(utils.powers_of(2, 2, 16))
         for subject_dim, task_dim in itertools.combinations(embed_dims, 2):
+            embed = NtfaSubjectEmbedding(subject_dim)
+            generators.append(cart_closed.Box(embed.name, embed.type.left,
+                                              embed.type.right, embed))
+            embed = NtfaSubjectNull(subject_dim)
+            generators.append(cart_closed.Box(embed.name, embed.type.left,
+                                              embed.type.right, embed))
+
+            embed = NtfaTaskEmbedding(task_dim)
+            generators.append(cart_closed.Box(embed.name, embed.type.left,
+                                              embed.type.right, embed))
+            embed = NtfaTaskNull(task_dim)
+            generators.append(cart_closed.Box(embed.name, embed.type.left,
+                                              embed.type.right, embed))
+
             factors = NtfaFactors(num_factors, voxel_locs, subject_dim,
                                   task_dim, volume=True)
             generators.append(cart_closed.Box(factors.name, factors.type.left,
