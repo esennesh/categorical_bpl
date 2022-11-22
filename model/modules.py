@@ -588,6 +588,78 @@ class MolecularDecoder(TypedModel):
         logits_categorical = dist.OneHotCategorical(probs=probs).to_event(1)
         return pyro.sample('$%s$' % self._smiles_name, logits_categorical)
 
+class NtfaFactors(TypedModel):
+    def __init__(self, num_factors, voxel_locs, subject_embed_dim=2,
+                 task_embed_dim=2, volume=False):
+        super().__init__()
+        self._num_factors = num_factors
+        self._subject_embed_dim = subject_embed_dim
+
+        center, center_scale = fmri_utils.brain_centroid(voxel_locs)
+        center_scale = center_scale.sum(dim=1)
+        hull = scipy.spatial.ConvexHull(voxel_locs)
+        coefficient = 1.
+        if volume:
+            coefficient = np.cbrt(hull.volume / self._num_factors)
+
+        embed_dim = self._subject_embed_dim
+        self.factors_embedding = nn.Sequential(
+            nn.Linear(embed_dim, embed_dim * 2), nn.PReLU(),
+            nn.Linear(embed_dim * 2, embed_dim * 4), nn.PReLU(),
+            nn.Linear(embed_dim * 4, self._num_factors * 4 * 2),
+        )
+        factor_loc = torch.cat(
+            (center.expand(self._num_factors, 3),
+             torch.ones(self._num_factors, 1) * np.log(coefficient)),
+            dim=-1
+        )
+        factor_log_scale = torch.cat(
+            (torch.log(center_sigma / coefficient).expand(
+                self._num_factors, 3
+            ), torch.zeros(self._num_factors, 1)),
+            dim=-1
+        )
+        self.factors_embedding[-1].bias = nn.Parameter(
+            torch.stack((factor_loc, factor_log_scale), dim=-1).reshape(
+                self._num_factors * 4 * 2
+            )
+        )
+
+    @property
+    def type(self):
+        dom = Ty('Su') @ types.tensor_type(torch.float, self._subject_embed_dim)
+        cod = types.tensor_type(torch.float, (self._num_factors, 3)) @
+              types.tensor_type(torch.float, (self._num_factors, 1))
+        return dom >> cod
+
+    @property
+    def effect(self):
+        return ['$\\mu$', '$\\rho$']
+
+    @property
+    def name(self):
+        embed_name = 'Z^{p}_{%d}' % self._subject_embed_dim
+        name = 'p(\\mu, \\rho \\mid %s)' % embed_name
+        return '$%s$' % name
+
+    def forward(self, subjects, subject_embed):
+        factors = self.factors_embedding(subject_embed).reshape(
+            -1, self._num_factors, 4, 2
+        )
+        centers, log_widths = factors[:, :, :3], factors[:, :, 3]
+        centers_loc, centers_log_scale = centers.unbind(dim=-1)
+        log_widths_loc, log_widths_log_scale = log_widths.unbind(dim=-1)
+
+        centers_dist = dist.Normal(centers_loc, centers_log_scale.exp())
+        centers = pyro.sample('$\\mu_{%s}$' % subjects,
+                              centers_dist.to_event(1))
+        log_widths_dist = dist.Normal(log_widths_loc,
+                                      log_widths_log_scale.exp())
+        log_widths = pyro.sample('$\\rho_{%s}$' % subjects,
+                                 log_widths_dist.to_event(1))
+
+        return centers, log_widths
+
 class Encoder(TypedModel):
     def __init__(self, in_dims, out_dims, latents, hidden_dim, incoder_cls,
                  normalizer_layer=nn.LayerNorm):
