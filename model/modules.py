@@ -14,6 +14,7 @@ import torch.nn.functional as F
 
 from base import TypedModel
 import base.base_type as types
+import utils.fmri_utils as fmri_utils
 
 class DiagonalGaussian(TypedModel):
     def __init__(self, dim, latent_name=None, likelihood=False):
