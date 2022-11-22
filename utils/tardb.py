@@ -10,7 +10,8 @@ import torch
 import torch.utils.data
 import webdataset as wds
 from ordered_set import OrderedSet
-from . import utils
+
+from utils import fmri_utils
 
 def unique_properties(key_func, data):
     results = []
@@ -48,7 +49,7 @@ class FmriTarDataset:
         self._path = path
         self._num_times = self._metadata['num_times']
 
-        self._dataset = wds.WebDataset(path, length=self._num_times)
+        self._dataset = wds.WebDataset(path).with_length(self._num_times)
         self._dataset = self._dataset.decode().rename(
             activations='pth', t='time.index', block='block.id',
             __key__='__key__'
@@ -92,8 +93,10 @@ class FmriTarDataset:
         if batch_size:
             result = result.batched(batch_size, _collation_fn)
         db_path = self._path + '_' + str(hash(selector)) + '.db'
-        return result.compose(wds.DBCache, db_path, result_len,
-                              verbose=self._verbose_caching)
+        return result.lmdb_cached(db_path)
+
+    def __len__(self):
+        return self._num_times
 
     def __getitem__(self, b):
         block = self.blocks[b]
@@ -106,8 +109,9 @@ class FmriTarDataset:
         subjects = OrderedSet([s for s in self.subjects()
                                if s not in held_out_subjects])
         tasks = OrderedSet([t for t in self.tasks() if t not in held_out_tasks])
-        diagonals = frozenset(utils.striping_diagonal_indices(len(subjects),
-                                                              len(tasks)))
+        diagonals = frozenset(fmri_utils.striping_diagonal_indices(
+            len(subjects), len(tasks)
+        ))
         def result(b):
             if 'block' in b:
                 subject = self._blocks[b['block']]['subject']
