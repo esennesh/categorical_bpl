@@ -1,0 +1,48 @@
+{
+    "name": "MiniPieman_Ntfa_AsviOperad",
+    "n_gpu": 1,
+
+    "arch": {
+        "type": "NtfaOperadicModel",
+        "args": {
+          "num_factors": 100
+        }
+    },
+    "data_loader": {
+        "type": "MiniPiemanDataLoader",
+        "args":{
+            "data_tar": "data/mini_pieman.tar",
+            "batch_size": 512,
+            "num_workers": 2
+        }
+    },
+    "optimizer": {
+        "type": "Adam",
+        "args":{
+            "optim_args": {
+              "lr": 5e-4,
+              "weight_decay": 0,
+              "amsgrad": true
+            }
+        }
+    },
+    "lr_scheduler": {
+        "type": "ReduceLROnPlateau",
+        "args": {
+            "patience": 10,
+            "factor": 0.1
+        }
+    },
+    "trainer": {
+        "epochs": 5000,
+
+        "save_dir": "saved/",
+        "save_period": 500,
+        "verbosity": 2,
+
+        "monitor": "min val_loss",
+        "early_stop": 500,
+
+        "tensorboard": true
+    }
+}
