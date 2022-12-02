@@ -615,6 +615,7 @@ class NtfaOperadicModel(AsviOperadicModel):
         tfa = TfaLikelihood(voxel_locs)
         generators.append(cart_closed.Box(tfa.name, tfa.type.left,
                                           tfa.type.right, tfa))
+        super().__init__(generators, data_space=(voxel_locs.shape[0], 1))
 
 class MolecularVaeOperadicModel(DaggerOperadicModel):
     def __init__(self, max_len=120, guide_hidden_dim=256, charset_len=34):
