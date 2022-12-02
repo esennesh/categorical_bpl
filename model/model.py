@@ -592,30 +592,44 @@ class NtfaOperadicModel(AsviOperadicModel):
         for subject_dim, task_dim in itertools.combinations(embed_dims, 2):
             embed = NtfaSubjectEmbedding(subject_dim)
             generators.append(cart_closed.Box(embed.name, embed.type.left,
-                                              embed.type.right, embed))
+                                              embed.type.right, embed,
+                                              data={'effect': embed.effect}))
             embed = NtfaSubjectNull(subject_dim)
             generators.append(cart_closed.Box(embed.name, embed.type.left,
-                                              embed.type.right, embed))
+                                              embed.type.right, embed,
+                                              data={'effect': embed.effect}))
 
             embed = NtfaTaskEmbedding(task_dim)
             generators.append(cart_closed.Box(embed.name, embed.type.left,
-                                              embed.type.right, embed))
+                                              embed.type.right, embed,
+                                              data={'effect': embed.effect}))
             embed = NtfaTaskNull(task_dim)
             generators.append(cart_closed.Box(embed.name, embed.type.left,
-                                              embed.type.right, embed))
+                                              embed.type.right, embed,
+                                              data={'effect': embed.effect}))
 
             factors = NtfaFactors(num_factors, voxel_locs, subject_dim,
                                   task_dim, volume=True)
             generators.append(cart_closed.Box(factors.name, factors.type.left,
-                                              factors.type.right, factors))
+                                              factors.type.right, factors,
+                                              data={'effect': factors.effect}))
 
             weights = NtfaWeights(num_factors, subject_dim, task_dim)
             generators.append(cart_closed.Box(weights.name, weights.type.left,
-                                              weights.type.right, weights))
-        tfa = TfaLikelihood(voxel_locs)
+                                              weights.type.right, weights,
+                                              data={'effect': weights.effect}))
+        tfa = TfaLikelihood(num_factors, voxel_locs)
         generators.append(cart_closed.Box(tfa.name, tfa.type.left,
-                                          tfa.type.right, tfa))
+                                          tfa.type.right, tfa,
+                                          data={'effect': tfa.effect}))
+
         super().__init__(generators, data_space=(voxel_locs.shape[0], 1))
+        self.likelihood = tfa
+
+    @property
+    def wiring_diagram(self):
+        return wiring.Box('', Ty('Bl', 'Su', 'Ta', 'Ti'), self.data_space,
+                          data={'effect': [self.likelihood.effect]})
 
 class MolecularVaeOperadicModel(DaggerOperadicModel):
     def __init__(self, max_len=120, guide_hidden_dim=256, charset_len=34):
