@@ -588,8 +588,8 @@ class NtfaOperadicModel(AsviOperadicModel):
         generators.append(cart_closed.Box('copy_Ti', Ty('Ti'), Ty('Ti', 'Ti'),
                                           lambda zs: (zs, zs)))
 
-        embed_dims = list(utils.powers_of(2, 2, 16))
-        for subject_dim, task_dim in itertools.combinations(embed_dims, 2):
+        embed_dims = list(util.powers_of(2, 2, 16))
+        for subject_dim, task_dim in itertools.product(embed_dims, repeat=2):
             embed = NtfaSubjectEmbedding(subject_dim)
             generators.append(cart_closed.Box(embed.name, embed.type.left,
                                               embed.type.right, embed,
