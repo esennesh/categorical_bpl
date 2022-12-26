@@ -641,13 +641,15 @@ class NtfaSubjectNull(TypedModel):
                                                  self._dim)))
 
 class NtfaTaskEmbedding(TypedModel):
+    tasks = []
+
     def __init__(self, task_embed_dim=2):
         super().__init__()
         self._dim = task_embed_dim
 
     @property
     def type(self):
-        return Ty('Ta') >> types.tensor_type(torch.float, self._dim)
+        return Ty() >> types.tensor_type(torch.float, self._dim)
 
     @property
     def effect(self):
