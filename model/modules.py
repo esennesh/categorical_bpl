@@ -763,6 +763,9 @@ class NtfaFactors(TypedModel):
         return centers, log_widths
 
 class NtfaWeights(TypedModel):
+    blocks = []
+    times = []
+
     def __init__(self, num_factors, subject_embed_dim=2, task_embed_dim=2):
         super().__init__()
         self._num_factors = num_factors
@@ -778,8 +781,7 @@ class NtfaWeights(TypedModel):
 
     @property
     def type(self):
-        dom = Ty('Bl', 'Ti') @ types.tensor_type(torch.float,
-                                                 self._subject_embed_dim)
+        dom = types.tensor_type(torch.float, self._subject_embed_dim)
         dom = dom @ types.tensor_type(torch.float, self._task_embed_dim)
 
         cod = types.tensor_type(torch.float, (self._num_factors, 1))
@@ -796,7 +798,10 @@ class NtfaWeights(TypedModel):
         name = 'p(W \\mid %s)' % embedding
         return '$%s$' % name
 
-    def forward(self, blocks, times, subject_embed, task_embed):
+    def forward(self, subject_embed, task_embed):
+        blocks = NtfaWeights.blocks
+        times = NTfaWeights.times
+
         joint_embed = torch.cat((subject_embed, task_embed), dim=-1)
         weights = self.weights_embedding(joint_embed).unsqueeze(dim=2).expand(
             -1, joint_embed.shape[1], len(times), self._num_factors, 2
