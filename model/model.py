@@ -628,8 +628,15 @@ class NtfaOperadicModel(AsviOperadicModel):
 
     @property
     def wiring_diagram(self):
-        return wiring.Box('', Ty('Bl', 'Su', 'Ta', 'Ti'), self.data_space,
+        return wiring.Box('', Ty(), self.data_space,
                           data={'effect': [self.likelihood.effect]})
+
+    @pnn.pyro_method
+    def guide(self, observations=None, target={}):
+        NtfaWeights.blocks = target['block']
+        NtfaWeights.times = target['t']
+
+        super().guide(observations=observations)
 
 class MolecularVaeOperadicModel(DaggerOperadicModel):
     def __init__(self, max_len=120, guide_hidden_dim=256, charset_len=34):
