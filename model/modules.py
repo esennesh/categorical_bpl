@@ -822,12 +822,11 @@ class TfaLikelihood(TypedModel):
 
     @property
     def type(self):
-        metadata = Ty('Bl', 'Ti')
         params = types.tensor_type(torch.float, (self._num_factors, 3))
         params = params @ types.tensor_type(torch.float, (self._num_factors, 1))
         params = params @ types.tensor_type(torch.float, (self._num_factors, 1))
         cod = types.tensor_type(torch.float, (self.voxel_locations.shape[0], 1))
-        return metadata @ params >> cod
+        return params >> cod
 
     @property
     def effect(self):
@@ -838,9 +837,10 @@ class TfaLikelihood(TypedModel):
         name = 'p(%s \\mid \\mu, \\rho, W)' % self.likelihood.effect[0]
         return '$%s$' % name
 
-    def forward(self, blocks, times, centers, log_widths, weights):
-        times = torch.arange(times.shape[0], device=self.voxel_locations.device)
-        blocks = blocks.unique(return_inverse=True)
+    def forward(self, centers, log_widths, weights):
+        times = torch.arange(NtfaWeights.times.shape[0],
+                             device=self.voxel_locations.device)
+        blocks = NtfaWeights.blocks.unique(return_inverse=True)
 
         factors = fmri_utils.radial_basis(locations, centers, log_widths)
         means = (weights @ factors)[:, blocks, times]
