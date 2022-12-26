@@ -591,13 +591,15 @@ class MolecularDecoder(TypedModel):
         return pyro.sample('$%s$' % self._smiles_name, logits_categorical)
 
 class NtfaSubjectEmbedding(TypedModel):
+    subjects = []
+
     def __init__(self, subject_embed_dim=2):
         super().__init__()
         self._dim = subject_embed_dim
 
     @property
     def type(self):
-        return Ty('Su') >> types.tensor_type(torch.float, self._dim)
+        return Ty() >> types.tensor_type(torch.float, self._dim)
 
     @property
     def effect(self):
