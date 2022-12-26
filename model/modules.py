@@ -729,7 +729,7 @@ class NtfaFactors(TypedModel):
 
     @property
     def type(self):
-        dom = Ty('Su') @ types.tensor_type(torch.float, self._subject_embed_dim)
+        dom = types.tensor_type(torch.float, self._subject_embed_dim)
         cod = types.tensor_type(torch.float, (self._num_factors, 3))
         cod = cod @ types.tensor_type(torch.float, (self._num_factors, 1))
         return dom >> cod
@@ -744,7 +744,7 @@ class NtfaFactors(TypedModel):
         name = 'p(\\mu, \\rho \\mid %s)' % embed_name
         return '$%s$' % name
 
-    def forward(self, subjects, subject_embed):
+    def forward(self, subject_embed):
         factors = self.factors_embedding(subject_embed).reshape(
             -1, self._num_factors, 4, 2
         )
@@ -753,11 +753,11 @@ class NtfaFactors(TypedModel):
         log_widths_loc, log_widths_log_scale = log_widths.unbind(dim=-1)
 
         centers_dist = dist.Normal(centers_loc, centers_log_scale.exp())
-        centers = pyro.sample('$\\mu_{%s}$' % subjects,
+        centers = pyro.sample('$\\mu_{%s}$' % NtfaSubjectEmbedding.subjects,
                               centers_dist.to_event(1))
         log_widths_dist = dist.Normal(log_widths_loc,
                                       log_widths_log_scale.exp())
-        log_widths = pyro.sample('$\\rho_{%s}$' % subjects,
+        log_widths = pyro.sample('$\\rho_{%s}$' % NtfaSubjectEmbedding.subjects,
                                  log_widths_dist.to_event(1))
 
         return centers, log_widths
