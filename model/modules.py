@@ -626,7 +626,7 @@ class NtfaSubjectNull(TypedModel):
 
     @property
     def type(self):
-        return Ty('Su') >> types.tensor_type(torch.float, self._dim)
+        return Ty() >> types.tensor_type(torch.float, self._dim)
 
     @property
     def effect(self):
