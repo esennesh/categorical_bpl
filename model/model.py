@@ -525,6 +525,54 @@ class AsviOperadicModel(OperadicModel):
 
         return morphism
 
+class DeepGenerativeOperadicModel(AsviOperadicModel):
+    def __init__(self, data_dim=28*28, hidden_dim=8, guide_hidden_dim=256,
+                 **kwargs):
+        self._data_dim = data_dim
+
+        # Build up a bunch of torch.Sizes for the powers of two between
+        # hidden_dim and data_dim.
+        dims = list(util.powers_of(2, hidden_dim, data_dim // 4)) + [data_dim]
+        dims.sort()
+
+        generators = []
+        for dim_a, dim_b in itertools.combinations(dims, 2):
+            lower, higher = sorted([dim_a, dim_b])
+            # Construct the decoder and encoder
+            if higher == self._data_dim:
+                decoder = DensityDecoder(lower, higher,
+                                         ContinuousBernoulliModel,
+                                         convolve=True)
+            else:
+                decoder = DensityDecoder(lower, higher, DiagonalGaussian)
+            data = {'effect': decoder.effect}
+            generator = cart_closed.Box(decoder.name, decoder.type.left,
+                                        decoder.type.right, decoder, data=data)
+            generators.append(generator)
+
+        obs = set()
+        for generator in generators:
+            ty = generator.dom >> generator.cod
+            obs = obs | unification.base_elements(ty)
+
+        global_elements = []
+        no_prior_dims = [self._data_dim]
+        for ob in obs:
+            dim = types.type_size(str(ob))
+            if dim in no_prior_dims:
+                continue
+
+            space = types.tensor_type(torch.float, dim)
+            prior = StandardNormal(dim)
+            name = '$p(%s)$' % prior.effects
+            effect = {'effect': prior.effect, 'dagger_effect': []}
+            global_element = cart_closed.Box(name, Ty(), space, prior,
+                                             data=effect)
+            global_elements.append(global_element)
+
+        super().__init__(generators, global_elements, data_dim,
+                         guide_hidden_dim, **kwargs)
+
 class MolecularVaeOperadicModel(DaggerOperadicModel):
     def __init__(self, max_len=120, guide_hidden_dim=256, charset_len=34):
         hidden_dims = [196, 292, 435]
