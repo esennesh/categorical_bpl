@@ -99,9 +99,19 @@ class Trainer(BaseTrainer):
         self.model.train()
         self.train_metrics.reset()
         current = 0
-        for batch_idx, (data, target) in enumerate(self.data_loader):
+        for batch_idx, batch in enumerate(self.data_loader):
+            if len(batch) == 2:
+                data, target = batch
+            elif len(batch) == 3:
+                data, target, indices = batch
             data, target = data.to(self.device), target.to(self.device)
-            loss = svi.step(observations=data) / data.shape[0]
+            if len(batch) == 3:
+                indices = indices.to(self.device)
+
+            kwargs = {}
+            if len(batch) == 3:
+                kwargs = {'index': indices}
+            loss = svi.step(observations=data, valid=False, **kwargs) / data.shape[0]
 
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
             self.train_metrics.update('loss', loss)
@@ -145,10 +155,21 @@ class Trainer(BaseTrainer):
         self.model.eval()
         self.valid_metrics.reset()
         with torch.no_grad():
-            for batch_idx, (data, target) in enumerate(self.valid_data_loader):
+            current = 0
+            for batch_idx, batch in enumerate(self.data_loader):
+                if len(batch) == 2:
+                    data, target = batch
+                elif len(batch) == 3:
+                    data, target, indices = batch
                 data, target = data.to(self.device), target.to(self.device)
-                loss = svi.evaluate_loss(observations=data) / data.shape[0]
-                imps.sample(observations=data)
+                if len(batch) == 3:
+                    indices = indices.to(self.device)
+
+                kwargs = {}
+                if len(batch) == 3:
+                    kwargs = {'index': indices}
+                loss = svi.evaluate_loss(observations=data, valid=True, **kwargs) / data.shape[0]
+                imps.sample(observations=data, valid=True, **kwargs)
                 log_likelihood = imps.get_log_likelihood().item() / data.shape[0]
                 log_marginal = imps.get_log_normalizer().item() / data.shape[0]
 
@@ -157,6 +178,7 @@ class Trainer(BaseTrainer):
                 self.valid_metrics.update('log_likelihood', log_likelihood)
                 self.valid_metrics.update('log_marginal', log_marginal)
 
+                current += len(target)
                 for met in self.metric_ftns:
                     metric_val = met(self.model.model, self.model.guide, data, target, 4)
                     self.valid_metrics.update(met.__name__, metric_val)
