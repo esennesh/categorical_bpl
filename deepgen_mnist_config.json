@@ -1,0 +1,51 @@
+{
+    "name": "Mnist_DeepGenerativeOperad",
+    "n_gpu": 1,
+
+    "arch": {
+        "type": "DeepGenerativeOperadicModel",
+        "args": {
+          "data_dim": 784,
+          "hidden_dim": 16
+        }
+    },
+    "data_loader": {
+        "type": "MnistTargetBatchDataLoader",
+        "args":{
+            "data_dir": "data/",
+            "batch_size": 512,
+            "shuffle": true,
+            "validation_split": 0.0,
+            "num_workers": 2,
+            "indexed": true
+        }
+    },
+    "optimizer": {
+        "type": "Adam",
+        "args":{
+            "optim_args": {
+              "lr": 1e-3,
+              "weight_decay": 0,
+              "amsgrad": true
+            }
+        }
+    },
+    "lr_scheduler": {
+        "type": "ReduceLROnPlateau",
+        "args": {
+            "patience": 10,
+            "factor": 0.1
+        }
+    },
+    "trainer": {
+        "epochs": 5000,
+
+        "save_dir": "saved/",
+        "save_period": 100,
+        "verbosity": 2,
+
+        "monitor": "min val_loss",
+
+        "tensorboard": true
+    }
+}
