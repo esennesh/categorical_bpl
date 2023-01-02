@@ -127,15 +127,11 @@ class OperadicModel(BaseModel):
 
         return morphism, data
 
-    def forward(self, observations=None):
-        if observations is not None:
-            trace = pyro.poutine.trace(self.guide).get_trace(
-                observations=observations
-            )
-            return pyro.poutine.replay(self.model, trace=trace)(
-                observations=observations
-            )
-        return self.model(observations=None)
+    def forward(self, **kwargs):
+        if 'observations' in kwargs and kwargs['observations'] is not None:
+            trace = pyro.poutine.trace(self.guide).get_trace(**kwargs)
+            return pyro.poutine.replay(self.model, trace=trace)(**kwargs)
+        return self.model(**kwargs)
 
 class DaggerOperadicModel(OperadicModel):
     def __init__(self, generators, global_elements=[], data_space=(784,),
