@@ -5,6 +5,11 @@ from torchvision import datasets, transforms
 from base import BaseDataLoader, BaseTargetBatchDataLoader
 from utils import mol_utils
 
+class IndexedMnist(datasets.MNIST):
+    def __getitem__(self, index):
+        img, target = super().__getitem__(index)
+        return (img, target, index)
+
 class MnistDataLoader(BaseDataLoader):
     """
     MNIST data loading demo using BaseDataLoader
