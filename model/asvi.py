@@ -42,6 +42,12 @@ class AsviGuide(GuideMessenger):
             torch.zeros(self._length, device=v.device)
         )
 
+    def get_alphas(self, name):
+        return self._prior_logits[name][self._indices]
+
+    def get_lambdas(self, name, key):
+        return self._mean_fields[name][key][self._indices]
+
     def get_posterior(self, name, prior):
         event_shape = prior.event_shape
         if isinstance(prior, Independent):
@@ -53,11 +59,11 @@ class AsviGuide(GuideMessenger):
         if name not in self:
             self.initialize_parameter(name, **parameters)
 
-        alphas = torch.sigmoid(self._prior_logits[name][self._indices])
+        alphas = torch.sigmoid(self.get_alphas(name))
         alphas = alphas.reshape(alphas.shape + (1,) * len(event_shape))
         for k, v in parameters.items():
             transform = transform_to(prior.arg_constraints[k])
-            lam = transform(self._mean_fields[name][k][self._indices])
+            lam = transform(self.get_lambdas(name, k))
 
             parameters[k] = alphas * v + (1 - alphas) * lam
 
