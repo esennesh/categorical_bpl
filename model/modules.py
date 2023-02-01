@@ -653,7 +653,23 @@ class Encoder(TypedModel):
                 d += dim
         return result
 
-class DenseIncoder(nn.Module):
+class Incoder(nn.Module):
+    @property
+    def in_features(self):
+        return self._in_features
+
+    @property
+    def out_features(self):
+        return self._out_features
+
+    def get_extra_state(self):
+        return {'type': self.__class__.__name__, 'in': self.in_features,
+                'out': self.out_features}
+
+    def set_extra_state(self, state):
+        pass
+
+class DenseIncoder(Incoder):
     def __init__(self, in_features, out_features, normalizer_cls=nn.LayerNorm):
         super().__init__()
         self.dense = nn.Sequential(
@@ -661,11 +677,14 @@ class DenseIncoder(nn.Module):
             normalizer_cls(out_features), nn.PReLU(),
             nn.Linear(out_features, out_features),
         )
+        self._in_features = in_features
+        self._out_features = out_features
+
 
     def forward(self, features):
         return self.dense(features)
 
-class ConvIncoder(nn.Module):
+class ConvIncoder(Incoder):
     def __init__(self, in_features, out_features, normalizer_cls=nn.LayerNorm):
         super().__init__()
         self._in_side = int(np.sqrt(in_features))
@@ -681,6 +700,8 @@ class ConvIncoder(nn.Module):
             normalizer_cls(out_features), nn.PReLU(),
             nn.Linear(out_features, out_features)
         )
+        self._in_features = in_features
+        self._out_features = out_features
 
     def forward(self, features):
         features = features.reshape(-1, 1, self._in_side, self._in_side)
