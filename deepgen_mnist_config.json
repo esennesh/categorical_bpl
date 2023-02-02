@@ -6,7 +6,8 @@
         "type": "DeepGenerativeOperadicModel",
         "args": {
           "data_dim": 784,
-          "hidden_dim": 16
+          "hidden_dim": 16,
+          "amortized": true
         }
     },
     "data_loader": {
@@ -15,7 +16,7 @@
             "data_dir": "data/",
             "batch_size": 512,
             "shuffle": true,
-            "validation_split": 0.0,
+            "validation_split": 0.1,
             "num_workers": 2,
             "indexed": true
         }
@@ -38,7 +39,7 @@
         }
     },
     "trainer": {
-        "epochs": 5000,
+        "epochs": 1000,
 
         "save_dir": "saved/",
         "save_period": 100,
