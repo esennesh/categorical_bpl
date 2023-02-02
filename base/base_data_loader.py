@@ -91,6 +91,8 @@ class BaseTargetBatchDataLoader(DataLoader):
             'collate_fn': collate_fn,
             'num_workers': num_workers
         }
+        if not self.valid_sampler:
+            self.init_kwargs['batch_size'] = batch_size
         super().__init__(batch_sampler=self.sampler, **self.init_kwargs)
         if evaluation:
             self.eval_dataset, eval_targets = evaluation

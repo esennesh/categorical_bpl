@@ -11,6 +11,7 @@ class BaseModel(pyro.nn.PyroModule):
     def __init__(self):
         super().__init__()
         self._batch = None
+        self._strict_load = True
 
     def set_batching(self, batch):
         self._batch = batch
@@ -32,7 +33,7 @@ class BaseModel(pyro.nn.PyroModule):
         params = sum([np.prod(p.size()) for p in model_parameters])
         return super().__str__() + '\nTrainable parameters: {}'.format(params)
 
-    def resume_from_checkpoint(self, resume_path):
+    def resume_from_checkpoint(self, resume_path, return_checkpoint=False):
         """
         Resume from saved checkpoints
 
@@ -40,7 +41,10 @@ class BaseModel(pyro.nn.PyroModule):
         """
         resume_path = str(resume_path)
         checkpoint = torch.load(resume_path)
-        self.load_state_dict(checkpoint['state_dict'])
+        self.load_state_dict(checkpoint['state_dict'], strict=self._strict_load)
+
+        if return_checkpoint:
+            return checkpoint
 
 class TypedModel(BaseModel):
     @abstractproperty

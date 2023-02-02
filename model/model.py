@@ -6,7 +6,8 @@ import itertools
 import math
 import matplotlib.pyplot as plt
 import pyro
-from pyro.contrib.autoname import name_count
+from pyro.contrib.autoname import name_count, scope
+from pyro.poutine import block
 import pyro.distributions as dist
 import pyro.nn as pnn
 import torch
@@ -14,9 +15,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from base import BaseModel
 import base.base_type as types
+from model.asvi import *
 from model.modules import *
-import utils.util as util
+import model.modules as modules
 from utils.name_stack import name_push, name_pop
+import utils.util as util
 
 VAE_MIN_DEPTH = 2
 
@@ -127,15 +130,11 @@ class OperadicModel(BaseModel):
 
         return morphism, data
 
-    def forward(self, observations=None):
-        if observations is not None:
-            trace = pyro.poutine.trace(self.guide).get_trace(
-                observations=observations
-            )
-            return pyro.poutine.replay(self.model, trace=trace)(
-                observations=observations
-            )
-        return self.model(observations=None)
+    def forward(self, **kwargs):
+        if 'observations' in kwargs and kwargs['observations'] is not None:
+            trace = pyro.poutine.trace(self.guide).get_trace(**kwargs)
+            return pyro.poutine.replay(self.model, trace=trace)(**kwargs)
+        return self.model(**kwargs)
 
 class DaggerOperadicModel(OperadicModel):
     def __init__(self, generators, global_elements=[], data_space=(784,),
@@ -421,6 +420,158 @@ class AutoencodingOperadicModel(OperadicModel):
                 morphism(latent_code)
 
         return morphism, latent_code
+
+class AsviOperadicModel(OperadicModel):
+    def __init__(self, generators, global_elements=[], data_space=(784,),
+                 guide_hidden_dim=256, dataset_length=1, amortized=False):
+        super().__init__(generators, global_elements=global_elements,
+                         data_space=data_space,
+                         guide_hidden_dim=guide_hidden_dim)
+        self._strict_load = False
+        self._amortized = amortized
+        self._data_length = dataset_length
+
+        if self._amortized:
+            prior_logits_dict = pnn.PyroModule[nn.ModuleDict]()
+        else:
+            prior_logits_dict = pnn.PyroModule[nn.ParameterDict]()
+        self.asvi_params = pnn.PyroModule[nn.ModuleDict]({
+            'mean_fields': pnn.PyroModule[nn.ModuleDict](),
+            'prior_logits': prior_logits_dict
+        })
+
+    def resume_from_checkpoint(self, resume_path):
+        checkpoint = super().resume_from_checkpoint(resume_path, True)
+        state_dict = checkpoint['state_dict']
+
+        logits_prefix = 'asvi_params.prior_logits'
+        saved_rvs = {k[len(logits_prefix)+1:].split('.')[0]
+                     for k, v in state_dict.items() if logits_prefix in k}
+
+        for name in saved_rvs:
+            logits_qual = logits_prefix + '.' + name
+            mean_fields_qual = 'asvi_params.mean_fields.' + name
+            mean_fields = {k[len(mean_fields_qual) + 1:]: v
+                           for k, v in state_dict.items()
+                           if mean_fields_qual in k}
+
+            if self._amortized:
+                logits_extra = state_dict[logits_qual + '._extra_state']
+                logits_module = getattr(modules, logits_extra['type'])
+                self.asvi_params.prior_logits[name] = logits_module(
+                    logits_extra['in'], logits_extra['out']
+                )
+                self.asvi_params.prior_logits[name].load_state_dict({
+                    k[len(logits_qual)+1:]: v
+                    for k, v in state_dict.items() if logits_qual in k
+                })
+
+                self.asvi_params.mean_fields[name] =\
+                    pnn.PyroModule[nn.ModuleDict]()
+                params = {k.split('.')[0] for k in mean_fields
+                          if '_extra_state' in k}
+                for key in params:
+                    extra_qual = mean_fields_qual + '.' + key + '._extra_state'
+                    extra = state_dict[extra_qual]
+                    module = getattr(modules, extra['type'])
+                    self.asvi_params.mean_fields[name][key] = module(
+                        extra['in'], extra['out']
+                    )
+                    self.asvi_params.mean_fields[name][key].load_state_dict({
+                        k[len(key)+1:]: v for k, v in mean_fields.items()
+                        if key in k
+                    })
+            else:
+                val = state_dict[logits_qual]
+                self.asvi_params.prior_logits[name] = nn.Parameter(val.cpu())
+
+                self.asvi_params.mean_fields[name] =\
+                        pnn.PyroModule[nn.ParameterDict]()
+                for k, v in mean_fields.items():
+                    self.asvi_params.mean_fields[name][k] =\
+                        nn.Parameter(v.cpu())
+
+    @pnn.pyro_method
+    def model(self, observations=None, valid=False, index=None, **kwargs):
+        morphism, observations, data = super().model(observations)
+
+        if observations is not None:
+            score_morphism = pyro.condition(morphism, data=observations)
+        else:
+            score_morphism = morphism
+        with pyro.plate('data', len(data)):
+            with name_count():
+                output = score_morphism()
+        return morphism, output
+
+    @pnn.pyro_method
+    def guide(self, observations=None, valid=False, index=None, **kwargs):
+        if isinstance(observations, dict):
+            data = observations[self._observation_name]
+        else:
+            data = observations
+        data = data.view(data.shape[0], *self._data_space)
+        morphism, data = super().guide(observations)
+
+        with pyro.plate('data', len(data)):
+            with name_count():
+                morphism = block(morphism, hide=[self._observation_name])
+                if self._amortized:
+                    morphism = amortized_asvi(morphism, self.asvi_params, data)
+                else:
+                    morphism = asvi(morphism, self.asvi_params, index=index,
+                                    length=self._data_length)
+                morphism()
+
+        return morphism
+
+class DeepGenerativeOperadicModel(AsviOperadicModel):
+    def __init__(self, data_dim=28*28, hidden_dim=8, guide_hidden_dim=256,
+                 **kwargs):
+        self._data_dim = data_dim
+
+        # Build up a bunch of torch.Sizes for the powers of two between
+        # hidden_dim and data_dim.
+        dims = list(util.powers_of(2, hidden_dim, data_dim // 4)) + [data_dim]
+        dims.sort()
+
+        generators = []
+        for dim_a, dim_b in itertools.combinations(dims, 2):
+            lower, higher = sorted([dim_a, dim_b])
+            # Construct the decoder and encoder
+            if higher == self._data_dim:
+                decoder = DensityDecoder(lower, higher,
+                                         ContinuousBernoulliModel,
+                                         convolve=True)
+            else:
+                decoder = DensityDecoder(lower, higher, DiagonalGaussian)
+            data = {'effect': decoder.effect}
+            generator = cart_closed.Box(decoder.name, decoder.type.left,
+                                        decoder.type.right, decoder, data=data)
+            generators.append(generator)
+
+        obs = set()
+        for generator in generators:
+            ty = generator.dom >> generator.cod
+            obs = obs | unification.base_elements(ty)
+
+        global_elements = []
+        no_prior_dims = [self._data_dim]
+        for ob in obs:
+            dim = types.type_size(str(ob))
+            if dim in no_prior_dims:
+                continue
+
+            space = types.tensor_type(torch.float, dim)
+            prior = StandardNormal(dim)
+            name = '$p(%s)$' % prior.effects
+            effect = {'effect': prior.effect, 'dagger_effect': []}
+            global_element = cart_closed.Box(name, Ty(), space, prior,
+                                             data=effect)
+            global_elements.append(global_element)
+
+        super().__init__(generators, global_elements, data_dim,
+                         guide_hidden_dim, **kwargs)
 
 class MolecularVaeOperadicModel(DaggerOperadicModel):
     def __init__(self, max_len=120, guide_hidden_dim=256, charset_len=34):
