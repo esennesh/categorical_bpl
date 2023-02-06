@@ -7,6 +7,7 @@ __email__ = ('j.vandemeent@northeastern.edu',
              'sennesh.e@husky.neu.edu',
              'khan.zu@husky.neu.edu')
 import torch
+import torch.nn.functional as F
 import torch.utils.data
 from torch.utils.data.dataloader import default_collate
 import webdataset as wds
@@ -19,6 +20,11 @@ class FmriIterableDataset(torch.utils.data.IterableDataset):
         self._data = tar.data()
         self._tar = tar
 
+        self.subjects = self._tar.subjects()
+        self.num_subjects = max(max(self.subjects), len(self.subjects))
+        self.tasks = self._tar.tasks()
+        self.num_tasks = len(self.tasks)
+
     def __getitem__(self, key):
         return self._data[key]
 
@@ -29,8 +35,13 @@ class FmriIterableDataset(torch.utils.data.IterableDataset):
         for item in self._data:
             b = item['block']
 
-            item['subject'] = self._tar.blocks[b]['subject']
-            item['task'] = self._tar.tasks().index(self._tar.blocks[b]['task'])
+            subject = self.subjects.index(self._tar.blocks[b]['subject'])
+            subject = torch.tensor([subject], dtype=torch.long)
+            item['subject'] = F.one_hot(subject, self.num_subjects)
+
+            task = self.tasks.index(self._tar.blocks[b]['task'])
+            task = torch.tensor([task], dtype=torch.long)
+            item['task'] = F.one_hot(task, self.num_tasks)
             yield item
 
 def collate_fn(batch):
