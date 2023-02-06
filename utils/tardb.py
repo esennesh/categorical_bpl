@@ -25,13 +25,12 @@ class FmriIterableDataset(torch.utils.data.IterableDataset):
         return len(self._data)
 
     def __iter__(self):
-        for batch in self._data:
-            activations = batch['activations']
-            metadata = {
-                'block': batch['block'],
-                't': batch['t'],
-            }
-            yield (activations, metadata)
+        for item in self._data:
+            b = item['block']
+
+            item['subject'] = self._tar.blocks[b]['subject']
+            item['task'] = self._tar.tasks().index(self._tar.blocks[b]['task'])
+            yield item
 
 def unique_properties(key_func, data):
     results = []
