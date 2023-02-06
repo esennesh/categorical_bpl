@@ -623,9 +623,10 @@ class NtfaOperadicModel(AsviOperadicModel):
                           data={'effect': [self.likelihood.effect]})
 
     @pnn.pyro_method
-    def guide(self, observations=None, target={}):
-        NtfaWeights.blocks = target['block']
-        NtfaWeights.times = target['t']
+    def guide(self, observations=None, block=[], t=[], subject=[], task=[],
+              **kwargs):
+        NtfaWeights.blocks = block
+        NtfaWeights.times = t
 
         super().guide(observations=observations)
 
