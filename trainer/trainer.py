@@ -100,26 +100,33 @@ class Trainer(BaseTrainer):
         self.train_metrics.reset()
         current = 0
         for batch_idx, batch in enumerate(self.data_loader):
-            if len(batch) == 2:
-                data, target = batch
-            elif len(batch) == 3:
-                data, target, indices = batch
-            data, target = data.to(self.device), target.to(self.device)
             if len(batch) == 3:
-                indices = indices.to(self.device)
+                data, metadata, indices = batch
+            else:
+                data, metadata = batch
+                indices = None
+            data = data.to(self.device)
+            if indices is not None:
+                    indices = indices.to(self.device)
 
-            kwargs = {}
-            if len(batch) == 3:
-                kwargs = {'index': indices}
+            kwargs = {'index': indices}
+            if isinstance(metadata, torch.Tensor):
+                metadata = metadata.to(self.device)
+                kwargs['target'] = metadata
+            else:
+                for k, v in metadata.items():
+                    metadata[k] = v.to(self.device)
+                kwargs.update(**metadata)
+
             loss = svi.step(observations=data, valid=False, **kwargs) / data.shape[0]
 
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
             self.train_metrics.update('loss', loss)
             for met in self.metric_ftns:
-                metric_val = met(self.model.model, self.model.guide, data, target, 4)
+                metric_val = met(self.model.model, self.model.guide, data, kwargs.get('target', None), 4)
                 self.train_metrics.update(met.__name__, metric_val)
 
-            current += len(target)
+            current += len(data)
             if batch_idx % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
                     epoch,
@@ -157,17 +164,24 @@ class Trainer(BaseTrainer):
         with torch.no_grad():
             current = 0
             for batch_idx, batch in enumerate(self.data_loader):
-                if len(batch) == 2:
-                    data, target = batch
-                elif len(batch) == 3:
-                    data, target, indices = batch
-                data, target = data.to(self.device), target.to(self.device)
                 if len(batch) == 3:
+                    data, metadata, indices = batch
+                else:
+                    data, metadata = batch
+                    indices = None
+                data = data.to(self.device)
+                if indices is not None:
                     indices = indices.to(self.device)
 
-                kwargs = {}
-                if len(batch) == 3:
-                    kwargs = {'index': indices}
+                kwargs = {'index': indices}
+                if isinstance(metadata, torch.Tensor):
+                    metadata = metadata.to(self.device)
+                    kwargs['target'] = metadata
+                else:
+                    for k, v in metadata.items():
+                        metadata[k] = v.to(self.device)
+                    kwargs.update(**metadata)
+
                 loss = svi.evaluate_loss(observations=data, valid=True, **kwargs) / data.shape[0]
                 imps.sample(observations=data, valid=True, **kwargs)
                 log_likelihood = imps.get_log_likelihood().item() / data.shape[0]
@@ -178,9 +192,9 @@ class Trainer(BaseTrainer):
                 self.valid_metrics.update('log_likelihood', log_likelihood)
                 self.valid_metrics.update('log_marginal', log_marginal)
 
-                current += len(target)
+                current += len(data)
                 for met in self.metric_ftns:
-                    metric_val = met(self.model.model, self.model.guide, data, target, 4)
+                    metric_val = met(self.model.model, self.model.guide, data, kwargs.get('target', None), 4)
                     self.valid_metrics.update(met.__name__, metric_val)
 
                 if self.log_images:
