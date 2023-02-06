@@ -8,6 +8,7 @@ __email__ = ('j.vandemeent@northeastern.edu',
              'khan.zu@husky.neu.edu')
 import torch
 import torch.utils.data
+from torch.utils.data.dataloader import default_collate
 import webdataset as wds
 from ordered_set import OrderedSet
 
@@ -31,6 +32,16 @@ class FmriIterableDataset(torch.utils.data.IterableDataset):
             item['subject'] = self._tar.blocks[b]['subject']
             item['task'] = self._tar.tasks().index(self._tar.blocks[b]['task'])
             yield item
+
+def collate_fn(batch):
+    batch = torch.utils.data.dataloader.default_collate(batch)
+    metadata = {
+        'block': batch['block'],
+        'subject': batch['subject'],
+        't': batch['t'],
+        'task': batch['task']
+    }
+    return (batch['activations'], metadata)
 
 def unique_properties(key_func, data):
     results = []
