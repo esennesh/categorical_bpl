@@ -100,17 +100,21 @@ class Trainer(BaseTrainer):
         self.train_metrics.reset()
         current = 0
         for batch_idx, batch in enumerate(self.data_loader):
-            if len(batch) == 2:
-                data, target = batch
-            elif len(batch) == 3:
-                data, target, indices = batch
-            data, target = data.to(self.device), target.to(self.device)
             if len(batch) == 3:
+                data, target, indices = batch
+            else:
+                data, target = batch
+                indices = None
+            data = data.to(self.device)
+            if isinstance(target, torch.Tensor):
+                target = target.to(self.device)
+            else:
+                for k, v in target.items():
+                    target[k] = v.to(self.device)
+            if indices is not None:
                 indices = indices.to(self.device)
 
-            kwargs = {}
-            if len(batch) == 3:
-                kwargs = {'index': indices}
+            kwargs = {'index': indices}
             loss = svi.step(observations=data, valid=False, **kwargs) / data.shape[0]
 
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
@@ -157,17 +161,21 @@ class Trainer(BaseTrainer):
         with torch.no_grad():
             current = 0
             for batch_idx, batch in enumerate(self.data_loader):
-                if len(batch) == 2:
-                    data, target = batch
-                elif len(batch) == 3:
-                    data, target, indices = batch
-                data, target = data.to(self.device), target.to(self.device)
                 if len(batch) == 3:
+                    data, target, indices = batch
+                else:
+                    data, target = batch
+                    indices = None
+                data = data.to(self.device)
+                if isinstance(target, torch.Tensor):
+                    target = target.to(self.device)
+                else:
+                    for k, v in target.items():
+                        target[k] = v.to(self.device)
+                if indices is not None:
                     indices = indices.to(self.device)
 
-                kwargs = {}
-                if len(batch) == 3:
-                    kwargs = {'index': indices}
+                kwargs = {'index': indices}
                 loss = svi.evaluate_loss(observations=data, valid=True, **kwargs) / data.shape[0]
                 imps.sample(observations=data, valid=True, **kwargs)
                 log_likelihood = imps.get_log_likelihood().item() / data.shape[0]
