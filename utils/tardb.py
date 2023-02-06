@@ -13,6 +13,26 @@ from ordered_set import OrderedSet
 
 from utils import fmri_utils
 
+class FmriIterableDataset(torch.utils.data.IterableDataset):
+    def __init__(self, tar):
+        self._data = tar.data()
+        self._tar = tar
+
+    def __getitem__(self, key):
+        return self._data[key]
+
+    def __len__(self):
+        return len(self._data)
+
+    def __iter__(self):
+        for batch in self._data:
+            activations = batch['activations']
+            metadata = {
+                'block': batch['block'],
+                't': batch['t'],
+            }
+            yield (activations, metadata)
+
 def unique_properties(key_func, data):
     results = []
     result_set = set()
