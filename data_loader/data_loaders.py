@@ -115,5 +115,5 @@ class MiniPiemanDataLoader(BaseDataLoader):
         self.data_tar = data_tar
         self.dataset = tardb.FmriTarDataset(data_tar)
         self.voxel_locations = self.dataset.voxel_locations
-        super().__init__(self.dataset.data(), batch_size, shuffle,
-                         validation_split, num_workers)
+        super().__init__(tardb.FmriIterableDataset(self.dataset), batch_size,
+                         shuffle, validation_split, num_workers)
