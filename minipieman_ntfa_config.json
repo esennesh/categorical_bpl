@@ -20,7 +20,7 @@
         "type": "Adam",
         "args":{
             "optim_args": {
-              "lr": 5e-4,
+              "lr": 1e-3,
               "weight_decay": 0,
               "amsgrad": true
             }
