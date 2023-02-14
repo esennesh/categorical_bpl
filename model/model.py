@@ -623,11 +623,6 @@ class NtfaOperadicModel(AsviOperadicModel):
         super().__init__(generators, data_space=(voxel_locs.shape[0], 1))
         self.likelihood = tfa
 
-    @property
-    def wiring_diagram(self):
-        return wiring.Box('', Ty(), self.data_space,
-                          data={'effect': [self.likelihood.effect]})
-
     @pnn.pyro_method
     def guide(self, observations=None, block=[], t=[], subject=[], task=[],
               **kwargs):
