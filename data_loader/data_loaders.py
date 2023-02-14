@@ -64,18 +64,18 @@ class OmniglotTargetBatchDataLoader(BaseTargetBatchDataLoader):
     """
     def __init__(self, data_dir, batch_size, shuffle=True, validation_split=0.0, num_workers=1):
         self.data_dir = data_dir
-        dataset = datasets.Omniglot(self.data_dir, download=True, background=True)
-        eval_dataset = datasets.Omniglot(self.data_dir, download=True, background=False)
+        dataset = datasets.Omniglot(self.data_dir, download=True, background=True, transform=omni_transforms)
+        eval_dataset = datasets.Omniglot(self.data_dir, download=True, background=False, transform=omni_transforms)
         target_transform = OmniglotTargetTransform(self.data_dir, background=True)
         eval_target_transform = OmniglotTargetTransform(self.data_dir, background=False)
 
-        self.dataset = datasets.Omniglot(self.data_dir, background=True, download=True, transform=omni_transforms, target_transform=target_transform)
-        self.eval_dataset = datasets.Omniglot(self.data_dir, background=False, download=True, transform=omni_transforms, target_transform=eval_target_transform)
-        self.targets = np.array([self.dataset[i][1] for i in range(len(self.dataset))])
-        eval_targets = np.array([self.eval_dataset[i][1] for i in range(len(self.eval_dataset))])
+        self.dataset = datasets.Omniglot(self.data_dir, background=True, transform=omni_transforms, target_transform=target_transform)
+        self.eval_dataset = datasets.Omniglot(self.data_dir, background=False, transform=omni_transforms, target_transform=eval_target_transform)
+        self.dataset.targets = np.array([target for (_, target) in self.dataset._flat_character_images])
+        self.eval_dataset.targets = np.array([target for (_, target) in self.eval_dataset._flat_character_images])
         super().__init__(self.dataset, batch_size, shuffle, validation_split,
-                         num_workers, self.targets, drop_train_last=False,
-                         drop_valid_last=False, evaluation=(self.eval_dataset, eval_targets))
+                         num_workers, self.dataset.targets, drop_train_last=False,
+                         drop_valid_last=False, evaluation=(self.eval_dataset, self.eval_dataset.targets))
 
 class FashionMnistDataLoader(BaseDataLoader):
     """
