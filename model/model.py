@@ -614,6 +614,12 @@ class NtfaOperadicModel(AsviOperadicModel):
                                           tfa.type.right, tfa,
                                           data={'effect': tfa.effect}))
 
+        copy = lambda x: (x, x)
+        for dim in embed_dims:
+            dimty = types.tensor_type(torch.float, dim)
+            generators.append(cart_closed.Box('Copy_{%d}' % dim, dimty,
+                                              dimty @ dimty, copy))
+
         super().__init__(generators, data_space=(voxel_locs.shape[0], 1))
         self.likelihood = tfa
 
