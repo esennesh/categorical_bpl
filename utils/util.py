@@ -59,7 +59,6 @@ def powers_of(base, lower, upper):
     upper_bound = math.floor(math.log(upper) / math.log(base))
     for i in range(lower_bound, upper_bound + 1):
         yield base ** i
-    yield upper
 
 def ensure_dir(dirname):
     dirname = Path(dirname)
