@@ -584,17 +584,17 @@ class MolecularVaeOperadicModel(DaggerOperadicModel):
                                            charset_len=charset_len,
                                            max_len=max_len)
                 data = {'effect': decoder.effect,
-                        'dagger_effect': encoder.effect}
+                        'dagger_effect': encoder.effect,
+                        'function': decoder}
                 conv_generator = cart_closed.Box(decoder.name,
                                                  decoder.type.left,
-                                                 decoder.type.right, decoder,
-                                                 data=data)
+                                                 decoder.type.right, data=data)
                 generators.append(conv_generator)
                 data = {'dagger_effect': decoder.effect,
-                        'effect': encoder.effect}
+                        'effect': encoder.effect,
+                        'function': encoder}
                 conv_dagger = cart_closed.Box(encoder.name, encoder.type.left,
-                                              encoder.type.right, encoder,
-                                              data=data)
+                                              encoder.type.right, data=data)
                 dagger_generators.append(conv_dagger)
 
                 encoder = RecurrentMolecularEncoder(hidden, recurrent,
@@ -603,16 +603,16 @@ class MolecularVaeOperadicModel(DaggerOperadicModel):
                                            charset_len=charset_len,
                                            max_len=max_len)
                 data = {'effect': decoder.effect,
-                        'dagger_effect': encoder.effect}
+                        'dagger_effect': encoder.effect,
+                        'function': decoder}
                 rec_generator = cart_closed.Box(decoder.name, decoder.type.left,
-                                                decoder.type.right, decoder,
-                                                data=data)
+                                                decoder.type.right, data=data)
                 generators.append(rec_generator)
                 data = {'dagger_effect': decoder.effect,
-                        'effect': encoder.effect}
+                        'effect': encoder.effect,
+                        'function': encoder}
                 rec_dagger = cart_closed.Box(encoder.name, encoder.type.left,
-                                             encoder.type.right, encoder,
-                                             data=data)
+                                             encoder.type.right, data=data)
                 dagger_generators.append(rec_dagger)
 
         super().__init__(generators, [], data_space=(max_len, charset_len),
