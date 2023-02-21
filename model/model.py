@@ -231,9 +231,9 @@ class VaeOperadicModel(DaggerOperadicModel):
                                          convolve=True)
             else:
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
-            data = {'effect': decoder.effect}
+            data = {'effect': decoder.effect, 'function': decoder}
             generator = cart_closed.Box(decoder.name, decoder.type.left,
-                                        decoder.type.right, decoder, data=data)
+                                        decoder.type.right, data=data)
             generators.append(generator)
 
         super().__init__(generators, [], data_dim, guide_hidden_dim)
