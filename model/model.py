@@ -260,9 +260,9 @@ class VlaeOperadicModel(DaggerOperadicModel):
             else:
                 decoder = LadderDecoder(lower, higher, noise_dim=2, conv=False,
                                         out_dist=None)
-            data = {'effect': decoder.effect}
+            data = {'effect': decoder.effect, 'function': decoder}
             generator = cart_closed.Box(decoder.name, decoder.type.left,
-                                        decoder.type.right, decoder, data=data)
+                                        decoder.type.right, data=data)
             generators.append(generator)
 
         # For each dimensionality, construct a prior/posterior ladder pair
@@ -270,8 +270,9 @@ class VlaeOperadicModel(DaggerOperadicModel):
             space = types.tensor_type(torch.float, dim)
             prior = LadderPrior(dim, None)
 
-            generator = cart_closed.Box(prior.name, Ty(), space, prior,
-                                        data={'effect': prior.effect})
+            generator = cart_closed.Box(prior.name, Ty(), space, data={
+                'effect': prior.effect, 'function': prior
+            })
             generators.append(generator)
 
         super().__init__(generators, [], data_dim, guide_hidden_dim,
