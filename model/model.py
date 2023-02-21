@@ -156,9 +156,9 @@ class DaggerOperadicModel(OperadicModel):
             space = types.tensor_type(torch.float, dim)
             prior = StandardNormal(dim)
             name = '$p(%s)$' % prior.effects
-            effect = {'effect': prior.effect, 'dagger_effect': []}
-            global_element = cart_closed.Box(name, Ty(), space, prior,
-                                             data=effect)
+            data = {'effect': prior.effect, 'dagger_effect': [],
+                    'function': prior}
+            global_element = cart_closed.Box(name, Ty(), space, data=data)
             global_elements.append(global_element)
 
         super().__init__(generators, global_elements, data_space,
@@ -167,8 +167,7 @@ class DaggerOperadicModel(OperadicModel):
         self.encoders = nn.ModuleDict()
         self.encoder_functor = wiring.Functor(
             lambda ty: util.double_latent(ty, self.data_space),
-            lambda ar: self._encoder(ar.name), ob_factory=Ty,
-            ar_factory=cart_closed.Box
+            lambda ar: self._encoder(ar.name)
         )
 
         for arrow in self._operad.ars:
@@ -184,8 +183,8 @@ class DaggerOperadicModel(OperadicModel):
     def _encoder(self, name):
         encoder = self.encoders[name]
         return cart_closed.Box(
-            name, encoder.type.left, encoder.type.right, encoder,
-            data={'effect': encoder.effect}
+            name, encoder.type.left, encoder.type.right,
+            data={'effect': encoder.effect, 'function': encoder}
         )
 
     @pnn.pyro_method
