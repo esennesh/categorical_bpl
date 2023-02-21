@@ -1,5 +1,5 @@
 import collections
-from discopy.biclosed import Ty
+from discopy.python import Ty
 from discopy import cat, wiring
 from discopyro import cart_closed, free_operad, unification
 import itertools
