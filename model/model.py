@@ -542,9 +542,9 @@ class DeepGenerativeOperadicModel(AsviOperadicModel):
                                          convolve=True)
             else:
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
-            data = {'effect': decoder.effect}
+            data = {'effect': decoder.effect, 'function': decoder}
             generator = cart_closed.Box(decoder.name, decoder.type.left,
-                                        decoder.type.right, decoder, data=data)
+                                        decoder.type.right, data=data)
             generators.append(generator)
 
         obs = set()
@@ -562,9 +562,9 @@ class DeepGenerativeOperadicModel(AsviOperadicModel):
             space = types.tensor_type(torch.float, dim)
             prior = StandardNormal(dim)
             name = '$p(%s)$' % prior.effects
-            effect = {'effect': prior.effect, 'dagger_effect': []}
-            global_element = cart_closed.Box(name, Ty(), space, prior,
-                                             data=effect)
+            effect = {'effect': prior.effect, 'dagger_effect': [],
+                      'function': prior}
+            global_element = cart_closed.Box(name, Ty(), space, data=effect)
             global_elements.append(global_element)
 
         super().__init__(generators, global_elements, data_dim,
