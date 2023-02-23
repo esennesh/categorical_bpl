@@ -1,5 +1,5 @@
 import collections
-from discopy.biclosed import Ty
+from discopy.python import Ty
 from discopy import cat, wiring
 from discopyro import cart_closed, free_operad, unification
 import itertools
@@ -156,9 +156,9 @@ class DaggerOperadicModel(OperadicModel):
             space = types.tensor_type(torch.float, dim)
             prior = StandardNormal(dim)
             name = '$p(%s)$' % prior.effects
-            effect = {'effect': prior.effect, 'dagger_effect': []}
-            global_element = cart_closed.Box(name, Ty(), space, prior,
-                                             data=effect)
+            data = {'effect': prior.effect, 'dagger_effect': [],
+                    'function': prior}
+            global_element = cart_closed.Box(name, Ty(), space, data=data)
             global_elements.append(global_element)
 
         super().__init__(generators, global_elements, data_space,
@@ -167,8 +167,7 @@ class DaggerOperadicModel(OperadicModel):
         self.encoders = nn.ModuleDict()
         self.encoder_functor = wiring.Functor(
             lambda ty: util.double_latent(ty, self.data_space),
-            lambda ar: self._encoder(ar.name), ob_factory=Ty,
-            ar_factory=cart_closed.Box
+            lambda ar: self._encoder(ar.name)
         )
 
         for arrow in self._operad.ars:
@@ -184,8 +183,8 @@ class DaggerOperadicModel(OperadicModel):
     def _encoder(self, name):
         encoder = self.encoders[name]
         return cart_closed.Box(
-            name, encoder.type.left, encoder.type.right, encoder,
-            data={'effect': encoder.effect}
+            name, encoder.type.left, encoder.type.right,
+            data={'effect': encoder.effect, 'function': encoder}
         )
 
     @pnn.pyro_method
@@ -232,9 +231,9 @@ class VaeOperadicModel(DaggerOperadicModel):
                                          convolve=True)
             else:
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
-            data = {'effect': decoder.effect}
+            data = {'effect': decoder.effect, 'function': decoder}
             generator = cart_closed.Box(decoder.name, decoder.type.left,
-                                        decoder.type.right, decoder, data=data)
+                                        decoder.type.right, data=data)
             generators.append(generator)
 
         super().__init__(generators, [], data_dim, guide_hidden_dim)
@@ -261,9 +260,9 @@ class VlaeOperadicModel(DaggerOperadicModel):
             else:
                 decoder = LadderDecoder(lower, higher, noise_dim=2, conv=False,
                                         out_dist=None)
-            data = {'effect': decoder.effect}
+            data = {'effect': decoder.effect, 'function': decoder}
             generator = cart_closed.Box(decoder.name, decoder.type.left,
-                                        decoder.type.right, decoder, data=data)
+                                        decoder.type.right, data=data)
             generators.append(generator)
 
         # For each dimensionality, construct a prior/posterior ladder pair
@@ -271,8 +270,9 @@ class VlaeOperadicModel(DaggerOperadicModel):
             space = types.tensor_type(torch.float, dim)
             prior = LadderPrior(dim, None)
 
-            generator = cart_closed.Box(prior.name, Ty(), space, prior,
-                                        data={'effect': prior.effect})
+            generator = cart_closed.Box(prior.name, Ty(), space, data={
+                'effect': prior.effect, 'function': prior
+            })
             generators.append(generator)
 
         super().__init__(generators, [], data_dim, guide_hidden_dim,
@@ -301,9 +301,9 @@ class GlimpseOperadicModel(DaggerOperadicModel):
                                          convolve=True)
             else:
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
-            data = {'effect': decoder.effect}
+            data = {'effect': decoder.effect, 'function': decoder}
             generator = cart_closed.Box(decoder.name, decoder.type.left,
-                                        decoder.type.right, decoder, data=data)
+                                        decoder.type.right, data=data)
             generators.append(generator)
 
         # Build up a bunch of torch.Sizes for the powers of two between
@@ -319,9 +319,9 @@ class GlimpseOperadicModel(DaggerOperadicModel):
             else:
                 decoder = LadderDecoder(lower, higher, noise_dim=2, conv=False,
                                         out_dist=DiagonalGaussian)
-            data = {'effect': decoder.effect}
+            data = {'effect': decoder.effect, 'function': decoder}
             generator = cart_closed.Box(decoder.name, decoder.type.left,
-                                        decoder.type.right, decoder, data=data)
+                                        decoder.type.right, data=data)
             generators.append(generator)
 
         # For each dimensionality, construct a prior/posterior ladder pair
@@ -329,26 +329,23 @@ class GlimpseOperadicModel(DaggerOperadicModel):
             space = types.tensor_type(torch.float, dim)
             prior = LadderPrior(dim, DiagonalGaussian)
 
-            data = {'effect': prior.effect}
-            generator = cart_closed.Box(prior.name, Ty(), space, prior,
-                                        data=data)
+            data = {'effect': prior.effect, 'function': prior}
+            generator = cart_closed.Box(prior.name, Ty(), space, data=data)
             generators.append(generator)
 
         # Construct writer/reader pair for spatial attention
         writer = SpatialTransformerWriter(data_side, glimpse_side)
         writer_l, writer_r = writer.type.left, writer.type.right
 
-        data = {'effect': writer.effect}
-        generator = cart_closed.Box(writer.name, writer_l, writer_r, writer,
-                                    data=data)
+        data = {'effect': writer.effect, 'function': writer}
+        generator = cart_closed.Box(writer.name, writer_l, writer_r, data=data)
         generators.append(generator)
 
         # Construct the likelihood
         likelihood = GaussianLikelihood(data_dim, 'X^{%d}' % data_dim)
-        data = {'effect': likelihood.effect}
+        data = {'effect': likelihood.effect, 'function': likelihood}
         generator = cart_closed.Box(likelihood.name, likelihood.type.left,
-                                    likelihood.type.right, likelihood,
-                                    data=data)
+                                    likelihood.type.right, data=data)
         generators.append(generator)
 
         super().__init__(generators, [], data_dim, guide_hidden_dim,
@@ -545,9 +542,9 @@ class DeepGenerativeOperadicModel(AsviOperadicModel):
                                          convolve=True)
             else:
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
-            data = {'effect': decoder.effect}
+            data = {'effect': decoder.effect, 'function': decoder}
             generator = cart_closed.Box(decoder.name, decoder.type.left,
-                                        decoder.type.right, decoder, data=data)
+                                        decoder.type.right, data=data)
             generators.append(generator)
 
         obs = set()
@@ -565,9 +562,9 @@ class DeepGenerativeOperadicModel(AsviOperadicModel):
             space = types.tensor_type(torch.float, dim)
             prior = StandardNormal(dim)
             name = '$p(%s)$' % prior.effects
-            effect = {'effect': prior.effect, 'dagger_effect': []}
-            global_element = cart_closed.Box(name, Ty(), space, prior,
-                                             data=effect)
+            effect = {'effect': prior.effect, 'dagger_effect': [],
+                      'function': prior}
+            global_element = cart_closed.Box(name, Ty(), space, data=effect)
             global_elements.append(global_element)
 
         super().__init__(generators, global_elements, data_dim,
@@ -587,17 +584,17 @@ class MolecularVaeOperadicModel(DaggerOperadicModel):
                                            charset_len=charset_len,
                                            max_len=max_len)
                 data = {'effect': decoder.effect,
-                        'dagger_effect': encoder.effect}
+                        'dagger_effect': encoder.effect,
+                        'function': decoder}
                 conv_generator = cart_closed.Box(decoder.name,
                                                  decoder.type.left,
-                                                 decoder.type.right, decoder,
-                                                 data=data)
+                                                 decoder.type.right, data=data)
                 generators.append(conv_generator)
                 data = {'dagger_effect': decoder.effect,
-                        'effect': encoder.effect}
+                        'effect': encoder.effect,
+                        'function': encoder}
                 conv_dagger = cart_closed.Box(encoder.name, encoder.type.left,
-                                              encoder.type.right, encoder,
-                                              data=data)
+                                              encoder.type.right, data=data)
                 dagger_generators.append(conv_dagger)
 
                 encoder = RecurrentMolecularEncoder(hidden, recurrent,
@@ -606,16 +603,16 @@ class MolecularVaeOperadicModel(DaggerOperadicModel):
                                            charset_len=charset_len,
                                            max_len=max_len)
                 data = {'effect': decoder.effect,
-                        'dagger_effect': encoder.effect}
+                        'dagger_effect': encoder.effect,
+                        'function': decoder}
                 rec_generator = cart_closed.Box(decoder.name, decoder.type.left,
-                                                decoder.type.right, decoder,
-                                                data=data)
+                                                decoder.type.right, data=data)
                 generators.append(rec_generator)
                 data = {'dagger_effect': decoder.effect,
-                        'effect': encoder.effect}
+                        'effect': encoder.effect,
+                        'function': encoder}
                 rec_dagger = cart_closed.Box(encoder.name, encoder.type.left,
-                                             encoder.type.right, encoder,
-                                             data=data)
+                                             encoder.type.right, data=data)
                 dagger_generators.append(rec_dagger)
 
         super().__init__(generators, [], data_space=(max_len, charset_len),

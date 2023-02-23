@@ -1,5 +1,5 @@
 from abc import abstractproperty
-from discopy.biclosed import Ty
+from discopy.closed import Ty
 import functools
 import numpy as np
 import pyro
