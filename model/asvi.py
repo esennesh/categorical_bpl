@@ -17,8 +17,6 @@ import torch.distributions.constraints as constraints
 import torch.nn as nn
 import torch
 
-from model.modules import ConvIncoder
-
 class AsviGuide(GuideMessenger):
     """
     ``AsviGuide`` implements Automatic Structured Variational Inference as an
@@ -79,18 +77,19 @@ def asvi(model, parameter_dicts=None, **kwargs):
     return AsviGuide(model, parameter_dicts, **kwargs)
 
 class AmortizedAsviGuide(AsviGuide):
-    def __init__(self, model, net_dicts, data):
+    def __init__(self, model, net_dicts, cls, data):
         super().__init__(model, net_dicts, length=data.shape[0])
         self._data = data
         self._dim = math.prod(self._data.shape[1:])
+        self._incoder_cls = cls
 
     def initialize_parameter(self, name, **kwargs):
         self._mean_fields[name] = PyroModule[nn.ParameterDict]()
         for k, v in kwargs.items():
-            incoder = ConvIncoder(self._dim, math.prod(v.shape[1:]))
+            incoder = self._incoder_cls(self._dim, math.prod(v.shape[1:]))
             self._mean_fields[name][k] = incoder.to(device=self._data.device)
 
-        incoder = ConvIncoder(self._dim, 1)
+        incoder = self._incoder_cls(self._dim, 1)
         self._prior_logits[name] = incoder.to(device=self._data.device)
 
     def get_alphas(self, name):
@@ -99,5 +98,5 @@ class AmortizedAsviGuide(AsviGuide):
     def get_lambdas(self, name, key):
         return self._mean_fields[name][key](self._data)
 
-def amortized_asvi(model, module_dicts=None, data=None, **kwargs):
-    return AmortizedAsviGuide(model, module_dicts, data, **kwargs)
+def amortized_asvi(model, module_dicts=None, cls=None, data=None, **kwargs):
+    return AmortizedAsviGuide(model, module_dicts, cls, data, **kwargs)
