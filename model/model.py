@@ -514,7 +514,8 @@ class AsviOperadicModel(OperadicModel):
             with name_count():
                 morphism = block(morphism, hide=[self._observation_name])
                 if self._amortized:
-                    morphism = amortized_asvi(morphism, self.asvi_params, data)
+                    morphism = amortized_asvi(morphism, self.asvi_params,
+                                              ConvIncoder, data)
                 else:
                     morphism = asvi(morphism, self.asvi_params, index=index,
                                     length=self._data_length)
