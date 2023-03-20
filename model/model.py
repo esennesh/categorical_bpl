@@ -158,7 +158,7 @@ class DaggerOperadicModel(OperadicModel):
             name = '$p(%s)$' % prior.effects
             data = {'effect': prior.effect, 'dagger_effect': [],
                     'function': prior}
-            global_element = cart_closed.Box(name, Ty(), space, data=data)
+            global_element = monoidal.Box(name, Ty(), space, data=data)
             global_elements.append(global_element)
 
         super().__init__(generators, global_elements, data_space,
@@ -182,7 +182,7 @@ class DaggerOperadicModel(OperadicModel):
 
     def _encoder(self, name):
         encoder = self.encoders[name]
-        return cart_closed.Box(
+        return monoidal.Box(
             name, encoder.type.left, encoder.type.right,
             data={'effect': encoder.effect, 'function': encoder}
         )
