@@ -587,15 +587,15 @@ class MolecularVaeOperadicModel(DaggerOperadicModel):
                 data = {'effect': decoder.effect,
                         'dagger_effect': encoder.effect,
                         'function': decoder}
-                conv_generator = cart_closed.Box(decoder.name,
+                conv_generator = monoidal.Box(decoder.name,
                                                  decoder.type.left,
                                                  decoder.type.right, data=data)
                 generators.append(conv_generator)
                 data = {'dagger_effect': decoder.effect,
                         'effect': encoder.effect,
                         'function': encoder}
-                conv_dagger = cart_closed.Box(encoder.name, encoder.type.left,
-                                              encoder.type.right, data=data)
+                conv_dagger = monoidal.Box(encoder.name, encoder.type.left,
+                                           encoder.type.right, data=data)
                 dagger_generators.append(conv_dagger)
 
                 encoder = RecurrentMolecularEncoder(hidden, recurrent,
@@ -606,13 +606,13 @@ class MolecularVaeOperadicModel(DaggerOperadicModel):
                 data = {'effect': decoder.effect,
                         'dagger_effect': encoder.effect,
                         'function': decoder}
-                rec_generator = cart_closed.Box(decoder.name, decoder.type.left,
-                                                decoder.type.right, data=data)
+                rec_generator = monoidal.Box(decoder.name, decoder.type.left,
+                                             decoder.type.right, data=data)
                 generators.append(rec_generator)
                 data = {'dagger_effect': decoder.effect,
                         'effect': encoder.effect,
                         'function': encoder}
-                rec_dagger = cart_closed.Box(encoder.name, encoder.type.left,
+                rec_dagger = monoidal.Box(encoder.name, encoder.type.left,
                                              encoder.type.right, data=data)
                 dagger_generators.append(rec_dagger)
 
