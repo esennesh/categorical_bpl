@@ -1,7 +1,7 @@
 import collections
 from discopy.python import Ty
-from discopy import cat, wiring
-from discopyro import cart_closed, free_operad, unification
+from discopy import monoidal, wiring
+from discopyro import free_operad, unification
 import itertools
 import math
 import matplotlib.pyplot as plt
