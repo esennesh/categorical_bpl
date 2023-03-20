@@ -232,8 +232,8 @@ class VaeOperadicModel(DaggerOperadicModel):
             else:
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
             data = {'effect': decoder.effect, 'function': decoder}
-            generator = cart_closed.Box(decoder.name, decoder.type.left,
-                                        decoder.type.right, data=data)
+            generator = monoidal.Box(decoder.name, decoder.type.left,
+                                     decoder.type.right, data=data)
             generators.append(generator)
 
         super().__init__(generators, [], data_dim, guide_hidden_dim)
