@@ -302,8 +302,8 @@ class GlimpseOperadicModel(DaggerOperadicModel):
             else:
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
             data = {'effect': decoder.effect, 'function': decoder}
-            generator = cart_closed.Box(decoder.name, decoder.type.left,
-                                        decoder.type.right, data=data)
+            generator = monoidal.Box(decoder.name, decoder.type.left,
+                                     decoder.type.right, data=data)
             generators.append(generator)
 
         # Build up a bunch of torch.Sizes for the powers of two between
@@ -320,8 +320,8 @@ class GlimpseOperadicModel(DaggerOperadicModel):
                 decoder = LadderDecoder(lower, higher, noise_dim=2, conv=False,
                                         out_dist=DiagonalGaussian)
             data = {'effect': decoder.effect, 'function': decoder}
-            generator = cart_closed.Box(decoder.name, decoder.type.left,
-                                        decoder.type.right, data=data)
+            generator = monoidal.Box(decoder.name, decoder.type.left,
+                                     decoder.type.right, data=data)
             generators.append(generator)
 
         # For each dimensionality, construct a prior/posterior ladder pair
@@ -330,7 +330,7 @@ class GlimpseOperadicModel(DaggerOperadicModel):
             prior = LadderPrior(dim, DiagonalGaussian)
 
             data = {'effect': prior.effect, 'function': prior}
-            generator = cart_closed.Box(prior.name, Ty(), space, data=data)
+            generator = monoidal.Box(prior.name, Ty(), space, data=data)
             generators.append(generator)
 
         # Construct writer/reader pair for spatial attention
@@ -338,14 +338,14 @@ class GlimpseOperadicModel(DaggerOperadicModel):
         writer_l, writer_r = writer.type.left, writer.type.right
 
         data = {'effect': writer.effect, 'function': writer}
-        generator = cart_closed.Box(writer.name, writer_l, writer_r, data=data)
+        generator = monoidal.Box(writer.name, writer_l, writer_r, data=data)
         generators.append(generator)
 
         # Construct the likelihood
         likelihood = GaussianLikelihood(data_dim, 'X^{%d}' % data_dim)
         data = {'effect': likelihood.effect, 'function': likelihood}
-        generator = cart_closed.Box(likelihood.name, likelihood.type.left,
-                                    likelihood.type.right, data=data)
+        generator = monoidal.Box(likelihood.name, likelihood.type.left,
+                                 likelihood.type.right, data=data)
         generators.append(generator)
 
         super().__init__(generators, [], data_dim, guide_hidden_dim,
