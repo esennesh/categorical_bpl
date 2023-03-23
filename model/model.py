@@ -62,7 +62,8 @@ class OperadicModel(BaseModel):
             nn.Linear(guide_in_dim, guide_hidden_dim),
             nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
             nn.Linear(guide_hidden_dim,
-                      self._operad.arrow_weight_loc.shape[0] * 2),
+                      self._operad.arrow_weight_alpha.shape[0]),
+            nn.Softplus(),
         )
         self._random_variable_names = collections.defaultdict(int)
 
@@ -116,17 +117,16 @@ class OperadicModel(BaseModel):
         temperature = pyro.sample('weights_temperature', temperature_gamma)
 
         data_arrow_weights = self.guide_arrow_weights(summary)
-        data_arrow_weights = data_arrow_weights.mean(dim=0).view(-1, 2)
+        data_arrow_weights = data_arrow_weights.mean(dim=0)
         arrow_weights = pyro.sample(
             'arrow_weights',
-            dist.Normal(data_arrow_weights[:, 0],
-                        data_arrow_weights[:, 1].exp()).to_event(1)
+            dist.Dirichlet(data_arrow_weights)
         )
 
         min_depth = VAE_MIN_DEPTH if len(list(self.wiring_diagram)) == 1 else 0
         morphism = self._operad(self.wiring_diagram, min_depth=min_depth,
-                                  temperature=temperature,
-                                  arrow_weights=arrow_weights)
+                                temperature=temperature,
+                                arrow_weights=arrow_weights)
 
         return morphism, data
 
