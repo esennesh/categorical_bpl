@@ -141,14 +141,17 @@ class DaggerOperadicModel(OperadicModel):
         obs = set()
         for generator in generators:
             ty = generator.dom >> generator.cod
-            obs = obs | unification.base_elements(ty)
+            obs |= unification.base_elements(ty)
 
-        no_prior_dims = no_prior_dims + [self._data_dim]
-        for ob in obs:
+        no_prior_dims.add(self._data_dim)
+        no_prior_obs = set()
+        for dim in no_prior_dims:
+            no_prior_obs |= unification.base_elements(types.tensor_type(
+                torch.float, dim
+            ))
+
+        for ob in obs - no_prior_obs:
             dim = types.type_size(str(ob))
-            if dim in no_prior_dims:
-                continue
-
             space = types.tensor_type(torch.float, dim)
             prior = StandardNormal(dim)
             name = '$p(%s)$' % prior.effects
