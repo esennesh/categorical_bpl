@@ -348,7 +348,7 @@ class GlimpseOperadicModel(DaggerOperadicModel):
         generators.append(generator)
 
         super().__init__(generators, [], data_dim, guide_hidden_dim,
-                         no_prior_dims=[glimpse_dim, data_dim])
+                         no_prior_dims={glimpse_dim})
 
     @property
     def wiring_diagram(self):
