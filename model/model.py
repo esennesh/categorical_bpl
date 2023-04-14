@@ -73,8 +73,7 @@ class OperadicModel(BaseModel):
 
     @property
     def wiring_diagram(self):
-        return wiring.Box('', Ty(), self.data_space,
-                          data={'effect': lambda e: True})
+        return wiring.Box('', Ty(), self.data_space)
 
     @pnn.pyro_method
     def model(self, observations=None, **kwargs):
