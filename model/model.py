@@ -137,7 +137,7 @@ class OperadicModel(BaseModel):
 
 class DaggerOperadicModel(OperadicModel):
     def __init__(self, generators, global_elements=[], data_space=(784,),
-                 guide_hidden_dim=256, no_prior_dims=[]):
+                 guide_hidden_dim=256, no_prior_dims=set()):
         obs = set()
         for generator in generators:
             obs |= unification.base_elements(generator.dom)
