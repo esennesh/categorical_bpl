@@ -1,6 +1,6 @@
 import collections
-from discopy.python import Ty
 from discopy import monoidal, wiring
+from discopy.monoidal import Ty
 from discopyro import free_operad, unification
 import itertools
 import math
@@ -140,8 +140,8 @@ class DaggerOperadicModel(OperadicModel):
                  guide_hidden_dim=256, no_prior_dims=[]):
         obs = set()
         for generator in generators:
-            ty = generator.dom >> generator.cod
-            obs |= unification.base_elements(ty)
+            obs |= unification.base_elements(generator.dom)
+            obs |= unification.base_elements(generator.cod)
 
         no_prior_dims.add(self._data_dim)
         no_prior_obs = set()
@@ -166,7 +166,8 @@ class DaggerOperadicModel(OperadicModel):
         self.encoders = nn.ModuleDict()
         self.encoder_functor = wiring.Functor(
             lambda ty: util.double_latent(ty, self.data_space),
-            lambda ar: self._encoder(ar.name)
+            lambda ar: self._encoder(ar.name),
+            cod=monoidal.Category(Ty, monoidal.Box)
         )
 
         for arrow in self._operad.ars:
@@ -181,10 +182,9 @@ class DaggerOperadicModel(OperadicModel):
 
     def _encoder(self, name):
         encoder = self.encoders[name]
-        return monoidal.Box(
-            name, encoder.type.left, encoder.type.right,
-            data={'effect': encoder.effect, 'function': encoder}
-        )
+        dom, cod = encoder.type
+        return monoidal.Box(name, dom, cod, data={'effect': encoder.effect,
+                                                  'function': encoder})
 
     @pnn.pyro_method
     def model(self, observations=None, **kwargs):
