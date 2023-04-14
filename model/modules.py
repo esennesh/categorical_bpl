@@ -1,5 +1,5 @@
 from abc import abstractproperty
-from discopy.closed import Ty
+from discopy.monoidal import Ty
 import functools
 import numpy as np
 import pyro
@@ -31,7 +31,7 @@ class DiagonalGaussian(TypedModel):
     @property
     def type(self):
         dim_space = types.tensor_type(torch.float, self._dim)
-        return (dim_space @ dim_space) >> dim_space
+        return (dim_space @ dim_space, dim_space)
 
     def forward(self, loc, precision):
         scale = torch.sqrt(F.softplus(precision)) ** (-1.)
@@ -55,7 +55,7 @@ class StandardNormal(TypedModel):
 
     @property
     def type(self):
-        return Ty() >> types.tensor_type(torch.float, self._dim)
+        return (Ty(), types.tensor_type(torch.float, self._dim))
 
     def forward(self):
         z_loc = self._batch.new_zeros(torch.Size((self._batch.shape[0],
@@ -76,7 +76,7 @@ class NullPrior(TypedModel):
 
     @property
     def type(self):
-        return Ty() >> types.tensor_type(torch.float, self._dim)
+        return (Ty(), types.tensor_type(torch.float, self._dim))
 
     @property
     def name(self):
@@ -102,8 +102,8 @@ class ContinuousBernoulliModel(TypedModel):
 
     @property
     def type(self):
-        return types.tensor_type(torch.float, self._dim) >>\
-               types.tensor_type(torch.float, self._dim)
+        return (types.tensor_type(torch.float, self._dim),
+                types.tensor_type(torch.float, self._dim))
 
     @property
     def name(self):
@@ -128,7 +128,7 @@ class GaussianLikelihood(DiagonalGaussian):
     @property
     def type(self):
         dim_space = types.tensor_type(torch.float, self._dim)
-        return dim_space >> dim_space
+        return (dim_space, dim_space)
 
     @property
     def name(self):
@@ -202,7 +202,7 @@ class DensityNet(TypedModel):
 
     @property
     def type(self):
-        return self._in_space >> self._out_space
+        return (self._in_space, self._out_space)
 
     @property
     def effect(self):
@@ -216,7 +216,7 @@ class DensityDecoder(DensityNet):
     @property
     def name(self):
         condition_name = '\\mathbb{R}^{%d}' % self._in_dim
-        return '$p(%s | %s)$' % (self.effects, condition_name)
+        return '$p(%s \\mid %s)$' % (self.effects, condition_name)
 
     def forward(self, inputs):
         if self._convolve:
@@ -286,8 +286,8 @@ class LadderDecoder(TypedModel):
     def type(self):
         input_space = types.tensor_type(torch.float, self._in_dim)
         noise_space = types.tensor_type(torch.float, self._noise_dim)
-        return (input_space @ noise_space) >>\
-               types.tensor_type(torch.float, self._out_dim)
+        return (input_space @ noise_space,
+                types.tensor_type(torch.float, self._out_dim))
 
     @property
     def effect(self):
@@ -360,7 +360,7 @@ class LadderPrior(TypedModel):
 
     @property
     def type(self):
-        return Ty() >> types.tensor_type(torch.float, self._out_dim)
+        return (Ty(), types.tensor_type(torch.float, self._out_dim))
 
     @property
     def has_distribution(self):
@@ -420,7 +420,7 @@ class CanvasPrior(TypedModel):
     def type(self):
         glimpse_type = types.tensor_type(torch.float, self._glimpse_side ** 2)
         canvas_type = types.tensor_type(torch.float, self._canvas_side ** 2)
-        return glimpse_type >> canvas_type
+        return (glimpse_type, canvas_type)
 
     @property
     def effect(self):
@@ -481,7 +481,7 @@ class SpatialTransformerWriter(TypedModel):
         canvas_type = types.tensor_type(torch.float, self._canvas_side ** 2)
         glimpse_type = types.tensor_type(torch.float, self._glimpse_side ** 2)
 
-        return (canvas_type @ glimpse_type) >> canvas_type
+        return (canvas_type @ glimpse_type, canvas_type)
 
     @property
     def effect(self):
@@ -552,7 +552,7 @@ class MolecularDecoder(TypedModel):
         embedding_type = types.tensor_type(torch.float, self._hidden_dim)
         smiles_type = types.tensor_type(torch.float,
                                         (self._max_len, self._charset_len))
-        return embedding_type >> smiles_type
+        return (embedding_type, smiles_type)
 
     @property
     def effect(self):
@@ -622,7 +622,7 @@ class Encoder(TypedModel):
         out_tys = [types.tensor_type(torch.float, out_dim) for out_dim
                    in self._out_dims]
         out_space = functools.reduce(lambda t, u: t @ u, out_tys, Ty())
-        return in_space >> out_space
+        return (in_space, out_space)
 
     @property
     def effect(self):
@@ -630,7 +630,7 @@ class Encoder(TypedModel):
 
     @property
     def name(self):
-        in_names = ['\mathbb{R}^{%d}' % dim for dim in self._in_dims]
+        in_names = ['\\mathbb{R}^{%d}' % dim for dim in self._in_dims]
 
         name = 'p(%s \\mid %s)' % (','.join(self.effect), ','.join(in_names))
         return '$%s$' % name
@@ -725,7 +725,7 @@ class RecurrentEncoder(Encoder):
         out_tys = [types.tensor_type(torch.float, out_dim) for out_dim
                    in self._out_dims]
         out_space = functools.reduce(lambda t, u: t @ u, out_tys, Ty())
-        return in_space >> out_space
+        return (in_space, out_space)
 
     @property
     def effect(self):
