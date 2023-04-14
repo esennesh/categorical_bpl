@@ -1,4 +1,4 @@
-from discopy.closed import Ty
+from discopy.monoidal import Ty
 import re
 import torch
 import uuid
