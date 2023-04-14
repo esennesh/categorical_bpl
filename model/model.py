@@ -231,8 +231,8 @@ class VaeOperadicModel(DaggerOperadicModel):
             else:
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
             data = {'effect': decoder.effect, 'function': decoder}
-            generator = monoidal.Box(decoder.name, decoder.type.left,
-                                     decoder.type.right, data=data)
+            dom, cod = decoder.type
+            generator = monoidal.Box(decoder.name, dom, cod, data=data)
             generators.append(generator)
 
         super().__init__(generators, [], data_dim, guide_hidden_dim)
@@ -260,8 +260,8 @@ class VlaeOperadicModel(DaggerOperadicModel):
                 decoder = LadderDecoder(lower, higher, noise_dim=2, conv=False,
                                         out_dist=None)
             data = {'effect': decoder.effect, 'function': decoder}
-            generator = monoidal.Box(decoder.name, decoder.type.left,
-                                     decoder.type.right, data=data)
+            dom, cod = decoder.type
+            generator = monoidal.Box(decoder.name, dom, cod, data=data)
             generators.append(generator)
 
         # For each dimensionality, construct a prior/posterior ladder pair
@@ -301,8 +301,8 @@ class GlimpseOperadicModel(DaggerOperadicModel):
             else:
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
             data = {'effect': decoder.effect, 'function': decoder}
-            generator = monoidal.Box(decoder.name, decoder.type.left,
-                                     decoder.type.right, data=data)
+            dom, cod = decoder.type
+            generator = monoidal.Box(decoder.name, dom, cod, data=data)
             generators.append(generator)
 
         # Build up a bunch of torch.Sizes for the powers of two between
@@ -319,8 +319,8 @@ class GlimpseOperadicModel(DaggerOperadicModel):
                 decoder = LadderDecoder(lower, higher, noise_dim=2, conv=False,
                                         out_dist=DiagonalGaussian)
             data = {'effect': decoder.effect, 'function': decoder}
-            generator = monoidal.Box(decoder.name, decoder.type.left,
-                                     decoder.type.right, data=data)
+            dom, cod = decoder.type
+            generator = monoidal.Box(decoder.name, dom, cod, data=data)
             generators.append(generator)
 
         # For each dimensionality, construct a prior/posterior ladder pair
@@ -334,7 +334,7 @@ class GlimpseOperadicModel(DaggerOperadicModel):
 
         # Construct writer/reader pair for spatial attention
         writer = SpatialTransformerWriter(data_side, glimpse_side)
-        writer_l, writer_r = writer.type.left, writer.type.right
+        writer_l, writer_r = writer.type
 
         data = {'effect': writer.effect, 'function': writer}
         generator = monoidal.Box(writer.name, writer_l, writer_r, data=data)
@@ -343,8 +343,8 @@ class GlimpseOperadicModel(DaggerOperadicModel):
         # Construct the likelihood
         likelihood = GaussianLikelihood(data_dim, 'X^{%d}' % data_dim)
         data = {'effect': likelihood.effect, 'function': likelihood}
-        generator = monoidal.Box(likelihood.name, likelihood.type.left,
-                                 likelihood.type.right, data=data)
+        dom, cod = likelihood.type
+        generator = monoidal.Box(likelihood.name, dom, cod, data=data)
         generators.append(generator)
         self.likelihood = generator
 
@@ -552,8 +552,8 @@ class DeepGenerativeOperadicModel(AsviOperadicModel):
             else:
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
             data = {'effect': decoder.effect, 'function': decoder}
-            generator = monoidal.Box(decoder.name, decoder.type.left,
-                                     decoder.type.right, data=data)
+            dom, cod = decoder.type
+            generator = monoidal.Box(decoder.name, dom, cod, data=data)
             generators.append(generator)
 
         obs = set()
@@ -595,15 +595,14 @@ class MolecularVaeOperadicModel(DaggerOperadicModel):
                 data = {'effect': decoder.effect,
                         'dagger_effect': encoder.effect,
                         'function': decoder}
-                conv_generator = monoidal.Box(decoder.name,
-                                                 decoder.type.left,
-                                                 decoder.type.right, data=data)
+                dom, cod = decoder.type
+                conv_generator = monoidal.Box(decoder.name, dom, cod, data=data)
                 generators.append(conv_generator)
                 data = {'dagger_effect': decoder.effect,
                         'effect': encoder.effect,
                         'function': encoder}
-                conv_dagger = monoidal.Box(encoder.name, encoder.type.left,
-                                           encoder.type.right, data=data)
+                dom, cod = encoder.type
+                conv_dagger = monoidal.Box(encoder.name, dom, cod, data=data)
                 dagger_generators.append(conv_dagger)
 
                 encoder = RecurrentMolecularEncoder(hidden, recurrent,
@@ -614,14 +613,14 @@ class MolecularVaeOperadicModel(DaggerOperadicModel):
                 data = {'effect': decoder.effect,
                         'dagger_effect': encoder.effect,
                         'function': decoder}
-                rec_generator = monoidal.Box(decoder.name, decoder.type.left,
-                                             decoder.type.right, data=data)
+                dom, cod = decoder.type
+                rec_generator = monoidal.Box(decoder.name, dom, cod, data=data)
                 generators.append(rec_generator)
                 data = {'dagger_effect': decoder.effect,
                         'effect': encoder.effect,
                         'function': encoder}
-                rec_dagger = monoidal.Box(encoder.name, encoder.type.left,
-                                             encoder.type.right, data=data)
+                dom, cod = encoder.type
+                rec_dagger = monoidal.Box(encoder.name, dom, cod, data=data)
                 dagger_generators.append(rec_dagger)
 
         super().__init__(generators, [], data_space=(max_len, charset_len),
