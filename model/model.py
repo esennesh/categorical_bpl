@@ -346,17 +346,26 @@ class GlimpseOperadicModel(DaggerOperadicModel):
         generator = monoidal.Box(likelihood.name, likelihood.type.left,
                                  likelihood.type.right, data=data)
         generators.append(generator)
+        self.likelihood = generator
 
         super().__init__(generators, [], data_dim, guide_hidden_dim,
                          no_prior_dims={glimpse_dim})
 
-    @property
-    def wiring_diagram(self):
-        latent = super().wiring_diagram
-        observation_effect = 'X^{%d}' % self._data_dim
-        likelihood = wiring.Box('', self.data_space, self.data_space,
-                                data={'effect': [observation_effect]})
-        return latent >> likelihood
+    @pnn.pyro_method
+    def model(self, observations=None, **kwargs):
+        morphism, observations, data = super(DaggerOperadicModel, self).model(
+            observations
+        )
+        morphism = morphism >> self.likelihood
+
+        if observations is not None:
+            score_morphism = pyro.condition(morphism, data=observations)
+        else:
+            score_morphism = morphism
+        with pyro.plate('data', len(data)):
+            with name_pop(name_stack=self._random_variable_names):
+                output = score_morphism()
+        return morphism, output
 
 class AutoencodingOperadicModel(OperadicModel):
     def __init__(self, generators, latent_space=(64,), global_elements=[],
