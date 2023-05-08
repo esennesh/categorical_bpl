@@ -1,7 +1,7 @@
 import collections
-from discopy.python import Ty
-from discopy import cat, wiring
-from discopyro import cart_closed, free_operad, unification
+from discopy import monoidal, wiring
+from discopy.monoidal import Ty
+from discopyro import free_operad, unification
 import itertools
 import math
 import matplotlib.pyplot as plt
@@ -62,7 +62,8 @@ class OperadicModel(BaseModel):
             nn.Linear(guide_in_dim, guide_hidden_dim),
             nn.LayerNorm(guide_hidden_dim), nn.PReLU(),
             nn.Linear(guide_hidden_dim,
-                      self._operad.arrow_weight_loc.shape[0] * 2),
+                      self._operad.arrow_weight_alpha.shape[0]),
+            nn.Softplus(),
         )
         self._random_variable_names = collections.defaultdict(int)
 
@@ -72,8 +73,7 @@ class OperadicModel(BaseModel):
 
     @property
     def wiring_diagram(self):
-        return wiring.Box('', Ty(), self.data_space,
-                          data={'effect': lambda e: True})
+        return wiring.Box('', Ty(), self.data_space)
 
     @pnn.pyro_method
     def model(self, observations=None, **kwargs):
@@ -116,17 +116,16 @@ class OperadicModel(BaseModel):
         temperature = pyro.sample('weights_temperature', temperature_gamma)
 
         data_arrow_weights = self.guide_arrow_weights(summary)
-        data_arrow_weights = data_arrow_weights.mean(dim=0).view(-1, 2)
+        data_arrow_weights = data_arrow_weights.mean(dim=0)
         arrow_weights = pyro.sample(
             'arrow_weights',
-            dist.Normal(data_arrow_weights[:, 0],
-                        data_arrow_weights[:, 1].exp()).to_event(1)
+            dist.Dirichlet(data_arrow_weights)
         )
 
         min_depth = VAE_MIN_DEPTH if len(list(self.wiring_diagram)) == 1 else 0
         morphism = self._operad(self.wiring_diagram, min_depth=min_depth,
-                                  temperature=temperature,
-                                  arrow_weights=arrow_weights)
+                                temperature=temperature,
+                                arrow_weights=arrow_weights)
 
         return morphism, data
 
@@ -138,27 +137,27 @@ class OperadicModel(BaseModel):
 
 class DaggerOperadicModel(OperadicModel):
     def __init__(self, generators, global_elements=[], data_space=(784,),
-                 guide_hidden_dim=256, no_prior_dims=[]):
+                 guide_hidden_dim=256, no_prior_dims=set()):
         obs = set()
         for generator in generators:
-            ty = generator.dom >> generator.cod
-            obs = obs | unification.base_elements(ty)
-        for element in global_elements:
-            ty = element.dom >> element.cod
-            obs = obs - unification.base_elements(ty)
+            obs |= unification.base_elements(generator.dom)
+            obs |= unification.base_elements(generator.cod)
 
-        no_prior_dims = no_prior_dims + [self._data_dim]
-        for ob in obs:
+        no_prior_dims.add(self._data_dim)
+        no_prior_obs = set()
+        for dim in no_prior_dims:
+            no_prior_obs |= unification.base_elements(types.tensor_type(
+                torch.float, dim
+            ))
+
+        for ob in obs - no_prior_obs:
             dim = types.type_size(str(ob))
-            if dim in no_prior_dims:
-                continue
-
             space = types.tensor_type(torch.float, dim)
             prior = StandardNormal(dim)
             name = '$p(%s)$' % prior.effects
             data = {'effect': prior.effect, 'dagger_effect': [],
                     'function': prior}
-            global_element = cart_closed.Box(name, Ty(), space, data=data)
+            global_element = monoidal.Box(name, Ty(), space, data=data)
             global_elements.append(global_element)
 
         super().__init__(generators, global_elements, data_space,
@@ -167,7 +166,8 @@ class DaggerOperadicModel(OperadicModel):
         self.encoders = nn.ModuleDict()
         self.encoder_functor = wiring.Functor(
             lambda ty: util.double_latent(ty, self.data_space),
-            lambda ar: self._encoder(ar.name)
+            lambda ar: self._encoder(ar.name),
+            cod=monoidal.Category(Ty, monoidal.Box)
         )
 
         for arrow in self._operad.ars:
@@ -182,10 +182,9 @@ class DaggerOperadicModel(OperadicModel):
 
     def _encoder(self, name):
         encoder = self.encoders[name]
-        return cart_closed.Box(
-            name, encoder.type.left, encoder.type.right,
-            data={'effect': encoder.effect, 'function': encoder}
-        )
+        dom, cod = encoder.type
+        return monoidal.Box(name, dom, cod, data={'effect': encoder.effect,
+                                                  'function': encoder})
 
     @pnn.pyro_method
     def model(self, observations=None, **kwargs):
@@ -232,8 +231,8 @@ class VaeOperadicModel(DaggerOperadicModel):
             else:
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
             data = {'effect': decoder.effect, 'function': decoder}
-            generator = cart_closed.Box(decoder.name, decoder.type.left,
-                                        decoder.type.right, data=data)
+            dom, cod = decoder.type
+            generator = monoidal.Box(decoder.name, dom, cod, data=data)
             generators.append(generator)
 
         super().__init__(generators, [], data_dim, guide_hidden_dim)
@@ -261,8 +260,8 @@ class VlaeOperadicModel(DaggerOperadicModel):
                 decoder = LadderDecoder(lower, higher, noise_dim=2, conv=False,
                                         out_dist=None)
             data = {'effect': decoder.effect, 'function': decoder}
-            generator = cart_closed.Box(decoder.name, decoder.type.left,
-                                        decoder.type.right, data=data)
+            dom, cod = decoder.type
+            generator = monoidal.Box(decoder.name, dom, cod, data=data)
             generators.append(generator)
 
         # For each dimensionality, construct a prior/posterior ladder pair
@@ -270,7 +269,7 @@ class VlaeOperadicModel(DaggerOperadicModel):
             space = types.tensor_type(torch.float, dim)
             prior = LadderPrior(dim, None)
 
-            generator = cart_closed.Box(prior.name, Ty(), space, data={
+            generator = monoidal.Box(prior.name, Ty(), space, data={
                 'effect': prior.effect, 'function': prior
             })
             generators.append(generator)
@@ -302,8 +301,8 @@ class GlimpseOperadicModel(DaggerOperadicModel):
             else:
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
             data = {'effect': decoder.effect, 'function': decoder}
-            generator = cart_closed.Box(decoder.name, decoder.type.left,
-                                        decoder.type.right, data=data)
+            dom, cod = decoder.type
+            generator = monoidal.Box(decoder.name, dom, cod, data=data)
             generators.append(generator)
 
         # Build up a bunch of torch.Sizes for the powers of two between
@@ -320,8 +319,8 @@ class GlimpseOperadicModel(DaggerOperadicModel):
                 decoder = LadderDecoder(lower, higher, noise_dim=2, conv=False,
                                         out_dist=DiagonalGaussian)
             data = {'effect': decoder.effect, 'function': decoder}
-            generator = cart_closed.Box(decoder.name, decoder.type.left,
-                                        decoder.type.right, data=data)
+            dom, cod = decoder.type
+            generator = monoidal.Box(decoder.name, dom, cod, data=data)
             generators.append(generator)
 
         # For each dimensionality, construct a prior/posterior ladder pair
@@ -330,34 +329,43 @@ class GlimpseOperadicModel(DaggerOperadicModel):
             prior = LadderPrior(dim, DiagonalGaussian)
 
             data = {'effect': prior.effect, 'function': prior}
-            generator = cart_closed.Box(prior.name, Ty(), space, data=data)
+            generator = monoidal.Box(prior.name, Ty(), space, data=data)
             generators.append(generator)
 
         # Construct writer/reader pair for spatial attention
         writer = SpatialTransformerWriter(data_side, glimpse_side)
-        writer_l, writer_r = writer.type.left, writer.type.right
+        writer_l, writer_r = writer.type
 
         data = {'effect': writer.effect, 'function': writer}
-        generator = cart_closed.Box(writer.name, writer_l, writer_r, data=data)
+        generator = monoidal.Box(writer.name, writer_l, writer_r, data=data)
         generators.append(generator)
 
         # Construct the likelihood
         likelihood = GaussianLikelihood(data_dim, 'X^{%d}' % data_dim)
         data = {'effect': likelihood.effect, 'function': likelihood}
-        generator = cart_closed.Box(likelihood.name, likelihood.type.left,
-                                    likelihood.type.right, data=data)
+        dom, cod = likelihood.type
+        generator = monoidal.Box(likelihood.name, dom, cod, data=data)
         generators.append(generator)
+        self.likelihood = generator
 
         super().__init__(generators, [], data_dim, guide_hidden_dim,
-                         no_prior_dims=[glimpse_dim, data_dim])
+                         no_prior_dims={glimpse_dim})
 
-    @property
-    def wiring_diagram(self):
-        latent = super().wiring_diagram
-        observation_effect = 'X^{%d}' % self._data_dim
-        likelihood = wiring.Box('', self.data_space, self.data_space,
-                                data={'effect': [observation_effect]})
-        return latent >> likelihood
+    @pnn.pyro_method
+    def model(self, observations=None, **kwargs):
+        morphism, observations, data = super(DaggerOperadicModel, self).model(
+            observations
+        )
+        morphism = morphism >> self.likelihood
+
+        if observations is not None:
+            score_morphism = pyro.condition(morphism, data=observations)
+        else:
+            score_morphism = morphism
+        with pyro.plate('data', len(data)):
+            with name_pop(name_stack=self._random_variable_names):
+                output = score_morphism()
+        return morphism, output
 
 class AutoencodingOperadicModel(OperadicModel):
     def __init__(self, generators, latent_space=(64,), global_elements=[],
@@ -544,8 +552,8 @@ class DeepGenerativeOperadicModel(AsviOperadicModel):
             else:
                 decoder = DensityDecoder(lower, higher, DiagonalGaussian)
             data = {'effect': decoder.effect, 'function': decoder}
-            generator = cart_closed.Box(decoder.name, decoder.type.left,
-                                        decoder.type.right, data=data)
+            dom, cod = decoder.type
+            generator = monoidal.Box(decoder.name, dom, cod, data=data)
             generators.append(generator)
 
         obs = set()
@@ -565,7 +573,7 @@ class DeepGenerativeOperadicModel(AsviOperadicModel):
             name = '$p(%s)$' % prior.effects
             effect = {'effect': prior.effect, 'dagger_effect': [],
                       'function': prior}
-            global_element = cart_closed.Box(name, Ty(), space, data=effect)
+            global_element = monoidal.Box(name, Ty(), space, data=effect)
             global_elements.append(global_element)
 
         super().__init__(generators, global_elements, data_dim,
@@ -587,15 +595,14 @@ class MolecularVaeOperadicModel(DaggerOperadicModel):
                 data = {'effect': decoder.effect,
                         'dagger_effect': encoder.effect,
                         'function': decoder}
-                conv_generator = cart_closed.Box(decoder.name,
-                                                 decoder.type.left,
-                                                 decoder.type.right, data=data)
+                dom, cod = decoder.type
+                conv_generator = monoidal.Box(decoder.name, dom, cod, data=data)
                 generators.append(conv_generator)
                 data = {'dagger_effect': decoder.effect,
                         'effect': encoder.effect,
                         'function': encoder}
-                conv_dagger = cart_closed.Box(encoder.name, encoder.type.left,
-                                              encoder.type.right, data=data)
+                dom, cod = encoder.type
+                conv_dagger = monoidal.Box(encoder.name, dom, cod, data=data)
                 dagger_generators.append(conv_dagger)
 
                 encoder = RecurrentMolecularEncoder(hidden, recurrent,
@@ -606,14 +613,14 @@ class MolecularVaeOperadicModel(DaggerOperadicModel):
                 data = {'effect': decoder.effect,
                         'dagger_effect': encoder.effect,
                         'function': decoder}
-                rec_generator = cart_closed.Box(decoder.name, decoder.type.left,
-                                                decoder.type.right, data=data)
+                dom, cod = decoder.type
+                rec_generator = monoidal.Box(decoder.name, dom, cod, data=data)
                 generators.append(rec_generator)
                 data = {'dagger_effect': decoder.effect,
                         'effect': encoder.effect,
                         'function': encoder}
-                rec_dagger = cart_closed.Box(encoder.name, encoder.type.left,
-                                             encoder.type.right, data=data)
+                dom, cod = encoder.type
+                rec_dagger = monoidal.Box(encoder.name, dom, cod, data=data)
                 dagger_generators.append(rec_dagger)
 
         super().__init__(generators, [], data_space=(max_len, charset_len),
