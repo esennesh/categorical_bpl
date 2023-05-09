@@ -378,12 +378,9 @@ class AutoencodingOperadicModel(OperadicModel):
     @pnn.pyro_method
     def model(self, observations=None):
         morphism, observations, data = super().model(observations)
+        score_morphism = self.condition_morphism(morphism, observations)
         latent_code = self.latent_prior()
 
-        if observations is not None:
-            score_morphism = pyro.condition(morphism, data=observations)
-        else:
-            score_morphism = morphism
         with pyro.plate('data', len(data)):
             with name_pop(name_stack=self._random_variable_names):
                 output = score_morphism(latent_code)
