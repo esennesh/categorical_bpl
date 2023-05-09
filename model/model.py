@@ -25,17 +25,6 @@ VAE_MIN_DEPTH = 2
 
 WIRING_FUNCTOR = wiring.WiringFunctor(True)
 
-def latent_effect_falgebra(f):
-    if isinstance(f, wiring.Id):
-        return []
-    if isinstance(f, wiring.Box):
-        return [eff for eff in f.data['effect'] if 'X^' not in eff]
-    if isinstance(f, wiring.Parallel):
-        return list(itertools.chain(*f.factors))
-    if isinstance(f, wiring.Sequential):
-        return list(itertools.chain(*f.arrows))
-    raise TypeError('Expected wiring diagram', f)
-
 class OperadicModel(BaseModel):
     def __init__(self, generators, global_elements=[], data_space=(784,),
                  guide_in_dim=None, guide_hidden_dim=256):
