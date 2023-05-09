@@ -475,11 +475,8 @@ class AsviOperadicModel(OperadicModel):
     @pnn.pyro_method
     def model(self, observations=None, valid=False, index=None, **kwargs):
         morphism, observations, data = super().model(observations)
+        score_morphism = self.condition_morphism(morphism, observations)
 
-        if observations is not None:
-            score_morphism = pyro.condition(morphism, data=observations)
-        else:
-            score_morphism = morphism
         with pyro.plate('data', len(data)):
             with name_count():
                 output = score_morphism()
