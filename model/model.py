@@ -25,17 +25,6 @@ VAE_MIN_DEPTH = 2
 
 WIRING_FUNCTOR = wiring.WiringFunctor(True)
 
-def latent_effect_falgebra(f):
-    if isinstance(f, wiring.Id):
-        return []
-    if isinstance(f, wiring.Box):
-        return [eff for eff in f.data['effect'] if 'X^' not in eff]
-    if isinstance(f, wiring.Parallel):
-        return list(itertools.chain(*f.factors))
-    if isinstance(f, wiring.Sequential):
-        return list(itertools.chain(*f.arrows))
-    raise TypeError('Expected wiring diagram', f)
-
 class OperadicModel(BaseModel):
     def __init__(self, generators, global_elements=[], data_space=(784,),
                  guide_in_dim=None, guide_hidden_dim=256):
@@ -74,6 +63,11 @@ class OperadicModel(BaseModel):
     @property
     def wiring_diagram(self):
         return wiring.Box('', Ty(), self.data_space)
+
+    def condition_morphism(self, morphism, observations=None):
+        if observations is not None:
+            return pyro.condition(morphism, data=observations)
+        return morphism
 
     @pnn.pyro_method
     def model(self, observations=None, **kwargs):
@@ -189,11 +183,8 @@ class DaggerOperadicModel(OperadicModel):
     @pnn.pyro_method
     def model(self, observations=None, **kwargs):
         morphism, observations, data = super().model(observations)
+        score_morphism = self.condition_morphism(morphism, observations)
 
-        if observations is not None:
-            score_morphism = pyro.condition(morphism, data=observations)
-        else:
-            score_morphism = morphism
         with pyro.plate('data', len(data)):
             with name_pop(name_stack=self._random_variable_names):
                 output = score_morphism()
@@ -351,21 +342,9 @@ class GlimpseOperadicModel(DaggerOperadicModel):
         super().__init__(generators, [], data_dim, guide_hidden_dim,
                          no_prior_dims={glimpse_dim})
 
-    @pnn.pyro_method
-    def model(self, observations=None, **kwargs):
-        morphism, observations, data = super(DaggerOperadicModel, self).model(
-            observations
-        )
-        morphism = morphism >> self.likelihood
-
-        if observations is not None:
-            score_morphism = pyro.condition(morphism, data=observations)
-        else:
-            score_morphism = morphism
-        with pyro.plate('data', len(data)):
-            with name_pop(name_stack=self._random_variable_names):
-                output = score_morphism()
-        return morphism, output
+    def condition_morphism(self, morphism, observations=None):
+        return super().condition_morphism(morphism >> self.likelihood,
+                                          observations)
 
 class AutoencodingOperadicModel(OperadicModel):
     def __init__(self, generators, latent_space=(64,), global_elements=[],
@@ -399,12 +378,9 @@ class AutoencodingOperadicModel(OperadicModel):
     @pnn.pyro_method
     def model(self, observations=None):
         morphism, observations, data = super().model(observations)
+        score_morphism = self.condition_morphism(morphism, observations)
         latent_code = self.latent_prior()
 
-        if observations is not None:
-            score_morphism = pyro.condition(morphism, data=observations)
-        else:
-            score_morphism = morphism
         with pyro.plate('data', len(data)):
             with name_pop(name_stack=self._random_variable_names):
                 output = score_morphism(latent_code)
@@ -499,11 +475,8 @@ class AsviOperadicModel(OperadicModel):
     @pnn.pyro_method
     def model(self, observations=None, valid=False, index=None, **kwargs):
         morphism, observations, data = super().model(observations)
+        score_morphism = self.condition_morphism(morphism, observations)
 
-        if observations is not None:
-            score_morphism = pyro.condition(morphism, data=observations)
-        else:
-            score_morphism = morphism
         with pyro.plate('data', len(data)):
             with name_count():
                 output = score_morphism()
