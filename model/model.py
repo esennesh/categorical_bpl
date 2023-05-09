@@ -64,6 +64,11 @@ class OperadicModel(BaseModel):
     def wiring_diagram(self):
         return wiring.Box('', Ty(), self.data_space)
 
+    def condition_morphism(self, morphism, observations=None):
+        if observations is not None:
+            return pyro.condition(morphism, data=observations)
+        return morphism
+
     @pnn.pyro_method
     def model(self, observations=None, **kwargs):
         if isinstance(observations, dict):
