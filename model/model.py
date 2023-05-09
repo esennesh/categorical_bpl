@@ -342,21 +342,9 @@ class GlimpseOperadicModel(DaggerOperadicModel):
         super().__init__(generators, [], data_dim, guide_hidden_dim,
                          no_prior_dims={glimpse_dim})
 
-    @pnn.pyro_method
-    def model(self, observations=None, **kwargs):
-        morphism, observations, data = super(DaggerOperadicModel, self).model(
-            observations
-        )
-        morphism = morphism >> self.likelihood
-
-        if observations is not None:
-            score_morphism = pyro.condition(morphism, data=observations)
-        else:
-            score_morphism = morphism
-        with pyro.plate('data', len(data)):
-            with name_pop(name_stack=self._random_variable_names):
-                output = score_morphism()
-        return morphism, output
+    def condition_morphism(self, morphism, observations=None):
+        return super().condition_morphism(morphism >> self.likelihood,
+                                          observations)
 
 class AutoencodingOperadicModel(OperadicModel):
     def __init__(self, generators, latent_space=(64,), global_elements=[],
