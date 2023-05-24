@@ -531,8 +531,8 @@ class DeepGenerativeOperadicModel(AsviOperadicModel):
 
         obs = set()
         for generator in generators:
-            ty = generator.dom >> generator.cod
-            obs = obs | unification.base_elements(ty)
+            obs = obs | unification.base_elements(generator.dom)
+            obs = obs | unification.base_elements(generator.cod)
 
         global_elements = []
         no_prior_dims = [self._data_dim]
