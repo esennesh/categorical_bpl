@@ -9,6 +9,7 @@ import pyro
 from pyro.contrib.autoname import name_count, scope
 from pyro.poutine import block
 import pyro.distributions as dist
+from pyro.infer.autoguide import NeuralAsviGuideMessenger
 import pyro.nn as pnn
 import torch
 import torch.nn as nn
@@ -490,12 +491,17 @@ class AsviOperadicModel(OperadicModel):
             data = observations
         data = data.view(data.shape[0], *self._data_space)
         morphism, data = super().guide(observations)
+        morphism = self.condition_morphism(morphism,
+                                           {self._observation_name: data})
 
         with pyro.plate('data', len(data)):
             with name_count():
                 morphism = block(morphism, hide=[self._observation_name])
                 if self._amortized:
-                    morphism = util.neural_asvi(morphism, ConvIncoder, data)
+                    morphism = NeuralAsviGuideMessenger(
+                        morphism, self.asvi_params, self._observation_name,
+                        data.shape[1:], init_amortizer=ConvIncoder
+                    )
                 else:
                     morphism = asvi(morphism, self.asvi_params, index=index,
                                     length=self._data_length)
