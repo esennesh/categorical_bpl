@@ -4,14 +4,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from pathlib import Path
 from pyro.infer import Importance
-from pyro.infer.autoguide import AutoNeuralSviMessenger
 from itertools import chain, repeat
 from collections import OrderedDict
 import torch
 import warnings
-
-def neural_asvi(model, amortizer_cls=None, data=None):
-    return AutoNeuralSviMessenger(model, data, data.shape[1:], init_amortizer=amortizer_cls)
 
 class ImportanceSampler(Importance):
     def __init__(self, *args, **kwargs):
