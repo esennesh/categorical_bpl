@@ -376,7 +376,7 @@ class AutoencodingOperadicModel(OperadicModel):
                           data={'effect': lambda e: True})
 
     @pnn.pyro_method
-    def model(self, observations=None):
+    def model(self, observations=None, valid=False, index=None, **kwargs):
         morphism, observations, data = super().model(observations)
         score_morphism = self.condition_morphism(morphism, observations)
         latent_code = self.latent_prior()
@@ -387,7 +387,7 @@ class AutoencodingOperadicModel(OperadicModel):
         return morphism, output
 
     @pnn.pyro_method
-    def guide(self, observations=None):
+    def guide(self, observations=None, valid=False, index=None, **kwargs):
         if isinstance(observations, dict):
             data = observations['$X^{%d}$' % self._data_dim]
         else:
