@@ -955,7 +955,7 @@ class StringEncoder(TypedModel):
     def type(self):
         in_space = types.tensor_type(torch.float, self._in_dims)
         out_space = types.tensor_type(torch.float, self._out_dim)
-        return in_space >> out_space
+        return (in_space, out_space)
 
     @property
     def name(self):
