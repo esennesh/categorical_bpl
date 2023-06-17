@@ -723,6 +723,65 @@ class MolecularDecoder(TypedModel):
         logits_categorical = dist.OneHotCategorical(probs=probs).to_event(1)
         return pyro.sample('$%s$' % self._smiles_name, logits_categorical)
 
+class RecurrentDecoder(TypedModel):
+    def __init__(self, hidden_dim, gru_layers, latent_dim, nclasses, strlen,
+                 relaxed=False):
+        super().__init__()
+        self._hidden_dim = hidden_dim
+        self._latent_dim = latent_dim
+        self._nclasses = nclasses
+        self._num_gru_layers = gru_layers
+        self._relaxed = relaxed
+        self._strlen = strlen
+
+        self.recurrence = nn.GRU(input_size=latent_dim, hidden_size=hidden_dim,
+                                 num_layers=gru_layers, batch_first=False)
+        self.decoder = nn.Sequential(
+            nn.Linear(hidden_dim, nclasses),
+            nn.Softmax(dim=-1)
+        )
+        self.temperature = pnn.PyroParam(torch.tensor([2.2]),
+                                         constraint=constraints.positive)
+
+    @property
+    def type(self):
+        embedding_type = types.tensor_type(torch.float, self._latent_dim)
+        str_type = types.tensor_type(torch.float, (self._strlen,
+                                                   self._nclasses))
+        return (embedding_type, str_type)
+
+    def _str_name(self, i):
+        return 'X^{(%d, %d)}' % (i, self._nclasses)
+
+    @property
+    def effect(self):
+        return [self._str_name(i) for i in range(self._strlen)]
+
+    @property
+    def name(self):
+        embedding_name = 'Z^{%d}' % self._hidden_dim
+        name = 'p(%s \\mid %s)' % (self._str_name(self._strlen), embedding_name)
+        return '$%s$' % name
+
+    def forward(self, zs):
+        hidden = self._batch.new_zeros(self._num_gru_layers,
+                                       self._batch.shape.shape[0],
+                                       self._hidden_dim)
+        chars = []
+        for i in range(self._strlen):
+            xs, hidden = self.recurrence(zs, hidden)
+            xs = self.decoder(xs)
+
+            if self._relaxed:
+                categorical = dist.RelaxedOneHotCategorical(self.temperature,
+                                                            logits=xs)
+            else:
+                categorical = dist.OneHotCategorical(logits=xs)
+            char = pyro.sample('$%s$' % self._str_name(i),
+                               categorical.to_event(1))
+            chars.append(char)
+        return torch.stack(chars, dim=1)
+
 class Encoder(TypedModel):
     def __init__(self, in_dims, out_dims, latents, hidden_dim, incoder_cls,
                  normalizer_layer=nn.LayerNorm):
