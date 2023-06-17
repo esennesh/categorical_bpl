@@ -302,10 +302,11 @@ class SelfiesDataset(torch.utils.data.TensorDataset):
         alphabet = selfies.get_alphabet_from_selfies(selfies_list)
         alphabet.add('[nop]')
         self.alphabet = list(alphabet)
-        max_len = max(selfies.len_selfies(s) for s in selfies_list)
+        self.max_len = max(selfies.len_selfies(s) for s in selfies_list)
 
-        selfies_array = np.array([selfies_to_hot(str, max_len, alphabet) for str
-                                  in selfies_list])
+        selfies_1hot = [selfies_to_hot(str, self.max_len, alphabet)[1] for str
+                        in selfies_list]
+        selfies_array = np.array(selfies_1hot, dtype='float32')
         super().__init__(torch.from_numpy(selfies_array))
 
 # RDKit Chem-based SMILES loading
@@ -413,10 +414,10 @@ def selfies_to_hot(selfie, largest_selfie_len, alphabet):
     symbol_to_int = dict((c, i) for i, c in enumerate(alphabet))
 
     # pad with [nop]
-    selfie += '[nop]' * (largest_selfie_len - sf.len_selfies(selfie))
+    selfie += '[nop]' * (largest_selfie_len - selfies.len_selfies(selfie))
 
     # integer encode
-    symbol_list = sf.split_selfies(selfie)
+    symbol_list = selfies.split_selfies(selfie)
     integer_encoded = [symbol_to_int[symbol] for symbol in symbol_list]
 
     # one hot-encode the integer encoded selfie
