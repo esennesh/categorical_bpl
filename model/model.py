@@ -362,7 +362,6 @@ class AutoencodingOperadicModel(OperadicModel):
             self._latent_name = 'Z^{%s}' % str(self._latent_space)
 
         super().__init__(generators, global_elements, data_space,
-                         guide_in_dim=self._latent_dim,
                          guide_hidden_dim=guide_hidden_dim)
 
         space = types.tensor_type(torch.float, latent_space)
@@ -382,10 +381,10 @@ class AutoencodingOperadicModel(OperadicModel):
     def model(self, observations=None, valid=False, index=None, **kwargs):
         morphism, observations, data = super().model(observations)
         score_morphism = self.condition_morphism(morphism, observations)
-        latent_code = self.latent_prior()
 
         with pyro.plate('data', len(data)):
             with name_pop(name_stack=self._random_variable_names):
+                latent_code = self.latent_prior()
                 output = score_morphism(latent_code)
         return morphism, output
 
@@ -396,11 +395,11 @@ class AutoencodingOperadicModel(OperadicModel):
         else:
             data = observations
         data = data.view(data.shape[0], *self._data_space)
-        latent_code = self.encoder(data)
-        morphism, data = super().guide(observations, latent_code)
+        morphism, data = super().guide(observations)
 
         with pyro.plate('data', len(data)):
             with name_push(name_stack=self._random_variable_names):
+                latent_code = self.encoder(data)
                 morphism(latent_code)
 
         return morphism, latent_code
