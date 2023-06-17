@@ -109,3 +109,11 @@ class ZincMolecularDataLoader(BaseDataLoader):
     def __init__(self, csv, batch_size, max_length=120, shuffle=True, validation_split=0.0, num_workers=1, training=True):
         dataset = mol_utils.Zinc15Dataset(csv, max_len=max_length)
         super().__init__(dataset, batch_size, shuffle, validation_split, num_workers)
+
+class SelfiesDataLoader(BaseDataLoader):
+    """
+    SMILES data loading and conversion to SELFIES using BaseDataLoader
+    """
+    def __init__(self, csv, batch_size, shuffle=True, validation_split=0.0, num_workers=1, training=True):
+        dataset = mol_utils.SelfiesDataset(csv)
+        super().__init__(dataset, batch_size, shuffle, validation_split, num_workers)
