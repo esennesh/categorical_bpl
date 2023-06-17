@@ -581,7 +581,7 @@ class SelfiesAutoencodingModel(AutoencodingOperadicModel):
                                      self._latent_dim)
 
     def condition_morphism(self, morphism, observations=None):
-        data = {'$X^{%d}$' % (i, self._data_space[1]): obs for i, obs in
+        data = {'$X^{%s}$' % str((i, self._data_space[1])): obs for i, obs in
                 enumerate(observations[self._observation_name].unbind(dim=1))}
         return super().condition_morphism(morphism, observations=data)
 
