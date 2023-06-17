@@ -735,7 +735,7 @@ class RecurrentDecoder(TypedModel):
         self._strlen = strlen
 
         self.recurrence = nn.GRU(input_size=latent_dim, hidden_size=hidden_dim,
-                                 num_layers=gru_layers, batch_first=False)
+                                 num_layers=gru_layers, batch_first=True)
         self.decoder = nn.Sequential(
             nn.Linear(hidden_dim, nclasses),
             nn.Softmax(dim=-1)
@@ -759,14 +759,16 @@ class RecurrentDecoder(TypedModel):
 
     @property
     def name(self):
-        embedding_name = 'Z^{%d}' % self._hidden_dim
+        embedding_name = 'Z^{%d}' % self._latent_dim
         name = 'p(%s \\mid %s)' % (self._str_name(self._strlen), embedding_name)
         return '$%s$' % name
 
     def forward(self, zs):
         hidden = self._batch.new_zeros(self._num_gru_layers,
-                                       self._batch.shape.shape[0],
+                                       self._batch.shape[0],
                                        self._hidden_dim)
+        zs = zs.unsqueeze(dim=1).expand(zs.shape[0], self._num_gru_layers,
+                                        *zs.shape[1:])
         chars = []
         for i in range(self._strlen):
             xs, hidden = self.recurrence(zs, hidden)
