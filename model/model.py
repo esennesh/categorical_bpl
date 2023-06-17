@@ -585,9 +585,14 @@ class SelfiesAutoencodingModel(AutoencodingOperadicModel):
         self.encoder = StringEncoder(self._latent_name, (str_len, nchars),
                                      self._latent_dim)
 
+    def block_conditioning(self, morphism, data):
+        observation_names = ['$X^{(%d, %d)}$' % (i, self._data_space[1]) for i
+                             in range(data.shape[0])]
+        return block(morphism, hide=observation_names)
+
     def condition_morphism(self, morphism, observations=None):
         data = {'$X^{%s}$' % str((i, self._data_space[1])): obs for i, obs in
-                enumerate(observations[self._observation_name].unbind(dim=1))}
+                enumerate(observations.unbind(dim=1))}
         return super().condition_morphism(morphism, observations=data)
 
 class GrammarAutoencodingModel(AutoencodingOperadicModel):
