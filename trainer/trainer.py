@@ -170,8 +170,12 @@ class Trainer(BaseTrainer):
             for batch_idx, batch in enumerate(self.data_loader):
                 if len(batch) == 3:
                     data, metadata, indices = batch
-                else:
+                elif len(batch) == 2:
                     data, metadata = batch
+                    indices = None
+                else:
+                    data = batch[0]
+                    metadata = {}
                     indices = None
                 data = data.to(self.device)
                 if indices is not None:
