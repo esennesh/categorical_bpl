@@ -186,7 +186,7 @@
 #    same "printed page" as the copyright notice for easier
 #    identification within third-party archives.
 #
-# Copyright 2017, A. Dorsk
+# Copyright 2017, A. Dorsk; 2023, Eli Sennesh
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -206,6 +206,7 @@ import numpy as np
 import os
 import pandas as pd
 import pickle as pkl
+import selfies
 import torch.utils.data
 
 logging.getLogger().addHandler(logging.StreamHandler())
@@ -290,6 +291,22 @@ chain -> branched_atom
 chain -> chain branched_atom
 chain -> chain bond branched_atom
 Nothing -> None"""
+
+# SELFIES-based SMILES loading
+class SelfiesDataset(torch.utils.data.TensorDataset):
+    def __init__(self, csv):
+        data_frame = pd.read_csv(csv)
+        smiles_list = np.asanyarray(data_frame.smiles)
+        selfies_list = list(map(selfies.encoder, smiles_list))
+
+        alphabet = selfies.get_alphabet_from_selfies(selfies_list)
+        alphabet.add('[nop]')
+        self.alphabet = list(alphabet)
+        max_len = max(selfies.len_selfies(s) for s in selfies_list)
+
+        selfies_array = np.array([selfies_to_hot(str, max_len, alphabet) for str
+                                  in selfies_list])
+        super().__init__(torch.from_numpy(selfies_array))
 
 # RDKit Chem-based SMILES loading
 class Zinc15Dataset(torch.utils.data.TensorDataset):
@@ -389,6 +406,27 @@ def filter_valid_smiles_return_invalid(strings, max_len):
             new_smiles.append(s)
     return new_smiles, filter_list
 
+def selfies_to_hot(selfie, largest_selfie_len, alphabet):
+    """Go from a single selfies string to a one-hot encoding.
+    """
+
+    symbol_to_int = dict((c, i) for i, c in enumerate(alphabet))
+
+    # pad with [nop]
+    selfie += '[nop]' * (largest_selfie_len - sf.len_selfies(selfie))
+
+    # integer encode
+    symbol_list = sf.split_selfies(selfie)
+    integer_encoded = [symbol_to_int[symbol] for symbol in symbol_list]
+
+    # one hot-encode the integer encoded selfie
+    onehot_encoded = list()
+    for index in integer_encoded:
+        letter = [0] * len(alphabet)
+        letter[index] = 1
+        onehot_encoded.append(letter)
+
+    return integer_encoded, np.array(onehot_encoded)
 
 def smiles_to_hot(smiles, max_len, padding, char_indices, nchars):
     smiles = [pad_smile(i, max_len, padding)
