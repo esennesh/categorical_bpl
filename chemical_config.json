@@ -1,20 +1,18 @@
 {
-    "name": "Molecular_GrammerAutoencodingOperad",
+    "name": "SelfiesAutoencodingOperad",
     "n_gpu": 1,
 
     "arch": {
-        "type": "ZincGrammarAutoencodingModel",
+        "type": "SelfiesAutoencodingModel",
         "args": {
-          "max_len": 120,
-          "charset_file": "data/ZINC/char_list.json",
-          "latent_space": [128]
+          "latent_space": [12]
         }
     },
     "data_loader": {
-        "type": "ZincMolecularDataLoader",
+        "type": "SelfiesDataLoader",
         "args":{
-            "csv": "data/ZINC/zinc15_250K_2D.csv",
-            "batch_size": 1,
+            "csv": "data/SMILES/0SelectedSMILES_QM9.csv",
+            "batch_size": 128,
             "shuffle": true,
             "validation_split": 0.1,
             "num_workers": 2
@@ -38,10 +36,10 @@
         }
     },
     "trainer": {
-        "epochs": 500,
+        "epochs": 5000,
 
         "save_dir": "saved/",
-        "save_period": 10,
+        "save_period": 100,
         "verbosity": 2,
 
         "monitor": "min val_loss",
