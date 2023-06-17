@@ -987,15 +987,18 @@ class StringEncoder(TypedModel):
         in_features = in_dims[0]
         if string_type == 'chars':
             self.conv_layers = nn.Sequential(
-                nn.Conv1d(in_features, 9, kernel_size=9),
+                nn.Conv1d(in_features, 32, kernel_size=3, stride=2, padding=1),
                 nn.ReLU(),
-                nn.Conv1d(9, 9, kernel_size=9),
+                nn.Conv1d(32, 64, kernel_size=3, stride=2, padding=1),
                 nn.ReLU(),
-                nn.Conv1d(9, 10, kernel_size=11),
-                nn.ReLU(),
+                nn.Flatten()
             )
+            dummy_input = torch.randn(1, *in_dims)
+            output = self.conv_layers(dummy_input)
+            flattened_size = output.shape[1]
+
             self.dense = nn.Sequential(
-                nn.Linear(80, 435), nn.ReLU(),
+                nn.Linear(flattened_size, 435), nn.ReLU(),
                 nn.Linear(435, out_features * 2),
             )
         else:
@@ -1025,10 +1028,10 @@ class StringEncoder(TypedModel):
         return '$%s$' % name
 
     def forward(self, features):
-        hs = self.conv_layers(features).view(features.shape[0], -1)
+        features = features.view(features.shape[0], self._in_dims[0], -1)
+        hs = self.conv_layers(features)
         hs = self.dense(hs).view(features.shape[0], 2, self._out_dim)
         return self.distribution(hs[:, 0], hs[:, 1].exp())
-
 
 def build_encoder(in_dims, out_dims, effects):
     latents = [eff for eff in effects if 'X^' not in eff]
