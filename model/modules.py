@@ -737,7 +737,7 @@ class RecurrentDecoder(TypedModel):
         self.recurrence = nn.GRU(input_size=latent_dim, hidden_size=hidden_dim,
                                  num_layers=gru_layers, batch_first=True)
         self.decoder = nn.Sequential(
-            nn.Linear(hidden_dim, nclasses),
+            nn.Linear(hidden_dim * gru_layers, nclasses),
             nn.Softmax(dim=-1)
         )
         self.temperature = pnn.PyroParam(torch.tensor([2.2]),
@@ -772,7 +772,7 @@ class RecurrentDecoder(TypedModel):
         chars = []
         for i in range(self._strlen):
             xs, hidden = self.recurrence(zs, hidden)
-            xs = self.decoder(xs)
+            xs = self.decoder(xs.flatten(start_dim=1))
 
             if self._relaxed:
                 categorical = dist.RelaxedOneHotCategorical(self.temperature,
