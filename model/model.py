@@ -567,7 +567,7 @@ class SelfiesAutoencodingModel(AutoencodingOperadicModel):
                                                             gru_layers,
                                                             relaxed):
             decoder = RecurrentDecoder(hidden_dim, nlayers,
-                                       math.prod(*latent_space), chars, str_len)
+                                       math.prod(latent_space), nchars, str_len)
             generator = monoidal.Box(decoder.name, decoder.type[0],
                                      decoder.type[1], data={
                                         'effect': decoder.effect,
