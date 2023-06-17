@@ -558,8 +558,8 @@ class DeepGenerativeOperadicModel(AsviOperadicModel):
 class SelfiesAutoencodingModel(AutoencodingOperadicModel):
     def __init__(self, nchars, str_len, latent_space=(12,),
                  guide_hidden_dim=256):
-        hidden_dims = [64, 128, 256]
-        gru_layers = [1, 2, 4, 8]
+        hidden_dims = [64, 100, 128]
+        gru_layers = [1, 2, 4]
         relaxed = [False, True]
         generators = []
 
