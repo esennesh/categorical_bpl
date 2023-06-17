@@ -555,6 +555,37 @@ class DeepGenerativeOperadicModel(AsviOperadicModel):
         super().__init__(generators, global_elements, data_dim,
                          guide_hidden_dim, **kwargs)
 
+class SelfiesAutoencodingModel(AutoencodingOperadicModel):
+    def __init__(self, nchars, str_len, latent_space=(12,),
+                 guide_hidden_dim=256):
+        hidden_dims = [64, 128, 256]
+        gru_layers = [1, 2, 4, 8]
+        relaxed = [False, True]
+        generators = []
+
+        for hidden_dim, nlayers, relax in itertools.product(hidden_dims,
+                                                            gru_layers,
+                                                            relaxed):
+            decoder = RecurrentDecoder(hidden_dim, nlayers,
+                                       math.prod(*latent_space), chars, str_len)
+            generator = monoidal.Box(decoder.name, decoder.type[0],
+                                     decoder.type[1], data={
+                                        'effect': decoder.effect,
+                                        'function': decoder
+                                     })
+            generators.append(generator)
+
+        super().__init__(generators, latent_space, data_space=(str_len, nchars),
+                         guide_hidden_dim=guide_hidden_dim)
+
+        self.encoder = StringEncoder(self._latent_name, (str_len, nchars),
+                                     self._latent_dim)
+
+    def condition_morphism(self, morphism, observations=None):
+        data = {'$X^{%d}$' % (i, self._data_space[1]): obs for i, obs in
+                enumerate(observations[self._observation_name].unbind(dim=1))}
+        return super().condition_morphism(morphism, observations=data)
+
 class GrammarAutoencodingModel(AutoencodingOperadicModel):
     def __init__(self, grammar, char_indices, latent_space=(64,), max_len=120,
                  guide_hidden_dim=256):
