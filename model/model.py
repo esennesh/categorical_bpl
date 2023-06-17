@@ -377,10 +377,13 @@ class AutoencodingOperadicModel(OperadicModel):
         return wiring.Box('', self.latent_space, self.data_space,
                           data={'effect': lambda e: True})
 
+    def block_conditioning(self, morphism, data):
+        return morphism
+
     @pnn.pyro_method
     def model(self, observations=None, valid=False, index=None, **kwargs):
         morphism, observations, data = super().model(observations)
-        score_morphism = self.condition_morphism(morphism, observations)
+        score_morphism = self.condition_morphism(morphism, data)
 
         with pyro.plate('data', len(data)):
             with name_pop(name_stack=self._random_variable_names):
@@ -396,11 +399,13 @@ class AutoencodingOperadicModel(OperadicModel):
             data = observations
         data = data.view(data.shape[0], *self._data_space)
         morphism, data = super().guide(observations)
+        score_morphism = self.condition_morphism(morphism, data)
+        score_morphism = self.block_conditioning(score_morphism, data)
 
         with pyro.plate('data', len(data)):
             with name_push(name_stack=self._random_variable_names):
                 latent_code = self.encoder(data)
-                morphism(latent_code)
+                score_morphism(latent_code)
 
         return morphism, latent_code
 
