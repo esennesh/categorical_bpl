@@ -89,8 +89,7 @@ class OperadicModel(BaseModel):
             if isinstance(module, BaseModel):
                 module.set_batching(data)
 
-        min_depth = VAE_MIN_DEPTH if len(list(self.wiring_diagram)) == 1 else 0
-        morphism = self._operad(self.wiring_diagram, min_depth=min_depth)
+        morphism = self._operad(self.wiring_diagram, min_depth=0)
 
         return morphism, observations, data
 
@@ -119,8 +118,7 @@ class OperadicModel(BaseModel):
             dist.Dirichlet(data_arrow_weights)
         )
 
-        min_depth = VAE_MIN_DEPTH if len(list(self.wiring_diagram)) == 1 else 0
-        morphism = self._operad(self.wiring_diagram, min_depth=min_depth,
+        morphism = self._operad(self.wiring_diagram, min_depth=0,
                                 temperature=temperature,
                                 arrow_weights=arrow_weights)
 
