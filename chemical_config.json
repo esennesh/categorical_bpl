@@ -12,7 +12,7 @@
         "type": "SelfiesDataLoader",
         "args":{
             "csv": "data/SMILES/0SelectedSMILES_QM9.csv",
-            "batch_size": 128,
+            "batch_size": 256,
             "shuffle": true,
             "validation_split": 0.1,
             "num_workers": 2
@@ -43,7 +43,7 @@
         "verbosity": 2,
 
         "monitor": "min val_loss",
-        "early_stop": 75,
+        "early_stop": 750,
 
         "tensorboard": true
     }
