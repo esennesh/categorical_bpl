@@ -314,13 +314,16 @@ class SelfiesDataset(torch.utils.data.TensorDataset):
         flat_hots = flat_hots.to(dtype=torch.int).numpy().tolist()
         return selfies.batch_flat_hot_to_selfies(flat_hots, self.alphabet)
 
-    def to_mols(self, onehot_xs):
+    def to_smiles(self, onehot_xs):
         mols = []
         for encoded in self.to_selfies(onehot_xs):
             smiles = selfies.decoder(encoded)
             if CheckSmiFeasible(smiles):
-                mols.append(smiles_to_mol(smiles))
+                mols.append(smiles)
         return mols
+
+    def to_mols(self, onehot_xs):
+        return [smiles_to_mol(smiles) for smiles in self.to_smiles(onehot_xs)]
 
 # RDKit Chem-based SMILES loading
 class Zinc15Dataset(torch.utils.data.TensorDataset):
