@@ -82,7 +82,7 @@ class OperadicModel(BaseModel):
                 self._observation_name: observations.view(-1, *self._data_space)
             }
         else:
-            data = torch.zeros(1, *self._data_space)
+            data = torch.zeros(kwargs.pop('num_samples', 1), *self._data_space)
             observations = {}
         data = data.view(data.shape[0], *self._data_space)
         for module in self.modules():
