@@ -5,7 +5,7 @@
     "arch": {
         "type": "SelfiesAutoencodingModel",
         "args": {
-          "latent_space": [12]
+          "latent_space": [32]
         }
     },
     "data_loader": {
